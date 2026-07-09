@@ -1,9 +1,11 @@
 package com.teaching.backend.global.exception;
 
+import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import teaching.backend.global.response.ApiResponse;
+import com.teaching.backend.global.response.ApiResponse;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -18,6 +20,32 @@ public class GlobalExceptionHandler {
                         errorCode.getCode(),
                         errorCode.getMessage(),
                         null
+                ));
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiResponse<Object>> handleMethodArgumentNotValid(MethodArgumentNotValidException e) {
+        ErrorCode errorCode = ErrorCode.BAD_REQUEST;
+
+        return ResponseEntity
+                .status(errorCode.getStatus())
+                .body(ApiResponse.onFailure(
+                        errorCode.getCode(),
+                        errorCode.getMessage(),
+                        e.getBindingResult().getFieldError()
+                ));
+    }
+
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ApiResponse<Object>> handleConstraintViolation(ConstraintViolationException e) {
+        ErrorCode errorCode = ErrorCode.BAD_REQUEST;
+
+        return ResponseEntity
+                .status(errorCode.getStatus())
+                .body(ApiResponse.onFailure(
+                        errorCode.getCode(),
+                        errorCode.getMessage(),
+                        e.getMessage()
                 ));
     }
 

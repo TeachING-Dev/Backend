@@ -23,6 +23,16 @@ public class ApiResponse<T> {
         );
     }
 
+    public static <T> ApiResponse<T> onSuccess(SuccessCode successCode, T result) {
+        return new ApiResponse<>(
+                true,
+                successCode.getCode(),
+                successCode.getMessage(),
+                result,
+                null
+        );
+    }
+
     public static <T> ApiResponse<T> onFailure(String code, String message, Object error) {
         return new ApiResponse<>(
                 false,
