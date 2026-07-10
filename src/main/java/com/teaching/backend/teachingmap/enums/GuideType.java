@@ -1,4 +1,4 @@
-package com.teaching.backend.material.enums;
+package com.teaching.backend.teachingmap.enums;
 
 import lombok.Getter;
 

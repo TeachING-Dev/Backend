@@ -1,13 +1,13 @@
-package com.teaching.backend.material.entity;
+package com.teaching.backend.tag.entity;
 
 import com.teaching.backend.global.common.BaseTimeEntity;
+import com.teaching.backend.material.entity.Material;
 import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@AllArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(name = "material_tag")
 public class MaterialTag extends BaseTimeEntity {
 

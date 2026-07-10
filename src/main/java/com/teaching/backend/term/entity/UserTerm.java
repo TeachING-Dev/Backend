@@ -54,6 +54,11 @@ public class UserTerm extends BaseTimeEntity {
                 .build();
     }
 
+    //재동의를 위한 인스턴스 메서드
+    public void reAgree() {
+               this.isAgreed = true;
+               this.agreedAt = LocalDateTime.now();
+           }
     public void withdraw() {
         this.isAgreed = false;
     }

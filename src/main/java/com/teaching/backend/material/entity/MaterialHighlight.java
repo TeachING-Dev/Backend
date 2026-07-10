@@ -47,6 +47,9 @@ public class MaterialHighlight {
     @Builder(access = AccessLevel.PRIVATE)
     private MaterialHighlight(MaterialChunk materialChunk, String highlightText, HighlightType highlightType,
                               Integer startPosition, Integer endPosition) {
+        if (startPosition == null || endPosition == null) {
+                       throw new IllegalArgumentException("시작/종료 위치는 필수입니다.");
+                    }
         if (startPosition >= endPosition) {
             throw new IllegalArgumentException("시작 위치는 종료 위치보다 작아야 합니다.");
         }

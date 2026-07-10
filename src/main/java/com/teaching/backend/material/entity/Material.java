@@ -1,16 +1,19 @@
 package com.teaching.backend.material.entity;
 
+import com.teaching.backend.folder.entity.Folder;
 import com.teaching.backend.global.common.BaseSoftDeleteEntity;
 import com.teaching.backend.material.enums.AiStatus;
 import com.teaching.backend.material.enums.PlatformType;
 import com.teaching.backend.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.SQLRestriction;
 
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor(access = AccessLevel.PROTECTED)
+@SQLRestriction("deleted_at IS NULL")
 @Table(name = "materials")
 public class Material extends BaseSoftDeleteEntity {
 

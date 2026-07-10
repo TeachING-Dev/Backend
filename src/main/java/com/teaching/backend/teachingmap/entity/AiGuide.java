@@ -1,7 +1,8 @@
-package com.teaching.backend.material.entity;
+package com.teaching.backend.teachingmap.entity;
 
-import com.teaching.backend.material.enums.AiGuideContentType;
-import com.teaching.backend.material.enums.GuideType;
+import com.teaching.backend.material.entity.MaterialHighlight;
+import com.teaching.backend.teachingmap.enums.AiGuideContentType;
+import com.teaching.backend.teachingmap.enums.GuideType;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;

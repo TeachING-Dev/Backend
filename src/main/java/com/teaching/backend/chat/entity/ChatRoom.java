@@ -24,7 +24,7 @@ public class ChatRoom extends BaseSoftDeleteEntity {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(nullable = false, length = 15)
+    @Column(nullable = false, length = 100)
     private String title;
 
     private LocalDateTime lastMessageAt;

@@ -1,7 +1,7 @@
 package com.teaching.backend.teachingmap.entity;
 
 import com.teaching.backend.global.common.BaseSoftDeleteEntity;
-import com.teaching.backend.material.entity.Folder;
+import com.teaching.backend.folder.entity.Folder;
 import com.teaching.backend.teachingmap.enums.TeachingMapStatus;
 import com.teaching.backend.teachingmap.enums.TeachingMapType;
 import com.teaching.backend.user.entity.User;
@@ -68,6 +68,9 @@ public class TeachingMap extends BaseSoftDeleteEntity {
 
     public static TeachingMap create(Folder folder, User user, String title, String description,
                                      Integer totalSteps, TeachingMapType type, Boolean isDraft) {
+        if (totalSteps == null || totalSteps <= 0) {
+                       throw new IllegalArgumentException("totalSteps는 1 이상이어야 합니다.");
+                   }
         return TeachingMap.builder()
                 .folder(folder)
                 .user(user)

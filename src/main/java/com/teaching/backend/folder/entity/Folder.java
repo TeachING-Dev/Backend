@@ -1,4 +1,4 @@
-package com.teaching.backend.material.entity;
+package com.teaching.backend.folder.entity;
 
 import com.teaching.backend.global.common.BaseSoftDeleteEntity;
 import com.teaching.backend.user.entity.User;
