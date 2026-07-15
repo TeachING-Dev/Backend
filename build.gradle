@@ -34,6 +34,10 @@ dependencies {
 
     //jakarta-persistence
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+
+    // MySQL 드라이버 (런타임에만 필요 / 비밀정보 아님 → 커밋 대상)
+    runtimeOnly 'com.mysql:mysql-connector-j'
+
     // Test
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
