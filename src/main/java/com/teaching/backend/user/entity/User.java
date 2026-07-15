@@ -30,11 +30,11 @@ public class User extends BaseSoftDeleteEntity {
     @Column(nullable = false)
     private String nickname;
 
-    @Column(nullable = false)
+
     private LocalDate birthday;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+
     private Gender gender;
 
     private String profileImageUrl;
