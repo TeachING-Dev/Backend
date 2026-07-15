@@ -35,15 +35,11 @@ public class AuthController {
 
     private String extractRefreshTokenFromCookie(HttpServletRequest request) {
         if (request.getCookies() == null) {
-            System.out.println("쿠키 자체가 없음!");
+
             throw new AuthException(AuthErrorCode.REFRESH_TOKEN_NOT_FOUND);
         }
 
 
-        // 임시 디버깅 코드
-        for (Cookie c : request.getCookies()) {
-            System.out.println("받은 쿠키 이름: " + c.getName() + " / 값: " + c.getValue());
-        }
 
         return java.util.Arrays.stream(request.getCookies())
                 .filter(c -> c.getName().equals("refreshToken"))

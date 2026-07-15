@@ -9,6 +9,6 @@ public class TestCallbackController {
 
     @GetMapping("/oauth2/redirect")
     public String testCallback(@RequestParam String accessToken) {
-        return "로그인 성공! AccessToken: " + accessToken;
+        return "로그인 성공!";
     }
 }

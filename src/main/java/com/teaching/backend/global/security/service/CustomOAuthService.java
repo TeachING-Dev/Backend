@@ -1,5 +1,7 @@
 package com.teaching.backend.global.security.service;
 
+import com.teaching.backend.auth.exception.AuthErrorCode;
+import com.teaching.backend.auth.exception.AuthException;
 import com.teaching.backend.global.security.dto.KakaoDTO;
 import com.teaching.backend.global.security.dto.OAuthDTO;
 import com.teaching.backend.global.security.entity.OAuthMember;
@@ -11,6 +13,7 @@ import com.teaching.backend.user.exception.UserException;
 import com.teaching.backend.user.repository.AccountRepository;
 import com.teaching.backend.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
@@ -38,7 +41,7 @@ public class CustomOAuthService extends DefaultOAuth2UserService {
                     userRequest.getClientRegistration().getRegistrationId().toUpperCase()
             );
         } catch (IllegalArgumentException e) {
-            throw new UserException(UserErrorCode.NOT_SUPPORT_SOCIAL_PROVIDER);
+            throw new AuthException(AuthErrorCode.NOT_SUPPORT_SOCIAL_PROVIDER);
         }
 
         OAuthDTO dto = extractDTO(provider, oAuth2User);
@@ -60,6 +63,9 @@ public class CustomOAuthService extends DefaultOAuth2UserService {
                 Map<String, Object> profile = (Map<String, Object>) kakaoAccount.get("profile");
 
                 Object idAttribute = oAuth2User.getAttribute("id");
+                if (idAttribute == null) {
+                    throw new AuthException(AuthErrorCode.SOCIAL_INFO_NOT_FOUND);
+                }
                 String socialUid = String.valueOf(idAttribute);
 
                 String email = (String) kakaoAccount.get("email");
@@ -69,24 +75,33 @@ public class CustomOAuthService extends DefaultOAuth2UserService {
                     throw new UserException(UserErrorCode.EMAIL_CONSENT_REQUIRED);
                 }
 
+
+                if (nickname == null || nickname.isBlank()) {
+                    nickname = "사용자" + socialUid.substring(0, Math.min(6, socialUid.length()));
+                }
+
+
                 yield new KakaoDTO(socialUid, email, nickname);
             }
             // case GOOGLE -> { ... GoogleDTO 추가 시 여기 확장 ... }
-            default -> throw new UserException(UserErrorCode.NOT_SUPPORT_SOCIAL_PROVIDER);
+            default -> throw new AuthException(AuthErrorCode.NOT_SUPPORT_SOCIAL_PROVIDER);
         };
     }
 
     private User registerNewUser(Provider provider, OAuthDTO dto) {
-        // 다른 provider로 이미 가입된 email이면 계정 병합 여부 정책 필요
         User user = userRepository.findByEmail(dto.getEmail())
                 .orElseGet(() -> userRepository.save(
                         User.create(dto.getEmail(), dto.getNickname(), null, null, null)
-                        // birthday, gender, profileImageUrl은 카카오/구글이 안 주는 경우가 많아
-                        // 회원가입 추가정보 입력 단계에서 채우는 흐름이면 여기선 null 허용
                 ));
 
-        Account account = Account.create(user, provider, dto.getProviderId());
-        accountRepository.save(account);
+        try {
+            Account account = Account.create(user, provider, dto.getProviderId());
+            accountRepository.save(account);
+        } catch (DataIntegrityViolationException e) {
+            return accountRepository.findByProviderAndProviderAccountId(provider, dto.getProviderId())
+                    .map(Account::getUser)
+                    .orElseThrow(() -> e);
+        }
 
         return user;
     }

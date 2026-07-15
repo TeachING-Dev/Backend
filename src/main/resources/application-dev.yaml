@@ -47,3 +47,7 @@ jwt:
 app:
   oauth2:
     redirect-uri: ${APP_OAUTH2_REDIRECT_URI:http://localhost:8080/oauth2/redirect}
+
+
+cookie:
+  secure: false

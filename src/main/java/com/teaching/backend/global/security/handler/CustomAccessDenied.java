@@ -20,6 +20,6 @@ public class CustomAccessDenied implements AccessDeniedHandler {
             AccessDeniedException accessDeniedException
     ) throws IOException {
         // 💡 마찬가지로 공통 Util 호출! (상태코드에 맞춰 바꾸거나 동일하게 설정)
-        SecurityResponseUtil.sendErrorResponse(response, GlobalErrorCode.UNAUTHORIZED);
+        SecurityResponseUtil.sendErrorResponse(response, GlobalErrorCode.FORBIDDEN);
     }
 }

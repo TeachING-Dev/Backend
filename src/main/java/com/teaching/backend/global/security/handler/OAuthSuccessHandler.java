@@ -31,6 +31,10 @@ public class OAuthSuccessHandler implements AuthenticationSuccessHandler {
     @Value("${app.oauth2.redirect-uri}")
     private String redirectUri;
 
+    @Value("${cookie.secure}")
+    private boolean cookieSecure;
+
+
     @Override
     @Transactional
     public void onAuthenticationSuccess(
@@ -58,7 +62,7 @@ public class OAuthSuccessHandler implements AuthenticationSuccessHandler {
         // refreshToken은 HttpOnly 쿠키로
         Cookie refreshCookie = new Cookie("refreshToken", refreshToken);
         refreshCookie.setHttpOnly(true);
-        refreshCookie.setSecure(false); // 로컬 http 테스트 시엔 false로 잠깐 바꿔야 할 수도 있음
+        refreshCookie.setSecure(cookieSecure); // 로컬 http 테스트 시엔 false로 잠깐 바꿔야 할 수도 있음
         refreshCookie.setPath("/");
         refreshCookie.setMaxAge(14 * 24 * 60 * 60); // 14일 (초 단위)
         response.addCookie(refreshCookie);

@@ -34,40 +34,38 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
 
+
         try {
-            // 토큰 가져오기
             String token = request.getHeader("Authorization");
-            // token이 없거나 Bearer가 아니면 넘기기
-            if (token == null || !token.startsWith("Bearer ")) {
-                filterChain.doFilter(request, response);
-                return;
+
+            if (token != null && token.startsWith("Bearer ")) {
+                token = token.replace("Bearer ", "");
+
+                if (jwtUtil.isValid(token)) {
+                    Long userId = jwtUtil.getUserId(token);
+                    UserDetails userDetails = customUserDetailsService.loadUserByUsername(String.valueOf(userId));
+                    Authentication auth = new UsernamePasswordAuthenticationToken(
+                            userDetails,
+                            null,
+                            userDetails.getAuthorities()
+                    );
+                    SecurityContextHolder.getContext().setAuthentication(auth);
+                }
             }
-            // Bearer이면 추출
-            token = token.replace("Bearer ", "");
-            // AccessToken 검증하기: 올바른 토큰이면
-            if (jwtUtil.isValid(token)) {
-                // 토큰에서 이메일 추출
-                Long userId = jwtUtil.getUserId(token);
-                UserDetails userDetails = customUserDetailsService.loadUserByUsername(String.valueOf(userId));
-                Authentication auth = new UsernamePasswordAuthenticationToken(
-                        userDetails,
-                        null,
-                        userDetails.getAuthorities()
-                );
-                // 인증 완료 후 SecurityContextHolder에 넣기
-                SecurityContextHolder.getContext().setAuthentication(auth);
-            }
-            filterChain.doFilter(request, response);
         } catch (Exception e) {
+            // 토큰 파싱/검증 단계에서만 나는 예외를 여기서 401로 응답
             ObjectMapper mapper = new ObjectMapper();
             BaseErrorCode code = GlobalErrorCode.UNAUTHORIZED;
 
             response.setContentType("application/json;charset=UTF-8");
             response.setStatus(code.getStatus().value());
 
-            ApiResponse<Void> errorResponse = ApiResponse.onFailure(code,null);
-
+            ApiResponse<Void> errorResponse = ApiResponse.onFailure(code, null);
             mapper.writeValue(response.getOutputStream(), errorResponse);
+            return; // 여기서 끝 — doFilter 호출 안 하고 체인 중단
         }
+
+        // 토큰 없음 / 토큰 검증 정상 완료 → 항상 여기로 와서 다음 필터로 넘어감
+        filterChain.doFilter(request, response);
     }
 }

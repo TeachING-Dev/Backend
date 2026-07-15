@@ -65,7 +65,7 @@ public class GlobalExceptionHandler {
         log.warn("Constraint violation: {}", e.getMessage());
         return ResponseEntity
                 .status(GlobalErrorCode.BAD_REQUEST.getStatus())
-                .body(ApiResponse.onFailure(GlobalErrorCode.BAD_REQUEST, e.getMessage()));
+                .body(ApiResponse.onFailure(GlobalErrorCode.BAD_REQUEST, GlobalErrorCode.BAD_REQUEST.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
@@ -105,9 +105,27 @@ public class GlobalExceptionHandler {
             DataIntegrityViolationException e
     ) {
         log.warn("Data integrity violation: {}", e.getMessage());
+
+        String rootMessage = getRootCauseMessage(e);
+
+        if (rootMessage.contains("Duplicate entry") || rootMessage.contains("unique constraint")) {
+            return ResponseEntity
+                    .status(GlobalErrorCode.CONFLICT.getStatus())
+                    .body(ApiResponse.onFailure(GlobalErrorCode.CONFLICT, "이미 존재하는 데이터입니다."));
+        }
+
+        // FK 위반, NOT NULL 위반 등은 별도 코드로
         return ResponseEntity
-                .status(GlobalErrorCode.CONFLICT.getStatus())
-                .body(ApiResponse.onFailure(GlobalErrorCode.CONFLICT, "이미 존재하는 데이터입니다."));
+                .status(GlobalErrorCode.BAD_REQUEST.getStatus())
+                .body(ApiResponse.onFailure(GlobalErrorCode.BAD_REQUEST, "요청 데이터가 올바르지 않습니다."));
+    }
+
+    private String getRootCauseMessage(Throwable e) {
+        Throwable cause = e;
+        while (cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        return cause.getMessage() != null ? cause.getMessage() : "";
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
