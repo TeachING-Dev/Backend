@@ -24,29 +24,29 @@ public class RefreshToken extends BaseTimeEntity {
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private User user;
 
-    @Column(nullable = false,columnDefinition = "TEXT")
-    private String token;
+    @Column(nullable = false, unique = true, length = 64)
+    private String tokenHash;
 
     @Column(nullable = false)
     private LocalDateTime expiredAt;
 
     @Builder(access = AccessLevel.PRIVATE)
-    private RefreshToken(User user, String token, LocalDateTime expiredAt) {
+    private RefreshToken(User user, String tokenHash, LocalDateTime expiredAt) {
         this.user = user;
-        this.token = token;
+        this.tokenHash = tokenHash;
         this.expiredAt = expiredAt;
     }
 
-    public static RefreshToken create(User user, String token, LocalDateTime expiredAt) {
+    public static RefreshToken create(User user, String tokenHash, LocalDateTime expiredAt) {
         return RefreshToken.builder()
                 .user(user)
-                .token(token)
+                .tokenHash(tokenHash)
                 .expiredAt(expiredAt)
                 .build();
     }
 
-    public void update(String newToken, LocalDateTime newExpiredAt) {
-        this.token = newToken;
+    public void update(String newTokenHash, LocalDateTime newExpiredAt) {
+        this.tokenHash = newTokenHash;
         this.expiredAt = newExpiredAt;
     }
 

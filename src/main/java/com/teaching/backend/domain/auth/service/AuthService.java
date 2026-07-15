@@ -16,6 +16,7 @@ public class AuthService {
 
     private final JwtUtil jwtUtil;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final TokenHasher tokenHasher;
 
     @Transactional
     public String reissueAccessToken(String refreshToken) {
@@ -23,7 +24,9 @@ public class AuthService {
             throw new AuthException(AuthErrorCode.INVALID_REFRESH_TOKEN);
         }
 
-        RefreshToken savedToken = refreshTokenRepository.findByToken(refreshToken)
+        String tokenHash = tokenHasher.hash(refreshToken);
+
+        RefreshToken savedToken = refreshTokenRepository.findByTokenHash(tokenHash)
                 .orElseThrow(() -> new AuthException(AuthErrorCode.REFRESH_TOKEN_NOT_FOUND));
 
         if (savedToken.isExpired()) {

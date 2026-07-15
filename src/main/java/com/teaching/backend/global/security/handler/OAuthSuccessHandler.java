@@ -1,5 +1,6 @@
 package com.teaching.backend.global.security.handler;
 
+import com.teaching.backend.domain.auth.service.TokenHasher;
 import com.teaching.backend.global.security.entity.AuthMember;
 import com.teaching.backend.global.security.entity.OAuthMember;
 import com.teaching.backend.global.security.util.JwtUtil;
@@ -34,6 +35,8 @@ public class OAuthSuccessHandler implements AuthenticationSuccessHandler {
     @Value("${cookie.secure}")
     private boolean cookieSecure;
 
+    private final TokenHasher tokenHasher;
+
 
     @Override
     @Transactional
@@ -49,13 +52,14 @@ public class OAuthSuccessHandler implements AuthenticationSuccessHandler {
 
         String accessToken = jwtUtil.createAccessToken(authMember);
         String refreshToken = jwtUtil.createRefreshToken(authMember);
+        String refreshTokenHash = tokenHasher.hash(refreshToken);
 
         // 기존 refreshToken 있으면 갱신, 없으면 생성 (Rotate)
         refreshTokenRepository.findByUser(user)
                 .ifPresentOrElse(
-                        existing -> existing.update(refreshToken, jwtUtil.getRefreshTokenExpiryDate()),
+                        existing -> existing.update(refreshTokenHash, jwtUtil.getRefreshTokenExpiryDate()),  // ← 변경
                         () -> refreshTokenRepository.save(
-                                RefreshToken.create(user, refreshToken, jwtUtil.getRefreshTokenExpiryDate())
+                                RefreshToken.create(user, refreshTokenHash, jwtUtil.getRefreshTokenExpiryDate())  // ← 변경
                         )
                 );
 
