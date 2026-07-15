@@ -1,17 +1,17 @@
 package com.teaching.backend.global.security.service;
 
-import com.teaching.backend.auth.exception.AuthErrorCode;
-import com.teaching.backend.auth.exception.AuthException;
+import com.teaching.backend.domain.auth.exception.AuthErrorCode;
+import com.teaching.backend.domain.auth.exception.AuthException;
 import com.teaching.backend.global.security.dto.KakaoDTO;
 import com.teaching.backend.global.security.dto.OAuthDTO;
 import com.teaching.backend.global.security.entity.OAuthMember;
-import com.teaching.backend.user.entity.Account;
-import com.teaching.backend.user.entity.User;
-import com.teaching.backend.user.enums.Provider;
-import com.teaching.backend.user.exception.UserErrorCode;
-import com.teaching.backend.user.exception.UserException;
-import com.teaching.backend.user.repository.AccountRepository;
-import com.teaching.backend.user.repository.UserRepository;
+import com.teaching.backend.domain.user.entity.Account;
+import com.teaching.backend.domain.user.entity.User;
+import com.teaching.backend.domain.user.enums.Provider;
+import com.teaching.backend.domain.user.exception.UserErrorCode;
+import com.teaching.backend.domain.user.exception.UserException;
+import com.teaching.backend.domain.user.repository.AccountRepository;
+import com.teaching.backend.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;

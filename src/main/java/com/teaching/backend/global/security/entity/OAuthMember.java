@@ -1,6 +1,6 @@
 package com.teaching.backend.global.security.entity;
 
-import com.teaching.backend.user.entity.User;
+import com.teaching.backend.domain.user.entity.User;
 import lombok.Getter;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.core.user.OAuth2User;

@@ -1,9 +1,8 @@
 package com.teaching.backend.global.security.entity;
 
-import com.teaching.backend.user.entity.User;
+import com.teaching.backend.domain.user.entity.User;
 import jakarta.annotation.Nullable;
 import lombok.Getter;
-import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
