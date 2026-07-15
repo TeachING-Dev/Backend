@@ -27,7 +27,7 @@ public class User extends BaseSoftDeleteEntity {
     @Column(nullable = false)
     private String email;
 
-    @Column(nullable = false)
+    @Column(nullable = false, unique = true)
     private String nickname;
 
     @Column(nullable = false)
@@ -63,5 +63,20 @@ public class User extends BaseSoftDeleteEntity {
                 .profileImageUrl(profileImageUrl)
                 .notificationsEnabled(true)
                 .build();
+    }
+
+    // === 수정 메서드 (마이페이지 프로필/알림 수정) ===
+    // 마이페이지 PATCH 에서 전달된 필드만 변경 감지(dirty checking)로 반영하기 위한 메서드.
+
+    public void changeNickname(String nickname) {
+        this.nickname = nickname;
+    }
+
+    public void changeProfileImageUrl(String profileImageUrl) {
+        this.profileImageUrl = profileImageUrl;
+    }
+
+    public void changeNotificationEnabled(Boolean notificationsEnabled) {
+        this.notificationsEnabled = notificationsEnabled;
     }
 }
