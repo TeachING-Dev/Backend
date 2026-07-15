@@ -14,10 +14,14 @@ public class ApiResponse<T> {
     private Object error;
 
     public static <T> ApiResponse<T> onSuccess(T result) {
+        return onSuccess(SuccessCode.COMMON200, result);
+    }
+
+    public static <T> ApiResponse<T> onSuccess(SuccessCode successCode, T result) {
         return new ApiResponse<>(
                 true,
-                "COMMON200",
-                "요청에 성공했습니다.",
+                successCode.getCode(),
+                successCode.getMessage(),
                 result,
                 null
         );
