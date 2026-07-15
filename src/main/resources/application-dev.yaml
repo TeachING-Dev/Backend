@@ -51,3 +51,19 @@ app:
 
 cookie:
   secure: false
+
+openai:
+  api-key: ${OPENAI_API_KEY}
+  base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+  embedding-model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+  chat-model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
+
+qdrant:
+  url: ${QDRANT_URL:http://localhost:6333}
+  api-key: ${QDRANT_API_KEY:}
+  collection-name: ${QDRANT_COLLECTION_NAME:material_chunks}
+  vector-size: ${QDRANT_VECTOR_SIZE:1536}
+
+rag:
+  top-k: ${RAG_TOP_K:5}
+  similarity-threshold: ${RAG_SIMILARITY_THRESHOLD:0.75}

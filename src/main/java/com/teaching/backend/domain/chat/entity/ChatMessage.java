@@ -11,6 +11,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 
+// 채팅방에 속한 유저/AI 메시지 정보를 저장하는 JPA 엔티티
 @Entity
 @Getter
 @EntityListeners(AuditingEntityListener.class)

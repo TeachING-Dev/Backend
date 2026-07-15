@@ -1,16 +1,7 @@
 package com.teaching.backend.domain.chat.enums;
 
-import lombok.Getter;
-
-@Getter
+// 메시지 작성 주체(유저/AI)를 구분하는 enum
 public enum ChatRole {
-
-    USER("사용자"),
-    AI("AI");
-
-    private final String description;
-
-    ChatRole(String description) {
-        this.description = description;
-    }
+    USER,
+    AI
 }

@@ -11,6 +11,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 
+// AI 메시지가 인용한 자료 조각(MaterialChunk) 출처 정보를 저장하는 JPA 엔티티
 @Entity
 @Getter
 @EntityListeners(AuditingEntityListener.class)
