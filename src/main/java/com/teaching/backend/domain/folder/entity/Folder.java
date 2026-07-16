@@ -40,4 +40,8 @@ public class Folder extends BaseSoftDeleteEntity {
                 .itemCount(0)
                 .build();
     }
+
+    public void rename(String name) {
+        this.name = name;
+    }
 }
