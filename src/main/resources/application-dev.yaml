@@ -66,4 +66,5 @@ qdrant:
 
 rag:
   top-k: ${RAG_TOP_K:5}
-  similarity-threshold: ${RAG_SIMILARITY_THRESHOLD:0.75}
+  # text-embedding-3-small 기준 실측: 관련 질문-청크 쌍 0.558, 무관한 질문 0.085 (2026-07-16 실측)
+  similarity-threshold: ${RAG_SIMILARITY_THRESHOLD:0.3}

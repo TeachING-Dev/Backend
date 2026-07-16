@@ -80,7 +80,7 @@ public class ChatMessageService {
 
         List<ChatSource> aiMessageSources = relevantChunks.stream()
                 .map(chunk -> chatSourceRepository.save(
-                        ChatSource.create(chunk, aiMessage, chunk.getPosition())
+                        ChatSource.create(chunk, aiMessage, citedAtOf(chunk))
                 ))
                 .toList();
 
@@ -97,5 +97,10 @@ public class ChatMessageService {
         if (content.length() > CONTENT_MAX_LENGTH) {
             throw new GeneralException(GlobalErrorCode.BAD_REQUEST);
         }
+    }
+
+    // ChatSource.citedAt은 NOT NULL이라, MaterialChunk에 위치 정보(position)가 아직 없는 경우 대체 값을 채워줌
+    private String citedAtOf(MaterialChunk chunk) {
+        return chunk.getPosition() != null ? chunk.getPosition() : ("청크 " + chunk.getChunkIndex());
     }
 }
