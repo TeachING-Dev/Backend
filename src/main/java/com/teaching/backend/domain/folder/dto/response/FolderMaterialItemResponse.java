@@ -9,7 +9,7 @@ public record FolderMaterialItemResponse(
         Long materialId,
         String title,
         String summary,
-        String originUrl,
+        String originalUrl,
         List<String> tags,
         String statusAi,
         LocalDateTime createdAt,

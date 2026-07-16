@@ -47,6 +47,7 @@ public class FolderService {
     private static final String DEFAULT_SORT = "recent";
     private static final int MAX_FOLDER_COUNT = 6;
     private static final int MAX_FOLDER_NAME_LENGTH = 10;
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final FolderRepository folderRepository;
     private final UserRepository userRepository;
@@ -114,8 +115,7 @@ public class FolderService {
     ) {
         String folderName = validateAndNormalizeFolderName(request);
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new UserException(UserErrorCode.USER_NOT_FOUND));
+        User user = lockUserForFolderMutation(userId);
 
         if (folderRepository.countByUser_Id(userId) >= MAX_FOLDER_COUNT) {
             throw new FolderException(FolderErrorCode.FOLDER_LIMIT_EXCEEDED);
@@ -174,6 +174,7 @@ public class FolderService {
             Long folderId
     ) {
         validateFolderId(folderId);
+        lockUserForFolderMutation(userId);
 
         if (folderRepository.findByIdAndUser_Id(folderId, userId).isPresent()) {
             return FolderRestoreResponse.of(folderId, false);
@@ -285,7 +286,7 @@ public class FolderService {
             return 10;
         }
 
-        if (size <= 0) {
+        if (size <= 0 || size > MAX_PAGE_SIZE) {
             throw new GeneralException(GlobalErrorCode.BAD_REQUEST);
         }
 
@@ -333,6 +334,11 @@ public class FolderService {
         }
 
         return tagsByMaterialId;
+    }
+
+    private User lockUserForFolderMutation(Long userId) {
+        return userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new UserException(UserErrorCode.USER_NOT_FOUND));
     }
 
     private String validateAndNormalizeFolderName(FolderCreateRequest request) {
