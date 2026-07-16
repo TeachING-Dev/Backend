@@ -6,12 +6,14 @@ import com.teaching.backend.domain.folder.dto.request.FolderRenameRequest;
 import com.teaching.backend.domain.folder.dto.response.FolderCreateResponse;
 import com.teaching.backend.domain.folder.dto.response.FolderDetailResponse;
 import com.teaching.backend.domain.folder.dto.response.FolderListResponse;
+import com.teaching.backend.domain.folder.dto.response.FolderMaterialListResponse;
 import com.teaching.backend.domain.folder.dto.response.FolderRestoreResponse;
 import com.teaching.backend.domain.folder.dto.response.FolderRenameResponse;
 import com.teaching.backend.domain.folder.dto.response.FolderTrashResponse;
 import com.teaching.backend.domain.folder.exception.FolderErrorCode;
 import com.teaching.backend.domain.folder.exception.FolderException;
 import com.teaching.backend.domain.folder.service.FolderService;
+import com.teaching.backend.domain.material.code.MaterialSuccessCode;
 import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
 import com.teaching.backend.global.response.ApiResponse;
@@ -113,6 +115,63 @@ public class FolderController {
 
         return ResponseEntity.ok(
                 ApiResponse.onSuccess(FolderSuccessCode.FOLDER_DETAIL_SUCCESS, result)
+        );
+    }
+
+    @Operation(
+            summary = "폴더 내부 자료 목록 조회",
+            description = "특정 폴더의 자료를 검색, 정렬 및 페이지 단위로 조회합니다."
+    )
+    @GetMapping("/{folderId}/materials")
+    public ResponseEntity<ApiResponse<FolderMaterialListResponse>> getFolderMaterials(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal AuthMember authMember,
+
+            @Parameter(
+                    description = "조회할 폴더 ID",
+                    example = "1"
+            )
+            @PathVariable String folderId,
+
+            @Parameter(
+                    description = "자료 제목 또는 요약 검색어",
+                    example = "node"
+            )
+            @RequestParam(required = false) String keyword,
+
+            @Parameter(
+                    description = "정렬 기준입니다. recent, oldest, title 중 하나를 입력합니다.",
+                    example = "recent"
+            )
+            @RequestParam(
+                    name = "sort",
+                    defaultValue = "recent"
+            )
+            String sort,
+
+            @Parameter(
+                    description = "0부터 시작하는 페이지 번호",
+                    example = "0"
+            )
+            @RequestParam(required = false) Integer page,
+
+            @Parameter(
+                    description = "페이지 크기",
+                    example = "10"
+            )
+            @RequestParam(required = false) Integer size
+    ) {
+        FolderMaterialListResponse result = folderService.getFolderMaterials(
+                getAuthenticatedUserId(authMember),
+                parseFolderId(folderId),
+                keyword,
+                sort,
+                page,
+                size
+        );
+
+        return ResponseEntity.ok(
+                ApiResponse.onSuccess(MaterialSuccessCode.FOLDER_MATERIAL_LIST_SUCCESS, result)
         );
     }
 
