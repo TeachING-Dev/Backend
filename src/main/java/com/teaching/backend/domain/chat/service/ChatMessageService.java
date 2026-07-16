@@ -22,7 +22,6 @@ import java.util.stream.Collectors;
 // 메시지 저장, 벡터 검색(RAG), LLM 답변 생성 및 출처 저장을 담당하는 서비스
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class ChatMessageService {
 
     private static final int CONTENT_MAX_LENGTH = 2000;
@@ -32,7 +31,9 @@ public class ChatMessageService {
     private final ChatRoomService chatRoomService;
     private final MaterialSearchService materialSearchService;
     private final OpenAiClient openAiClient;
+    private final ChatAskWriter chatAskWriter;
 
+    @Transactional(readOnly = true)
     public ChatRoomHistoryResult getMessages(Long chatRoomId, Long userId) {
         ChatRoom chatRoom = chatRoomService.getChatRoom(chatRoomId, userId);
         List<ChatMessage> messages = chatMessageRepository.findByChatRoomIdOrderByCreatedAtAsc(chatRoomId);
@@ -51,17 +52,15 @@ public class ChatMessageService {
                 .collect(Collectors.groupingBy(source -> source.getChatMessage().getId()));
     }
 
-    @Transactional
+    // 벡터 검색(Qdrant)과 LLM 호출(OpenAI)이 외부 네트워크 호출이라 트랜잭션 없이 수행하고,
+    // 메시지/출처 저장만 ChatAskWriter의 짧은 트랜잭션에 위임해 커넥션 점유 시간을 최소화한다.
     public AskResult ask(Long chatRoomId, Long userId, MessageCreateRequest request) {
         validateContent(request.content());
 
-        ChatRoom chatRoom = chatRoomService.getChatRoom(chatRoomId, userId);
+        // 조기 검증: 방이 없거나 소유자가 아니면 외부 호출 전에 실패시킨다.
+        chatRoomService.getChatRoom(chatRoomId, userId);
 
         // TODO: 무료 회원 당일 질문 횟수(5회) 제한(DAILY_QUESTION_LIMIT_EXCEEDED) 정책/사용량 저장소 확정 후 적용
-
-        ChatMessage userMessage = chatMessageRepository.save(
-                ChatMessage.createUserMessage(chatRoom, request.content())
-        );
 
         List<MaterialChunk> relevantChunks = materialSearchService.searchTopChunks(request.content(), userId);
 
@@ -70,24 +69,8 @@ public class ChatMessageService {
 
         // isFallback은 LLM 답변 텍스트를 파싱하는 게 아니라 "근거로 삼을 청크가 있었는가"를 구조적으로 반영
         boolean isFallback = relevantChunks.isEmpty();
-        ChatMessage aiMessage = chatMessageRepository.save(
-                isFallback
-                        ? ChatMessage.createAiFallbackMessage(chatRoom, answer)
-                        : ChatMessage.createAiMessage(chatRoom, answer)
-        );
 
-        chatRoom.updateLastMessageAt(aiMessage.getCreatedAt());
-
-        List<ChatSource> aiMessageSources = relevantChunks.stream()
-                .map(chunk -> chatSourceRepository.save(
-                        ChatSource.create(chunk, aiMessage, citedAtOf(chunk))
-                ))
-                .toList();
-
-        // TODO: 무료 회원 당일 남은 횟수 계산 로직 확정 전까지 무제한(null)으로 응답
-        Integer remainingCount = null;
-
-        return new AskResult(chatRoom, userMessage, aiMessage, aiMessageSources, remainingCount);
+        return chatAskWriter.write(chatRoomId, userId, request.content(), answer, isFallback, relevantChunks);
     }
 
     private void validateContent(String content) {
@@ -97,10 +80,5 @@ public class ChatMessageService {
         if (content.length() > CONTENT_MAX_LENGTH) {
             throw new GeneralException(GlobalErrorCode.BAD_REQUEST);
         }
-    }
-
-    // ChatSource.citedAt은 NOT NULL이라, MaterialChunk에 위치 정보(position)가 아직 없는 경우 대체 값을 채워줌
-    private String citedAtOf(MaterialChunk chunk) {
-        return chunk.getPosition() != null ? chunk.getPosition() : ("청크 " + chunk.getChunkIndex());
     }
 }

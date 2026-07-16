@@ -60,7 +60,7 @@ openai:
 
 qdrant:
   url: ${QDRANT_URL:http://localhost:6333}
-  api-key: ${QDRANT_API_KEY:}
+  api-key: ${QDRANT_API_KEY}
   collection-name: ${QDRANT_COLLECTION_NAME:material_chunks}
   vector-size: ${QDRANT_VECTOR_SIZE:1536}
 
