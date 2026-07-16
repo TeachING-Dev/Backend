@@ -1,6 +1,7 @@
 package com.teaching.backend.global.ai.qdrant;
 
 import com.teaching.backend.global.ai.qdrant.dto.CreateCollectionRequest;
+import com.teaching.backend.global.ai.qdrant.dto.DeletePointsRequest;
 import com.teaching.backend.global.ai.qdrant.dto.QdrantSearchHit;
 import com.teaching.backend.global.ai.qdrant.dto.QdrantSearchResponse;
 import com.teaching.backend.global.ai.qdrant.dto.SearchRequest;
@@ -71,6 +72,20 @@ public class QdrantClient {
         call(webClient.put()
                 .uri("/collections/{name}/points?wait=true", collectionName)
                 .bodyValue(request)
+                .retrieve()
+                .onStatus(HttpStatusCode::isError, this::mapError)
+                .bodyToMono(Void.class));
+    }
+
+    // 색인 도중 실패 시 이미 upsert된 포인트를 되돌리기 위한 보상용 삭제
+    public void deletePoints(List<String> pointIds) {
+        if (pointIds.isEmpty()) {
+            return;
+        }
+
+        call(webClient.post()
+                .uri("/collections/{name}/points/delete?wait=true", collectionName)
+                .bodyValue(new DeletePointsRequest(pointIds))
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, this::mapError)
                 .bodyToMono(Void.class));

@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -57,20 +58,28 @@ public class MaterialIndexingService {
 
         qdrantClient.ensureCollection();
 
-        for (int i = 0; i < chunkTexts.size(); i++) {
-            String text = chunkTexts.get(i);
-            float[] vector = openAiClient.embed(text);
-            String pointId = UUID.randomUUID().toString();
+        // 임베딩/저장/upsert 중 하나라도 실패하면 그동안 Qdrant에 남긴 포인트를 보상 삭제해 DB 롤백과 정합성 유지
+        List<String> upsertedPointIds = new ArrayList<>();
+        try {
+            for (int i = 0; i < chunkTexts.size(); i++) {
+                String text = chunkTexts.get(i);
+                float[] vector = openAiClient.embed(text);
+                String pointId = UUID.randomUUID().toString();
 
-            MaterialChunk chunk = materialChunkRepository.save(
-                    MaterialChunk.create(material, i, text, pointId, null)
-            );
+                MaterialChunk chunk = materialChunkRepository.save(
+                        MaterialChunk.create(material, i, text, pointId, null)
+                );
 
-            qdrantClient.upsertPoint(pointId, vector, Map.of(
-                    "materialChunkId", chunk.getId(),
-                    "materialId", material.getId(),
-                    "userId", material.getUser().getId()
-            ));
+                qdrantClient.upsertPoint(pointId, vector, Map.of(
+                        "materialChunkId", chunk.getId(),
+                        "materialId", material.getId(),
+                        "userId", material.getUser().getId()
+                ));
+                upsertedPointIds.add(pointId);
+            }
+        } catch (RuntimeException e) {
+            qdrantClient.deletePoints(upsertedPointIds);
+            throw e;
         }
 
         return chunkTexts.size();
