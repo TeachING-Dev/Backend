@@ -17,7 +17,8 @@ public class SecurityCurrentUserProvider implements CurrentUserProvider {
     @Override
     public Long getCurrentUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !(authentication.getPrincipal() instanceof AuthMember authMember)) {
+        if (authentication == null || !authentication.isAuthenticated()
+                || !(authentication.getPrincipal() instanceof AuthMember authMember)) {
             throw new GeneralException(GlobalErrorCode.UNAUTHORIZED);
         }
         return authMember.getUserId();

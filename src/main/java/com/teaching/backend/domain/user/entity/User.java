@@ -27,7 +27,9 @@ public class User extends BaseSoftDeleteEntity {
     @Column(nullable = false)
     private String email;
 
-    @Column(nullable = false, unique = true)
+    // 활성 사용자 간 닉네임 유일성은 DB의 생성 컬럼(active_nickname) + unique 인덱스로 보장한다.
+    // (soft-delete 된 사용자는 닉네임을 자유롭게 반납 - 아래 마이그레이션 SQL 참고)
+    @Column(nullable = false)
     private String nickname;
 
 

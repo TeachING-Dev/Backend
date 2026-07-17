@@ -16,6 +16,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.net.URI;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -47,7 +48,7 @@ public class UserService {
     /** [PATCH] /users/me — 전달된 필드만 부분 수정 */
     @Transactional
     public UserUpdateResponseDto updateProfile(Long userId, UserUpdateRequestDto request) {
-        if (request.isEmpty()) {
+        if (request == null || request.isEmpty()) {
             throw new UserException(UserErrorCode.PROFILE_NO_UPDATE_FIELD);
         }
 
@@ -73,7 +74,16 @@ public class UserService {
 
         if (request.profileImageUrl() != null) {
             String url = request.profileImageUrl();
-            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            URI uri;
+            try {
+                uri = URI.create(url);
+            } catch (IllegalArgumentException e) {
+                throw new UserException(UserErrorCode.PROFILE_IMAGE_INVALID);
+            }
+            String scheme = uri.getScheme();
+            boolean validScheme = "http".equals(scheme) || "https".equals(scheme);
+            boolean hasHost = uri.getHost() != null && !uri.getHost().isBlank();
+            if (!validScheme || !hasHost) {
                 throw new UserException(UserErrorCode.PROFILE_IMAGE_INVALID);
             }
             user.changeProfileImageUrl(url);
@@ -86,7 +96,7 @@ public class UserService {
     /** [PATCH] /users/me/notifications */
     @Transactional
     public NotificationUpdateResponseDto updateNotification(Long userId, NotificationUpdateRequestDto request) {
-        if (request.pushEnabled() == null) {
+        if (request == null || request.pushEnabled() == null) {
             throw new UserException(UserErrorCode.NOTIFICATION_INVALID);
         }
 
