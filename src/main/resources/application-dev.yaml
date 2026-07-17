@@ -51,3 +51,20 @@ app:
 
 cookie:
   secure: false
+
+openai:
+  api-key: ${OPENAI_API_KEY}
+  base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+  embedding-model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+  chat-model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
+
+qdrant:
+  url: ${QDRANT_URL:http://localhost:6333}
+  api-key: ${QDRANT_API_KEY}
+  collection-name: ${QDRANT_COLLECTION_NAME:material_chunks}
+  vector-size: ${QDRANT_VECTOR_SIZE:1536}
+
+rag:
+  top-k: ${RAG_TOP_K:5}
+  # text-embedding-3-small 기준 실측: 관련 질문-청크 쌍 0.558, 무관한 질문 0.085 (2026-07-16 실측)
+  similarity-threshold: ${RAG_SIMILARITY_THRESHOLD:0.3}

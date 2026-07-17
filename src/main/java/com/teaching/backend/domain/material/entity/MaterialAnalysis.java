@@ -22,11 +22,11 @@ public class MaterialAnalysis extends BaseSoftDeleteEntity {
     private Material material;
 
     @Lob
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "MEDIUMTEXT")
     private String summary;
 
     @Lob
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "MEDIUMTEXT")
     private String detailAnalysis;
 
     @Column(nullable = false, length = 20)
