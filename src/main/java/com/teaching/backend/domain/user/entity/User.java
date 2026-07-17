@@ -27,6 +27,8 @@ public class User extends BaseSoftDeleteEntity {
     @Column(nullable = false)
     private String email;
 
+    // 활성 사용자 간 닉네임 유일성은 DB의 생성 컬럼(active_nickname) + unique 인덱스로 보장한다.
+    // (soft-delete 된 사용자는 닉네임을 자유롭게 반납 - 아래 마이그레이션 SQL 참고)
     @Column(nullable = false)
     private String nickname;
 
@@ -63,5 +65,20 @@ public class User extends BaseSoftDeleteEntity {
                 .profileImageUrl(profileImageUrl)
                 .notificationsEnabled(true)
                 .build();
+    }
+
+    // === 수정 메서드 (마이페이지 프로필/알림 수정) ===
+    // 마이페이지 PATCH 에서 전달된 필드만 변경 감지(dirty checking)로 반영하기 위한 메서드.
+
+    public void changeNickname(String nickname) {
+        this.nickname = nickname;
+    }
+
+    public void changeProfileImageUrl(String profileImageUrl) {
+        this.profileImageUrl = profileImageUrl;
+    }
+
+    public void changeNotificationEnabled(Boolean notificationsEnabled) {
+        this.notificationsEnabled = notificationsEnabled;
     }
 }
