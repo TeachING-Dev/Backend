@@ -36,4 +36,18 @@ public class AuthService {
         AuthMember authMember = AuthMember.from(savedToken.getUser());
         return jwtUtil.createAccessToken(authMember);
     }
+
+    /** 로그아웃: 쿠키로 전달된 refreshToken에 해당하는 row 삭제. 없거나 이미 삭제된 경우도 정상 처리(멱등). */
+    @Transactional
+    public void logout(String refreshToken) {
+        String tokenHash = tokenHasher.hash(refreshToken);
+        refreshTokenRepository.findByTokenHash(tokenHash)
+                .ifPresent(refreshTokenRepository::delete);
+    }
+
+    /** 회원 탈퇴 시 해당 사용자의 refreshToken을 무효화한다. */
+    @Transactional
+    public void revokeRefreshToken(Long userId) {
+        refreshTokenRepository.deleteByUser_Id(userId);
+    }
 }

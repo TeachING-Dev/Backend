@@ -106,6 +106,13 @@ public class UserService {
         return NotificationUpdateResponseDto.of(user.getNotificationsEnabled());
     }
 
+    /** [DELETE] /users/me — 회원 탈퇴 (soft-delete) */
+    @Transactional
+    public void withdraw(Long userId) {
+        User user = getActiveUser(userId);
+        user.delete();
+    }
+
     /**
      * 활성 사용자 조회.
      * soft-delete 로 탈퇴 사용자는 조회 자체가 안 되므로, 없으면 USER_NOT_FOUND.
