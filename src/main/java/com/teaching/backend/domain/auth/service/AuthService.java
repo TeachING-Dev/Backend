@@ -37,12 +37,15 @@ public class AuthService {
         return jwtUtil.createAccessToken(authMember);
     }
 
-    /** 로그아웃: 쿠키로 전달된 refreshToken에 해당하는 row 삭제. 없거나 이미 삭제된 경우도 정상 처리(멱등). */
+    /**
+     * 로그아웃: 쿠키로 전달된 refreshToken에 해당하는 row 삭제. 없거나 이미 삭제된 경우도 정상 처리(멱등).
+     * 조회 후 삭제하는 대신 조건부 DELETE 쿼리를 바로 실행해, 동시 로그아웃 요청에서 0건 삭제가
+     * StaleStateException 으로 이어지는 것을 방지한다.
+     */
     @Transactional
     public void logout(String refreshToken) {
         String tokenHash = tokenHasher.hash(refreshToken);
-        refreshTokenRepository.findByTokenHash(tokenHash)
-                .ifPresent(refreshTokenRepository::delete);
+        refreshTokenRepository.deleteByTokenHash(tokenHash);
     }
 
     /** 회원 탈퇴 시 해당 사용자의 refreshToken을 무효화한다. */
