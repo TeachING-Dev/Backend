@@ -20,6 +20,7 @@ import java.util.List;
 public class ChatRoomService {
 
     private static final int TITLE_MAX_LENGTH = 15;
+    private static final String TITLE_ELLIPSIS = "...";
 
     private final ChatRoomRepository chatRoomRepository;
     private final EntityManager entityManager;
@@ -72,7 +73,7 @@ public class ChatRoomService {
 
     private String generateTitle(String content) {
         return content.length() > TITLE_MAX_LENGTH
-                ? content.substring(0, TITLE_MAX_LENGTH)
+                ? content.substring(0, TITLE_MAX_LENGTH - TITLE_ELLIPSIS.length()) + TITLE_ELLIPSIS
                 : content;
     }
 
