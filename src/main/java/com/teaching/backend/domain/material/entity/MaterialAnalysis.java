@@ -32,12 +32,16 @@ public class MaterialAnalysis extends BaseSoftDeleteEntity {
     @Column(nullable = false, length = 20)
     private String promptVersion;
 
+    @Column(nullable = false)
+    private boolean isUserEdited;
+
     @Builder(access = AccessLevel.PRIVATE)
     private MaterialAnalysis(Material material, String summary, String detailAnalysis, String promptVersion) {
         this.material = material;
         this.summary = summary;
         this.detailAnalysis = detailAnalysis;
         this.promptVersion = promptVersion;
+        this.isUserEdited = false;
     }
 
     public static MaterialAnalysis create(Material material, String summary,
@@ -54,5 +58,10 @@ public class MaterialAnalysis extends BaseSoftDeleteEntity {
         this.summary = summary;
         this.detailAnalysis = detailAnalysis;
         this.promptVersion = promptVersion;
+    }
+
+    public void editSummary(String summary) {
+        this.summary = summary;
+        this.isUserEdited = true;
     }
 }

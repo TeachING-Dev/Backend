@@ -4,10 +4,46 @@ import com.teaching.backend.domain.material.entity.Material;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
+import java.util.Optional;
+
 public interface MaterialRepository extends JpaRepository<Material, Long> {
+
+    Optional<Material> findByIdAndFolder_IdAndUser_Id(
+            Long id,
+            Long folderId,
+            Long userId
+    );
+
+    List<Material> findAllByIdInAndFolder_IdAndUser_Id(
+            List<Long> ids,
+            Long folderId,
+            Long userId
+    );
+
+    @Query(
+            value = "SELECT COUNT(*) FROM materials WHERE id IN (:materialIds) AND user_id = :userId AND deleted_at IS NOT NULL",
+            nativeQuery = true
+    )
+    long countDeletedByIdsAndUserId(
+            @Param("materialIds") List<Long> materialIds,
+            @Param("userId") Long userId
+    );
+
+    @Modifying
+    @Query(
+            value = "UPDATE materials SET deleted_at = NULL, folder_id = :folderId WHERE id IN (:materialIds) AND user_id = :userId AND deleted_at IS NOT NULL",
+            nativeQuery = true
+    )
+    int restoreDeletedMaterials(
+            @Param("materialIds") List<Long> materialIds,
+            @Param("folderId") Long folderId,
+            @Param("userId") Long userId
+    );
 
     @Query(
             value = """

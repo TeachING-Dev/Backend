@@ -79,4 +79,8 @@ public class Material extends BaseSoftDeleteEntity {
     public void failAnalysis() {
         this.aiStatus = AiStatus.FAILED;
     }
+
+    public void changeFolder(Folder folder) {
+        this.folder = folder;
+    }
 }
