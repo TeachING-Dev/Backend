@@ -12,10 +12,14 @@ import java.util.Optional;
 public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long> {
     Optional<RefreshToken> findByTokenHash(String tokenHash);
     Optional<RefreshToken> findByUser(User user);
-    void deleteByUser_Id(Long userId);
 
     /** 조회 없이 단일 DELETE 쿼리로 삭제해, 동시 로그아웃 요청에서 0건 삭제가 StaleStateException 으로 이어지는 것을 방지한다. */
     @Modifying
     @Query("delete from RefreshToken r where r.tokenHash = :tokenHash")
     void deleteByTokenHash(@Param("tokenHash") String tokenHash);
+
+    /** 조회 없이 단일 DELETE 쿼리로 삭제해, 동시 탈퇴/로그아웃 요청에서 stale-state 예외로 이어지는 것을 방지한다. */
+    @Modifying
+    @Query("delete from RefreshToken r where r.user.id = :userId")
+    void deleteByUser_Id(@Param("userId") Long userId);
 }

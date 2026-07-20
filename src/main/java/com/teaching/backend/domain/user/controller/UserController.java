@@ -1,6 +1,5 @@
 package com.teaching.backend.domain.user.controller;
 
-import com.teaching.backend.domain.auth.service.AuthService;
 import com.teaching.backend.domain.user.code.UserSuccessCode;
 import com.teaching.backend.domain.user.dto.NotificationUpdateRequestDto;
 import com.teaching.backend.domain.user.dto.NotificationUpdateResponseDto;
@@ -34,7 +33,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserController {
 
     private final UserService userService;
-    private final AuthService authService;
     private final CurrentUserProvider currentUserProvider;
 
     @Value("${cookie.secure}")
@@ -66,7 +64,6 @@ public class UserController {
     public ApiResponse<Void> withdraw(@RequestBody UserWithdrawRequestDto request, HttpServletResponse response) {
         Long userId = currentUserProvider.getCurrentUserId();
         userService.withdraw(userId, request);
-        authService.revokeRefreshToken(userId);
         RefreshTokenCookieUtil.clear(response, cookieSecure);
         return ApiResponse.onSuccess(UserSuccessCode.WITHDRAWN, null);
     }
