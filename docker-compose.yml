@@ -19,7 +19,7 @@ services:
       APP_OAUTH2_REDIRECT_URI: ${APP_OAUTH2_REDIRECT_URI}
     depends_on:
       - qdrant
-      -
+
   qdrant:
     image: qdrant/qdrant:v1.11.0
     container_name: teaching-qdrant
