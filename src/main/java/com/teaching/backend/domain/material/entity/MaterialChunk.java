@@ -29,7 +29,7 @@ public class MaterialChunk {
     private Integer chunkIndex;
 
     @Lob
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "MEDIUMTEXT")
     private String chunkText;
 
     @Column(nullable = false, unique = true, length = 100)

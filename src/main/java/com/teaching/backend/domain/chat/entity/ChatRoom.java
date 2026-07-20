@@ -10,6 +10,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+// 채팅방 정보(제목, 마지막 메시지 시각, 소유 유저)를 저장하는 JPA 엔티티
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
