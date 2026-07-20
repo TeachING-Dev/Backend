@@ -20,7 +20,12 @@ public enum UserErrorCode implements BaseErrorCode {
     NICKNAME_DUPLICATED(HttpStatus.CONFLICT, "USER409_2", "이미 사용 중인 닉네임입니다."),
     PROFILE_NO_UPDATE_FIELD(HttpStatus.BAD_REQUEST, "USER400_5", "수정할 값을 최소 1개 이상 입력해주세요."),
     PROFILE_IMAGE_INVALID(HttpStatus.BAD_REQUEST, "USER400_6", "프로필 이미지 URL 형식이 올바르지 않습니다."),
-    NOTIFICATION_INVALID(HttpStatus.BAD_REQUEST, "USER400_7", "알림 수신 여부 값이 올바르지 않습니다.");
+    NOTIFICATION_INVALID(HttpStatus.BAD_REQUEST, "USER400_7", "알림 수신 여부 값이 올바르지 않습니다."),
+
+    // 회원 탈퇴
+    WITHDRAWAL_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "USER400_8", "탈퇴 사유를 선택해주세요."),
+    WITHDRAWAL_REASON_DETAIL_REQUIRED(HttpStatus.BAD_REQUEST, "USER400_9", "기타 사유를 입력해주세요."),
+    WITHDRAWAL_NOT_CONFIRMED(HttpStatus.BAD_REQUEST, "USER400_10", "탈퇴 확인에 동의해주세요.");
     private final HttpStatus status;
     private final String code;
     private final String message;

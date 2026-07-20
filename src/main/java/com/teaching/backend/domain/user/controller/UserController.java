@@ -7,6 +7,7 @@ import com.teaching.backend.domain.user.dto.NotificationUpdateResponseDto;
 import com.teaching.backend.domain.user.dto.UserInfoResponseDto;
 import com.teaching.backend.domain.user.dto.UserUpdateRequestDto;
 import com.teaching.backend.domain.user.dto.UserUpdateResponseDto;
+import com.teaching.backend.domain.user.dto.UserWithdrawRequestDto;
 import com.teaching.backend.domain.user.service.UserService;
 import com.teaching.backend.global.response.ApiResponse;
 import com.teaching.backend.global.security.CurrentUserProvider;
@@ -62,9 +63,9 @@ public class UserController {
 
     /** [DELETE] /users/me — 회원 탈퇴 */
     @DeleteMapping("/me")
-    public ApiResponse<Void> withdraw(HttpServletResponse response) {
+    public ApiResponse<Void> withdraw(@RequestBody UserWithdrawRequestDto request, HttpServletResponse response) {
         Long userId = currentUserProvider.getCurrentUserId();
-        userService.withdraw(userId);
+        userService.withdraw(userId, request);
         authService.revokeRefreshToken(userId);
         RefreshTokenCookieUtil.clear(response, cookieSecure);
         return ApiResponse.onSuccess(UserSuccessCode.WITHDRAWN, null);

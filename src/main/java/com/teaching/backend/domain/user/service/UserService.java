@@ -5,12 +5,16 @@ import com.teaching.backend.domain.user.dto.NotificationUpdateResponseDto;
 import com.teaching.backend.domain.user.dto.UserInfoResponseDto;
 import com.teaching.backend.domain.user.dto.UserUpdateRequestDto;
 import com.teaching.backend.domain.user.dto.UserUpdateResponseDto;
+import com.teaching.backend.domain.user.dto.UserWithdrawRequestDto;
 import com.teaching.backend.domain.user.entity.Account;
 import com.teaching.backend.domain.user.entity.User;
+import com.teaching.backend.domain.user.entity.WithdrawalHistory;
+import com.teaching.backend.domain.user.enums.WithdrawalReason;
 import com.teaching.backend.domain.user.exception.UserErrorCode;
 import com.teaching.backend.domain.user.exception.UserException;
 import com.teaching.backend.domain.user.repository.AccountRepository;
 import com.teaching.backend.domain.user.repository.UserRepository;
+import com.teaching.backend.domain.user.repository.WithdrawalHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -34,6 +38,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final AccountRepository accountRepository;
+    private final WithdrawalHistoryRepository withdrawalHistoryRepository;
 
     /** 닉네임: 2~10자의 한글/영문/숫자 */
     private static final Pattern NICKNAME_PATTERN = Pattern.compile("^[가-힣a-zA-Z0-9]{2,10}$");
@@ -106,11 +111,32 @@ public class UserService {
         return NotificationUpdateResponseDto.of(user.getNotificationsEnabled());
     }
 
-    /** [DELETE] /users/me — 회원 탈퇴 (soft-delete) */
+    /** [DELETE] /users/me — 회원 탈퇴 (soft-delete). 탈퇴 사유를 별도 이력 테이블에 저장한다. */
     @Transactional
-    public void withdraw(Long userId) {
+    public void withdraw(Long userId, UserWithdrawRequestDto request) {
+        WithdrawalReason reason = parseWithdrawalReason(request.reason());
+        if (reason == WithdrawalReason.ETC
+                && (request.reasonDetail() == null || request.reasonDetail().isBlank())) {
+            throw new UserException(UserErrorCode.WITHDRAWAL_REASON_DETAIL_REQUIRED);
+        }
+        if (!Boolean.TRUE.equals(request.isConfirmed())) {
+            throw new UserException(UserErrorCode.WITHDRAWAL_NOT_CONFIRMED);
+        }
+
         User user = getActiveUser(userId);
+        withdrawalHistoryRepository.save(WithdrawalHistory.of(userId, reason, request.reasonDetail()));
         user.delete();
+    }
+
+    private WithdrawalReason parseWithdrawalReason(String reason) {
+        if (reason == null) {
+            throw new UserException(UserErrorCode.WITHDRAWAL_REASON_REQUIRED);
+        }
+        try {
+            return WithdrawalReason.valueOf(reason);
+        } catch (IllegalArgumentException e) {
+            throw new UserException(UserErrorCode.WITHDRAWAL_REASON_REQUIRED);
+        }
     }
 
     /**

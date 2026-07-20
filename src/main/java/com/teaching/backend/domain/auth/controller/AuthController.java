@@ -1,5 +1,6 @@
 package com.teaching.backend.domain.auth.controller;
 
+import com.teaching.backend.domain.auth.code.AuthSuccessCode;
 import com.teaching.backend.domain.auth.exception.AuthErrorCode;
 import com.teaching.backend.domain.auth.exception.AuthException;
 import com.teaching.backend.domain.auth.service.AuthService;
@@ -50,7 +51,7 @@ public class AuthController {
     public ApiResponse<Void> logout(HttpServletRequest request, HttpServletResponse response) {
         extractRefreshTokenFromCookieOrEmpty(request).ifPresent(authService::logout);
         RefreshTokenCookieUtil.clear(response, cookieSecure);
-        return ApiResponse.onSuccess(null);
+        return ApiResponse.onSuccess(AuthSuccessCode.LOGOUT_SUCCESS, null);
     }
 
     private String extractRefreshTokenFromCookie(HttpServletRequest request) {
