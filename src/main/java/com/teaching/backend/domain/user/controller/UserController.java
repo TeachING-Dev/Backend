@@ -3,6 +3,8 @@ package com.teaching.backend.domain.user.controller;
 import com.teaching.backend.domain.user.code.UserSuccessCode;
 import com.teaching.backend.domain.user.dto.NotificationUpdateRequestDto;
 import com.teaching.backend.domain.user.dto.NotificationUpdateResponseDto;
+import com.teaching.backend.domain.user.dto.TeacherPersonaUpdateRequestDto;
+import com.teaching.backend.domain.user.dto.TeacherPersonaUpdateResponseDto;
 import com.teaching.backend.domain.user.dto.UserInfoResponseDto;
 import com.teaching.backend.domain.user.dto.UserUpdateRequestDto;
 import com.teaching.backend.domain.user.dto.UserUpdateResponseDto;
@@ -49,5 +51,12 @@ public class UserController {
     public ApiResponse<NotificationUpdateResponseDto> updateNotification(@RequestBody NotificationUpdateRequestDto request) {
         Long userId = currentUserProvider.getCurrentUserId();
         return ApiResponse.onSuccess(UserSuccessCode.NOTIFICATION_UPDATED, userService.updateNotification(userId, request));
+    }
+
+    /** [PATCH] /users/me/teacher-persona — AI 선생님 설정(페르소나) 변경 */
+    @PatchMapping("/me/teacher-persona")
+    public ApiResponse<TeacherPersonaUpdateResponseDto> updateTeacherPersona(@RequestBody TeacherPersonaUpdateRequestDto request) {
+        Long userId = currentUserProvider.getCurrentUserId();
+        return ApiResponse.onSuccess(UserSuccessCode.TEACHER_PERSONA_UPDATED, userService.updateTeacherPersona(userId, request));
     }
 }
