@@ -1,5 +1,6 @@
 package com.teaching.backend.domain.user.service;
 
+import com.teaching.backend.domain.auth.service.AuthService;
 import com.teaching.backend.domain.user.dto.NotificationUpdateRequestDto;
 import com.teaching.backend.domain.user.dto.NotificationUpdateResponseDto;
 import com.teaching.backend.domain.user.dto.TeacherPersonaUpdateRequestDto;
@@ -7,13 +8,17 @@ import com.teaching.backend.domain.user.dto.TeacherPersonaUpdateResponseDto;
 import com.teaching.backend.domain.user.dto.UserInfoResponseDto;
 import com.teaching.backend.domain.user.dto.UserUpdateRequestDto;
 import com.teaching.backend.domain.user.dto.UserUpdateResponseDto;
+import com.teaching.backend.domain.user.dto.UserWithdrawRequestDto;
 import com.teaching.backend.domain.user.entity.Account;
 import com.teaching.backend.domain.user.entity.User;
+import com.teaching.backend.domain.user.entity.WithdrawalHistory;
 import com.teaching.backend.domain.user.enums.TeacherPersona;
+import com.teaching.backend.domain.user.enums.WithdrawalReason;
 import com.teaching.backend.domain.user.exception.UserErrorCode;
 import com.teaching.backend.domain.user.exception.UserException;
 import com.teaching.backend.domain.user.repository.AccountRepository;
 import com.teaching.backend.domain.user.repository.UserRepository;
+import com.teaching.backend.domain.user.repository.WithdrawalHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -37,6 +42,11 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final AccountRepository accountRepository;
+    private final WithdrawalHistoryRepository withdrawalHistoryRepository;
+    private final AuthService authService;
+
+    /** 탈퇴 사유 상세 최대 길이 */
+    private static final int WITHDRAWAL_REASON_DETAIL_MAX_LENGTH = 500;
 
     /** 닉네임: 2~10자의 한글/영문/숫자 */
     private static final Pattern NICKNAME_PATTERN = Pattern.compile("^[가-힣a-zA-Z0-9]{2,10}$");
@@ -127,6 +137,42 @@ public class UserService {
         user.changeTeacherPersona(persona);
 
         return TeacherPersonaUpdateResponseDto.of(user.getTeacherPersona());
+    }
+
+    /**
+     * [DELETE] /users/me — 회원 탈퇴 (soft-delete). 탈퇴 사유를 별도 이력 테이블에 저장한다.
+     * refreshToken 무효화까지 같은 트랜잭션으로 묶어, 탈퇴 이후 토큰만 남는 상태를 방지한다
+     * (쿠키 만료는 응답 단계의 부수 효과라 컨트롤러에서 별도로 처리한다).
+     */
+    @Transactional
+    public void withdraw(Long userId, UserWithdrawRequestDto request) {
+        WithdrawalReason reason = parseWithdrawalReason(request.reason());
+        if (reason == WithdrawalReason.ETC
+                && (request.reasonDetail() == null || request.reasonDetail().isBlank())) {
+            throw new UserException(UserErrorCode.WITHDRAWAL_REASON_DETAIL_REQUIRED);
+        }
+        if (request.reasonDetail() != null && request.reasonDetail().length() > WITHDRAWAL_REASON_DETAIL_MAX_LENGTH) {
+            throw new UserException(UserErrorCode.WITHDRAWAL_REASON_DETAIL_TOO_LONG);
+        }
+        if (!Boolean.TRUE.equals(request.isConfirmed())) {
+            throw new UserException(UserErrorCode.WITHDRAWAL_NOT_CONFIRMED);
+        }
+
+        User user = getActiveUser(userId);
+        withdrawalHistoryRepository.save(WithdrawalHistory.of(userId, reason, request.reasonDetail()));
+        user.delete();
+        authService.revokeRefreshToken(userId);
+    }
+
+    private WithdrawalReason parseWithdrawalReason(String reason) {
+        if (reason == null) {
+            throw new UserException(UserErrorCode.WITHDRAWAL_REASON_REQUIRED);
+        }
+        try {
+            return WithdrawalReason.valueOf(reason);
+        } catch (IllegalArgumentException e) {
+            throw new UserException(UserErrorCode.WITHDRAWAL_REASON_REQUIRED);
+        }
     }
 
     /**
