@@ -6,10 +6,15 @@ import com.teaching.backend.domain.user.dto.NotificationUpdateResponseDto;
 import com.teaching.backend.domain.user.dto.UserInfoResponseDto;
 import com.teaching.backend.domain.user.dto.UserUpdateRequestDto;
 import com.teaching.backend.domain.user.dto.UserUpdateResponseDto;
+import com.teaching.backend.domain.user.dto.UserWithdrawRequestDto;
 import com.teaching.backend.domain.user.service.UserService;
 import com.teaching.backend.global.response.ApiResponse;
 import com.teaching.backend.global.security.CurrentUserProvider;
+import com.teaching.backend.global.security.util.RefreshTokenCookieUtil;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 마이페이지 API.
  *
- * 현재 사용자 id 는 CurrentUserProvider 에서 가져온다(인증 미구현이라 개발용은 고정 id=1).
+ * 현재 사용자 id 는 CurrentUserProvider(SecurityContext 기반)에서 가져온다.
  * 성공 응답 code/message 는 스펙 문서에 정의된 엔드포인트별 UserSuccessCode 를 사용한다.
  */
 @RestController
@@ -29,6 +34,9 @@ public class UserController {
 
     private final UserService userService;
     private final CurrentUserProvider currentUserProvider;
+
+    @Value("${cookie.secure}")
+    private boolean cookieSecure;
 
     /** [GET] /users/me — 내 정보 조회 */
     @GetMapping("/me")
@@ -49,5 +57,14 @@ public class UserController {
     public ApiResponse<NotificationUpdateResponseDto> updateNotification(@RequestBody NotificationUpdateRequestDto request) {
         Long userId = currentUserProvider.getCurrentUserId();
         return ApiResponse.onSuccess(UserSuccessCode.NOTIFICATION_UPDATED, userService.updateNotification(userId, request));
+    }
+
+    /** [DELETE] /users/me — 회원 탈퇴 */
+    @DeleteMapping("/me")
+    public ApiResponse<Void> withdraw(@RequestBody UserWithdrawRequestDto request, HttpServletResponse response) {
+        Long userId = currentUserProvider.getCurrentUserId();
+        userService.withdraw(userId, request);
+        RefreshTokenCookieUtil.clear(response, cookieSecure);
+        return ApiResponse.onSuccess(UserSuccessCode.WITHDRAWN, null);
     }
 }
