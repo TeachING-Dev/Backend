@@ -19,9 +19,16 @@ public interface FolderRepository extends JpaRepository<Folder, Long> {
 
     long countByUser_Id(Long userId);
 
-    boolean existsByUser_IdAndName(
-            Long userId,
-            String name
+    @Query("""
+            SELECT CASE WHEN COUNT(f) > 0 THEN true ELSE false END
+            FROM Folder f
+            WHERE f.user.id = :userId
+              AND f.name = :name
+              AND f.deletedAt IS NULL
+            """)
+    boolean existsActiveByUserIdAndName(
+            @Param("userId") Long userId,
+            @Param("name") String name
     );
 
     Optional<Folder> findByIdAndUser_Id(
@@ -29,10 +36,18 @@ public interface FolderRepository extends JpaRepository<Folder, Long> {
             Long userId
     );
 
-    boolean existsByUser_IdAndNameAndIdNot(
-            Long userId,
-            String name,
-            Long folderId
+    @Query("""
+            SELECT CASE WHEN COUNT(f) > 0 THEN true ELSE false END
+            FROM Folder f
+            WHERE f.user.id = :userId
+              AND f.name = :name
+              AND f.id <> :folderId
+              AND f.deletedAt IS NULL
+            """)
+    boolean existsActiveByUserIdAndNameAndIdNot(
+            @Param("userId") Long userId,
+            @Param("name") String name,
+            @Param("folderId") Long folderId
     );
 
     @Query(
