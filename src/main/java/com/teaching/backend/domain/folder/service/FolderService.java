@@ -139,6 +139,7 @@ public class FolderService {
             FolderRenameRequest request
     ) {
         String folderName = validateAndNormalizeFolderName(request);
+        lockUserForFolderMutation(userId);
         Folder folder = getOwnedFolder(userId, folderId);
 
         if (folder.getName().equals(folderName)) {
