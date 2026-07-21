@@ -46,6 +46,12 @@ dependencies {
 
     //jakarta-persistence
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+
+    // WebClient for raw HTTP calls to OpenAI / Qdrant (직접 REST 호출, Spring AI 미사용).
+    // starter-webflux 대신 필요한 두 모듈만 추가 — webmvc가 이미 있어 WebApplicationType은 계속 SERVLET으로 결정됨.
+    implementation 'org.springframework:spring-webflux'
+    implementation 'io.projectreactor.netty:reactor-netty-http'
+
     // Test
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'

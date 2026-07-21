@@ -6,9 +6,11 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
-public interface MaterialAnalysisRepository
-        extends JpaRepository<MaterialAnalysis, Long> {
+public interface MaterialAnalysisRepository extends JpaRepository<MaterialAnalysis, Long> {
+
+    Optional<MaterialAnalysis> findByMaterialId(Long materialId);
 
     @Query("""
             SELECT ma
