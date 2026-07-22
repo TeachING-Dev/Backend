@@ -13,6 +13,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
@@ -64,18 +66,27 @@ public class OAuthSuccessHandler implements AuthenticationSuccessHandler {
                 );
 
         // refreshToken은 HttpOnly 쿠키로
-        Cookie refreshCookie = new Cookie("refreshToken", refreshToken);
-        refreshCookie.setHttpOnly(true);
-        refreshCookie.setSecure(cookieSecure); // 로컬 http 테스트 시엔 false로 잠깐 바꿔야 할 수도 있음
-        refreshCookie.setPath("/");
-        refreshCookie.setMaxAge(14 * 24 * 60 * 60); // 14일 (초 단위)
-        response.addCookie(refreshCookie);
+        ResponseCookie refreshCookie = ResponseCookie.from("refreshToken", refreshToken)
+                .httpOnly(true)
+                .secure(cookieSecure)
+                .sameSite("None")
+                .path("/")
+                .maxAge(14 * 24 * 60 * 60)
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie.toString());
 
-        String targetUrl = UriComponentsBuilder.fromUriString(redirectUri)
-                .queryParam("accessToken", accessToken)
-                .build()
-                .toUriString();
 
-        response.sendRedirect(targetUrl);
+        // (accessToken도 쿠키로, 리다이렉트는 순수 redirectUri로만)
+        ResponseCookie accessCookie = ResponseCookie.from("accessToken", accessToken)
+                .httpOnly(true)
+                .secure(cookieSecure)
+                .sameSite("None")
+                .path("/")
+                .maxAge(60 * 60)
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, accessCookie.toString());
+
+        response.sendRedirect(redirectUri);
+
     }
 }
