@@ -27,6 +27,7 @@ import com.teaching.backend.domain.user.repository.UserRepository;
 import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -121,12 +122,12 @@ public class FolderService {
             throw new FolderException(FolderErrorCode.FOLDER_LIMIT_EXCEEDED);
         }
 
-        if (folderRepository.existsByUser_IdAndName(userId, folderName)) {
+        if (folderRepository.existsActiveByUserIdAndName(userId, folderName)) {
             throw new FolderException(FolderErrorCode.DUPLICATE_FOLDER_NAME);
         }
 
         Folder folder = Folder.create(user, folderName);
-        Folder savedFolder = folderRepository.save(folder);
+        Folder savedFolder = saveFolderOrThrowDuplicateName(folder);
 
         return FolderCreateResponse.from(savedFolder);
     }
@@ -138,17 +139,19 @@ public class FolderService {
             FolderRenameRequest request
     ) {
         String folderName = validateAndNormalizeFolderName(request);
+        lockUserForFolderMutation(userId);
         Folder folder = getOwnedFolder(userId, folderId);
 
         if (folder.getName().equals(folderName)) {
             return FolderRenameResponse.from(folder);
         }
 
-        if (folderRepository.existsByUser_IdAndNameAndIdNot(userId, folderName, folderId)) {
+        if (folderRepository.existsActiveByUserIdAndNameAndIdNot(userId, folderName, folderId)) {
             throw new FolderException(FolderErrorCode.DUPLICATE_FOLDER_NAME);
         }
 
         folder.rename(folderName);
+        flushFolderMutationOrThrowDuplicateName();
 
         return FolderRenameResponse.from(folder);
     }
@@ -190,7 +193,7 @@ public class FolderService {
             throw new FolderException(FolderErrorCode.DUPLICATE_FOLDER_NAME);
         }
 
-        int restoredCount = folderRepository.restoreDeletedFolder(folderId, userId);
+        int restoredCount = restoreFolderOrThrowDuplicateName(folderId, userId);
         if (restoredCount == 0) {
             throw new FolderException(FolderErrorCode.FOLDER_NOT_FOUND);
         }
@@ -339,6 +342,49 @@ public class FolderService {
     private User lockUserForFolderMutation(Long userId) {
         return userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new UserException(UserErrorCode.USER_NOT_FOUND));
+    }
+
+    private Folder saveFolderOrThrowDuplicateName(Folder folder) {
+        try {
+            return folderRepository.saveAndFlush(folder);
+        } catch (DataIntegrityViolationException e) {
+            throwDuplicateFolderNameIfUniqueViolation(e);
+            throw e;
+        }
+    }
+
+    private void flushFolderMutationOrThrowDuplicateName() {
+        try {
+            folderRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            throwDuplicateFolderNameIfUniqueViolation(e);
+            throw e;
+        }
+    }
+
+    private int restoreFolderOrThrowDuplicateName(Long folderId, Long userId) {
+        try {
+            return folderRepository.restoreDeletedFolder(folderId, userId);
+        } catch (DataIntegrityViolationException e) {
+            throwDuplicateFolderNameIfUniqueViolation(e);
+            throw e;
+        }
+    }
+
+    private void throwDuplicateFolderNameIfUniqueViolation(DataIntegrityViolationException e) {
+        String rootMessage = getRootCauseMessage(e);
+        String normalizedMessage = rootMessage.toLowerCase();
+        if (normalizedMessage.contains("duplicate entry") || normalizedMessage.contains("unique constraint")) {
+            throw new FolderException(FolderErrorCode.DUPLICATE_FOLDER_NAME);
+        }
+    }
+
+    private String getRootCauseMessage(Throwable e) {
+        Throwable cause = e;
+        while (cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        return cause.getMessage() == null ? "" : cause.getMessage();
     }
 
     private String validateAndNormalizeFolderName(FolderCreateRequest request) {

@@ -10,8 +10,11 @@ import org.springframework.data.repository.query.Param;
 import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
-    // 카카오/구글 최초 가입 시 기존 유저인지 체크
+
     Optional<User> findByEmail(String email);
+
+    boolean existsByNicknameAndIdNot(String nickname, Long id);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT u FROM User u WHERE u.id = :userId")
     Optional<User> findByIdForUpdate(@Param("userId") Long userId);

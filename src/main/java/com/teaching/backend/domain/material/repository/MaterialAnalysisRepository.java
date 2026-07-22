@@ -8,8 +8,9 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 import java.util.Optional;
 
-public interface MaterialAnalysisRepository
-        extends JpaRepository<MaterialAnalysis, Long> {
+public interface MaterialAnalysisRepository extends JpaRepository<MaterialAnalysis, Long> {
+
+    Optional<MaterialAnalysis> findByMaterialId(Long materialId);
 
     Optional<MaterialAnalysis> findByMaterialId(Long materialId);
 
