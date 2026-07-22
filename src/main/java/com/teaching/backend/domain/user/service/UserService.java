@@ -3,6 +3,8 @@ package com.teaching.backend.domain.user.service;
 import com.teaching.backend.domain.auth.service.AuthService;
 import com.teaching.backend.domain.user.dto.NotificationUpdateRequestDto;
 import com.teaching.backend.domain.user.dto.NotificationUpdateResponseDto;
+import com.teaching.backend.domain.user.dto.TeacherPersonaUpdateRequestDto;
+import com.teaching.backend.domain.user.dto.TeacherPersonaUpdateResponseDto;
 import com.teaching.backend.domain.user.dto.UserInfoResponseDto;
 import com.teaching.backend.domain.user.dto.UserUpdateRequestDto;
 import com.teaching.backend.domain.user.dto.UserUpdateResponseDto;
@@ -10,6 +12,7 @@ import com.teaching.backend.domain.user.dto.UserWithdrawRequestDto;
 import com.teaching.backend.domain.user.entity.Account;
 import com.teaching.backend.domain.user.entity.User;
 import com.teaching.backend.domain.user.entity.WithdrawalHistory;
+import com.teaching.backend.domain.user.enums.TeacherPersona;
 import com.teaching.backend.domain.user.enums.WithdrawalReason;
 import com.teaching.backend.domain.user.exception.UserErrorCode;
 import com.teaching.backend.domain.user.exception.UserException;
@@ -114,6 +117,26 @@ public class UserService {
         user.changeNotificationEnabled(request.pushEnabled());
 
         return NotificationUpdateResponseDto.of(user.getNotificationsEnabled());
+    }
+
+    /** [PATCH] /users/me/teacher-persona */
+    @Transactional
+    public TeacherPersonaUpdateResponseDto updateTeacherPersona(Long userId, TeacherPersonaUpdateRequestDto request) {
+        if (request == null || request.persona() == null) {
+            throw new UserException(UserErrorCode.TEACHER_PERSONA_INVALID);
+        }
+
+        TeacherPersona persona;
+        try {
+            persona = TeacherPersona.valueOf(request.persona());
+        } catch (IllegalArgumentException e) {
+            throw new UserException(UserErrorCode.TEACHER_PERSONA_INVALID);
+        }
+
+        User user = getActiveUser(userId);
+        user.changeTeacherPersona(persona);
+
+        return TeacherPersonaUpdateResponseDto.of(user.getTeacherPersona());
     }
 
     /**
