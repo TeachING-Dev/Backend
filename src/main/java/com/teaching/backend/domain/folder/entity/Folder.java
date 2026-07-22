@@ -12,10 +12,7 @@ import org.hibernate.annotations.SQLRestriction;
 @AllArgsConstructor(access = AccessLevel.PROTECTED)
 @Builder(access = AccessLevel.PRIVATE)
 @SQLRestriction("deleted_at IS NULL")
-@Table(
-        name = "folders",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "name"})
-)
+@Table(name = "folders")
 public class Folder extends BaseSoftDeleteEntity {
 
     @Id
@@ -39,5 +36,9 @@ public class Folder extends BaseSoftDeleteEntity {
                 .name(name)
                 .itemCount(0)
                 .build();
+    }
+
+    public void rename(String name) {
+        this.name = name;
     }
 }
