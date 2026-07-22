@@ -85,23 +85,33 @@ public class AuthService {
     //회원가입
     @Transactional
     public void signup(Long userId, SignupRequest request) {
+
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserException(UserErrorCode.USER_NOT_FOUND));
 
         validateNickname(request.nickname());
 
-        List<Term> requiredTerms = termRepository.findAllByIsRequiredTrue();
+        // 1. 필수 약관 검증 (soft delete 필터링 적용)
+        List<Term> requiredTerms = termRepository.findAllByIsRequiredTrueAndDeletedAtIsNull();
         List<Long> requiredTermIds = requiredTerms.stream().map(Term::getId).toList();
 
         if (!request.agreedTermIds().containsAll(requiredTermIds)) {
             throw new TermException(TermErrorCode.REQUIRED_TERM_NOT_AGREED);
         }
 
+        // 2. 동의 대상 약관 조회 + 존재 검증
+        List<Term> agreedTerms = termRepository.findAllByIdInAndDeletedAtIsNull(request.agreedTermIds());
+        if (agreedTerms.size() != request.agreedTermIds().size()) {
+            throw new TermException(TermErrorCode.TERM_NOT_FOUND);
+        }
+
+        // 3. 닉네임 확정
         user.changeNickname(request.nickname());
 
-        List<Term> agreedTerms = termRepository.findAllById(request.agreedTermIds());
-        for (Term term : agreedTerms) {
-            userTermRepository.save(UserTerm.agree(user, term));
-        }
+        // 4. 약관 동의 이력 저장
+        List<UserTerm> userTerms = agreedTerms.stream()
+                .map(term -> UserTerm.agree(user, term))
+                .toList();
+        userTermRepository.saveAll(userTerms);
     }
 }
