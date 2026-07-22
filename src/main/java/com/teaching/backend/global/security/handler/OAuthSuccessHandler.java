@@ -77,16 +77,11 @@ public class OAuthSuccessHandler implements AuthenticationSuccessHandler {
 
 
         // (accessToken도 쿠키로, 리다이렉트는 순수 redirectUri로만)
-        ResponseCookie accessCookie = ResponseCookie.from("accessToken", accessToken)
-                .httpOnly(true)
-                .secure(cookieSecure)
-                .sameSite("None")
-                .path("/")
-                .maxAge(60 * 60)
-                .build();
-        response.addHeader(HttpHeaders.SET_COOKIE, accessCookie.toString());
+        String targetUrl = UriComponentsBuilder.fromUriString(redirectUri)
+                .queryParam("accessToken", accessToken)
+                .build()
+                .toUriString();
 
-        response.sendRedirect(redirectUri);
-
+        response.sendRedirect(targetUrl);
     }
 }
