@@ -200,16 +200,6 @@ class TeachingMapServiceTest {
     }
 
     @Test
-    void getTeachingMapsKeepsHomeDashboardRepositoryMethodAvailable() throws NoSuchMethodException {
-        TeachingMapRepository.class.getMethod(
-                "findAllByUser_IdAndStatusAndIsDraftFalseAndDeletedAtIsNull",
-                Long.class,
-                TeachingMapStatus.class,
-                Pageable.class
-        );
-    }
-
-    @Test
     void getTeachingMapsAppliesPageableWithStatus() {
         when(teachingMapRepository.findAllByUser_IdAndStatusAndIsDraftFalseAndDeletedAtIsNull(
                 eq(USER_ID),

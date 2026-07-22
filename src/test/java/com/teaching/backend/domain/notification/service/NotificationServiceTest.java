@@ -42,16 +42,20 @@ class NotificationServiceTest {
     private NotificationService notificationService;
 
     @Test
-    void getNotificationsReturnsNotifications() {
+    void getNotificationsUsesDefaultSizeWhenSizeIsNull() {
         Notification first = notification(101L, USER_ID, "Title 1", "Content 1", NotificationTargetType.MATERIAL, false, createdAt(1));
         Notification second = notification(102L, USER_ID, "Title 2", "Content 2", NotificationTargetType.TEACHING_MAP, true, createdAt(2));
-        when(notificationRepository.findAllByUser_Id(eq(USER_ID), any(Sort.class)))
-                .thenReturn(List.of(first, second));
+        when(notificationRepository.findAllByUser_Id(eq(USER_ID), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(first, second)));
 
         List<NotificationListResponse> result = notificationService.getNotifications(USER_ID, null);
 
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(notificationRepository).findAllByUser_Id(eq(USER_ID), pageableCaptor.capture());
+        assertThat(pageableCaptor.getValue().getPageSize()).isEqualTo(20);
         assertThat(result).extracting(NotificationListResponse::notificationId)
                 .containsExactly(101L, 102L);
+        verify(notificationRepository, never()).findAllByUser_Id(eq(USER_ID), any(Sort.class));
     }
 
     @Test
@@ -74,8 +78,8 @@ class NotificationServiceTest {
 
     @Test
     void getNotificationsReturnsEmptyListWhenNoNotificationExists() {
-        when(notificationRepository.findAllByUser_Id(eq(USER_ID), any(Sort.class)))
-                .thenReturn(List.of());
+        when(notificationRepository.findAllByUser_Id(eq(USER_ID), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
 
         List<NotificationListResponse> result = notificationService.getNotifications(USER_ID, null);
 
@@ -84,13 +88,13 @@ class NotificationServiceTest {
 
     @Test
     void getNotificationsPassesCurrentUserIdToRepository() {
-        when(notificationRepository.findAllByUser_Id(eq(USER_ID), any(Sort.class)))
-                .thenReturn(List.of());
+        when(notificationRepository.findAllByUser_Id(eq(USER_ID), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
 
         notificationService.getNotifications(USER_ID, null);
 
-        verify(notificationRepository).findAllByUser_Id(eq(USER_ID), any(Sort.class));
-        verify(notificationRepository, never()).findAllByUser_Id(eq(OTHER_USER_ID), any(Sort.class));
+        verify(notificationRepository).findAllByUser_Id(eq(USER_ID), any(Pageable.class));
+        verify(notificationRepository, never()).findAllByUser_Id(eq(OTHER_USER_ID), any(Pageable.class));
     }
 
     @Test
@@ -105,8 +109,8 @@ class NotificationServiceTest {
                 true,
                 createdAt
         );
-        when(notificationRepository.findAllByUser_Id(eq(USER_ID), any(Sort.class)))
-                .thenReturn(List.of(notification));
+        when(notificationRepository.findAllByUser_Id(eq(USER_ID), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(notification)));
 
         NotificationListResponse result = notificationService.getNotifications(USER_ID, null).get(0);
 
@@ -128,15 +132,32 @@ class NotificationServiceTest {
     }
 
     @Test
+    void getNotificationsAllowsMaxSize() {
+        when(notificationRepository.findAllByUser_Id(eq(USER_ID), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        notificationService.getNotifications(USER_ID, 100);
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(notificationRepository).findAllByUser_Id(eq(USER_ID), pageableCaptor.capture());
+        assertThat(pageableCaptor.getValue().getPageSize()).isEqualTo(100);
+    }
+
+    @Test
+    void getNotificationsRejectsSizeGreaterThanMax() {
+        assertBadRequestThrown(() -> notificationService.getNotifications(USER_ID, 101));
+    }
+
+    @Test
     void getNotificationsAppliesRecentSort() {
-        when(notificationRepository.findAllByUser_Id(eq(USER_ID), any(Sort.class)))
-                .thenReturn(List.of());
+        when(notificationRepository.findAllByUser_Id(eq(USER_ID), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
 
         notificationService.getNotifications(USER_ID, null);
 
-        ArgumentCaptor<Sort> sortCaptor = ArgumentCaptor.forClass(Sort.class);
-        verify(notificationRepository).findAllByUser_Id(eq(USER_ID), sortCaptor.capture());
-        Sort sort = sortCaptor.getValue();
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(notificationRepository).findAllByUser_Id(eq(USER_ID), pageableCaptor.capture());
+        Sort sort = pageableCaptor.getValue().getSort();
         assertThat(sort.getOrderFor("createdAt")).isNotNull();
         assertThat(sort.getOrderFor("createdAt").getDirection()).isEqualTo(Sort.Direction.DESC);
         assertThat(sort.getOrderFor("id")).isNotNull();

@@ -18,6 +18,9 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class NotificationService {
 
+    private static final int DEFAULT_PAGE_SIZE = 20;
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final NotificationRepository notificationRepository;
 
     public List<NotificationListResponse> getNotifications(Long userId, Integer size) {
@@ -32,14 +35,11 @@ public class NotificationService {
 
     private List<Notification> findNotifications(Long userId, Integer size) {
         Sort recentSort = recentSort();
-
-        if (size == null) {
-            return notificationRepository.findAllByUser_Id(userId, recentSort);
-        }
+        int pageSize = size == null ? DEFAULT_PAGE_SIZE : size;
 
         return notificationRepository.findAllByUser_Id(
                 userId,
-                PageRequest.of(0, size, recentSort)
+                PageRequest.of(0, pageSize, recentSort)
         ).getContent();
     }
 
@@ -50,7 +50,7 @@ public class NotificationService {
     }
 
     private void validateSize(Integer size) {
-        if (size != null && size <= 0) {
+        if (size != null && (size <= 0 || size > MAX_PAGE_SIZE)) {
             throw new GeneralException(GlobalErrorCode.BAD_REQUEST);
         }
     }
