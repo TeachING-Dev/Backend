@@ -81,7 +81,7 @@ public class TrashController {
             @PathVariable Long materialId
     ) {
         MaterialRestoreResponse result = trashService.restoreMaterial(authMember.getUserId(), materialId);
-        return ApiResponse.onSuccess(MaterialSuccessCode.MATERIAL_RESTORE_SUCCESS, result);
+        return ApiResponse.onSuccess(MaterialSuccessCode.MATERIAL_TRASH_RESTORE_SUCCESS, result);
     }
 
     @Operation(

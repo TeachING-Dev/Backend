@@ -64,6 +64,29 @@ tasks.named('test') {
     useJUnitPlatform()
 }
 
-tasks.named('jar') {
-    enabled = false
+def dotenv = file('.env')
+if (dotenv.exists()) {
+    def dotenvVars = [:]
+    dotenv.eachLine { line ->
+        def trimmed = line.trim()
+        if (trimmed && !trimmed.startsWith('#')) {
+            def idx = trimmed.indexOf('=')
+            if (idx > 0) {
+                dotenvVars[trimmed.substring(0, idx).trim()] = trimmed.substring(idx + 1).trim()
+            }
+        }
+    }
+    tasks.named('bootRun') { environment(dotenvVars) }
+
+    // 테스트 JVM에는 외부 서비스(OPenAI/Qdrant) 실키를 넘기지 않는다.
+    // 실키가 노출되면 테스트가 실제 외부 API를 호출해 비용이 발생하거나 부작용을 일으킬 수 있어,
+    // 컨텍스트 로딩에 필요한 자리표시자 값으로 대체한다.
+    def externalServiceKeys = ['OPENAI_API_KEY', 'QDRANT_URL', 'QDRANT_API_KEY']
+    def testEnvVars = dotenvVars.findAll { key, value -> !externalServiceKeys.contains(key) }
+    testEnvVars.putAll([
+            'OPENAI_API_KEY': 'test-openai-key',
+            'QDRANT_URL'    : 'http://localhost:6333',
+            'QDRANT_API_KEY': 'test-qdrant-key',
+    ])
+    tasks.named('test') { environment(testEnvVars) }
 }

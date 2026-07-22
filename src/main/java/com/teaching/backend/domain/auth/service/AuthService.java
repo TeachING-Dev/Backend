@@ -1,7 +1,18 @@
 package com.teaching.backend.domain.auth.service;
 
+import com.teaching.backend.domain.auth.dto.SignupRequest;
 import com.teaching.backend.domain.auth.exception.AuthErrorCode;
 import com.teaching.backend.domain.auth.exception.AuthException;
+import com.teaching.backend.domain.term.entity.Term;
+import com.teaching.backend.domain.term.entity.UserTerm;
+import com.teaching.backend.domain.term.exception.TermErrorCode;
+import com.teaching.backend.domain.term.exception.TermException;
+import com.teaching.backend.domain.term.repository.TermRepository;
+import com.teaching.backend.domain.term.repository.UserTermRepository;
+import com.teaching.backend.domain.user.entity.User;
+import com.teaching.backend.domain.user.exception.UserErrorCode;
+import com.teaching.backend.domain.user.exception.UserException;
+import com.teaching.backend.domain.user.repository.UserRepository;
 import com.teaching.backend.global.security.entity.AuthMember;
 import com.teaching.backend.global.security.util.JwtUtil;
 import com.teaching.backend.domain.auth.entity.RefreshToken;
@@ -10,6 +21,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -17,6 +30,10 @@ public class AuthService {
     private final JwtUtil jwtUtil;
     private final RefreshTokenRepository refreshTokenRepository;
     private final TokenHasher tokenHasher;
+
+    private final UserRepository userRepository;
+    private final TermRepository termRepository;
+    private final UserTermRepository userTermRepository;
 
     @Transactional
     public String reissueAccessToken(String refreshToken) {
@@ -52,5 +69,49 @@ public class AuthService {
     @Transactional
     public void revokeRefreshToken(Long userId) {
         refreshTokenRepository.deleteByUser_Id(userId);
+    }
+
+    //닉네임 검증 로직
+
+    public void validateNickname(String nickname) {
+        if (nickname == null || nickname.isBlank() || nickname.length() > 10) {
+            throw new UserException(UserErrorCode.NICKNAME_INVALID_FORMAT);
+        }
+        if (userRepository.existsByNickname(nickname)) {
+            throw new UserException(UserErrorCode.NICKNAME_DUPLICATED);
+        }
+    }
+
+    //회원가입
+    @Transactional
+    public void signup(Long userId, SignupRequest request) {
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserException(UserErrorCode.USER_NOT_FOUND));
+
+        validateNickname(request.nickname());
+
+        // 1. 필수 약관 검증 (soft delete 필터링 적용)
+        List<Term> requiredTerms = termRepository.findAllByIsRequiredTrueAndDeletedAtIsNull();
+        List<Long> requiredTermIds = requiredTerms.stream().map(Term::getId).toList();
+
+        if (!request.agreedTermIds().containsAll(requiredTermIds)) {
+            throw new TermException(TermErrorCode.REQUIRED_TERM_NOT_AGREED);
+        }
+
+        // 2. 동의 대상 약관 조회 + 존재 검증
+        List<Term> agreedTerms = termRepository.findAllByIdInAndDeletedAtIsNull(request.agreedTermIds());
+        if (agreedTerms.size() != request.agreedTermIds().size()) {
+            throw new TermException(TermErrorCode.TERM_NOT_FOUND);
+        }
+
+        // 3. 닉네임 확정
+        user.changeNickname(request.nickname());
+
+        // 4. 약관 동의 이력 저장
+        List<UserTerm> userTerms = agreedTerms.stream()
+                .map(term -> UserTerm.agree(user, term))
+                .toList();
+        userTermRepository.saveAll(userTerms);
     }
 }
