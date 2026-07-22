@@ -14,6 +14,7 @@ import com.teaching.backend.domain.folder.exception.FolderErrorCode;
 import com.teaching.backend.domain.folder.exception.FolderException;
 import com.teaching.backend.domain.folder.service.FolderService;
 import com.teaching.backend.domain.material.code.MaterialSuccessCode;
+import com.teaching.backend.domain.material.dto.request.MaterialAnalysisGenerateRequest;
 import com.teaching.backend.domain.material.dto.request.MaterialAnalysisSummaryUpdateRequest;
 import com.teaching.backend.domain.material.dto.request.MaterialIdsRequest;
 import com.teaching.backend.domain.material.dto.request.MaterialMoveRequest;
@@ -266,6 +267,31 @@ public class FolderController {
         return ResponseEntity.ok(
                 ApiResponse.onSuccess(FolderSuccessCode.FOLDER_RESTORE_SUCCESS, result)
         );
+    }
+
+    @Operation(
+            summary = "자료 생성 + AI 분석",
+            description = "URL/본문 텍스트를 받아 해당 폴더에 자료를 생성하고, AI 요약/상세 분석/태그를 생성합니다."
+    )
+    @PostMapping("/{folderId}/materials/analyze")
+    public ResponseEntity<ApiResponse<MaterialAnalysisResponse>> generateMaterialWithAnalysis(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal AuthMember authMember,
+
+            @Parameter(description = "저장할 폴더 ID", example = "1")
+            @PathVariable String folderId,
+
+            @RequestBody MaterialAnalysisGenerateRequest request
+    ) {
+        MaterialAnalysisResponse result = materialService.generateMaterialWithAnalysis(
+                getAuthenticatedUserId(authMember),
+                parseFolderId(folderId),
+                request
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(ApiResponse.onSuccess(MaterialSuccessCode.MATERIAL_ANALYSIS_GENERATE_SUCCESS, result));
     }
 
     @Operation(

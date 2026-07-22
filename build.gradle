@@ -63,3 +63,19 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 }
+
+def dotenv = file('.env')
+if (dotenv.exists()) {
+    def dotenvVars = [:]
+    dotenv.eachLine { line ->
+        def trimmed = line.trim()
+        if (trimmed && !trimmed.startsWith('#')) {
+            def idx = trimmed.indexOf('=')
+            if (idx > 0) {
+                dotenvVars[trimmed.substring(0, idx).trim()] = trimmed.substring(idx + 1).trim()
+            }
+        }
+    }
+    tasks.named('bootRun') { environment(dotenvVars) }
+    tasks.named('test') { environment(dotenvVars) }
+}
