@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisResult;
 import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.exception.MaterialException;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -13,14 +12,15 @@ import java.util.regex.Pattern;
 
 // OpenAI 응답 문자열을 MaterialAiAnalysisResult로 파싱/검증하는 컴포넌트.
 // response_format=json_object로 요청하지만, 모델이 코드펜스를 덧붙이는 경우까지 방어적으로 처리한다.
+// Spring Boot 4는 기본적으로 Jackson 3(tools.jackson.databind.ObjectMapper) 빈만 자동 구성하므로,
+// 이 클래스 전용으로 com.fasterxml.jackson(Jackson 2) ObjectMapper를 직접 소유한다.
 @Component
-@RequiredArgsConstructor
 public class MaterialAiAnalysisResponseParser {
 
     private static final Pattern CODE_FENCE_PATTERN =
             Pattern.compile("```(?:json)?\\s*([\\s\\S]*?)\\s*```");
 
-    private final ObjectMapper objectMapper;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public MaterialAiAnalysisResult parse(String rawContent) {
         String jsonText = stripCodeFence(rawContent);
