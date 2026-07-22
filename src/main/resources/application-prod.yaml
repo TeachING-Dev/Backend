@@ -1,10 +1,13 @@
+server:
+  forward-headers-strategy: framework
+
 spring:
   config:
     activate:
       on-profile: prod
 
   datasource:
-    url: jdbc:mysql://${DB_HOST}:3306/${DB_NAME:teaching-db}?useSSL=true&requireSSL=true&verifyServerCertificate=false&characterEncoding=UTF-8&serverTimezone=Asia/Seou
+    url: jdbc:mysql://${DB_HOST}:3306/${DB_NAME:teaching-db}?useSSL=true&requireSSL=true&verifyServerCertificate=false&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -30,6 +33,12 @@ spring:
             scope:
               - profile_nickname
               - account_email
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope:
+              - email
+              - profile
 
         provider:
           kakao:

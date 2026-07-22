@@ -2,6 +2,7 @@ package com.teaching.backend.global.security.service;
 
 import com.teaching.backend.domain.auth.exception.AuthErrorCode;
 import com.teaching.backend.domain.auth.exception.AuthException;
+import com.teaching.backend.global.security.dto.GoogleDTO;
 import com.teaching.backend.global.security.dto.KakaoDTO;
 import com.teaching.backend.global.security.dto.OAuthDTO;
 import com.teaching.backend.global.security.entity.OAuthMember;
@@ -83,7 +84,32 @@ public class CustomOAuthService extends DefaultOAuth2UserService {
 
                 yield new KakaoDTO(socialUid, email, nickname);
             }
-            // case GOOGLE -> { ... GoogleDTO 추가 시 여기 확장 ... }
+            case GOOGLE -> {
+                Object subAttribute = oAuth2User.getAttribute("sub");
+                if (subAttribute == null) {
+                    throw new AuthException(AuthErrorCode.SOCIAL_INFO_NOT_FOUND);
+                }
+                String socialUid = String.valueOf(subAttribute);
+
+                String email = oAuth2User.getAttribute("email");
+                String nickname = oAuth2User.getAttribute("name");
+                Boolean emailVerified = oAuth2User.getAttribute("email_verified");
+
+                if (email == null) {
+                    throw new UserException(UserErrorCode.EMAIL_CONSENT_REQUIRED);
+                }
+
+                if (emailVerified == null || !emailVerified) {
+                    throw new UserException(UserErrorCode.EMAIL_NOT_VERIFIED); // 에러코드 새로 추가 필요
+                }
+
+                if (nickname == null || nickname.isBlank()) {
+                    nickname = "사용자" + socialUid.substring(0, Math.min(6, socialUid.length()));
+                }
+
+                yield new GoogleDTO(socialUid, email, nickname);
+            }
+
             default -> throw new AuthException(AuthErrorCode.NOT_SUPPORT_SOCIAL_PROVIDER);
         };
     }
