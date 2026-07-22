@@ -30,6 +30,12 @@ spring:
             scope:
               - profile_nickname
               - account_email
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope:
+              - email
+              - profile
 
         provider:
           kakao:
@@ -51,6 +57,10 @@ app:
 
 cookie:
   secure: false
+
+support:
+  kakao-channel-url: ${SUPPORT_KAKAO_CHANNEL_URL:https://pf.kakao.com/_teaching}
+  email: ${SUPPORT_EMAIL:support@teaching.com}
 
 openai:
   api-key: ${OPENAI_API_KEY}

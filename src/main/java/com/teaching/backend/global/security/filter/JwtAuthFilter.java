@@ -34,7 +34,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             @NonNull FilterChain filterChain
     ) throws ServletException, IOException {
 
-
         try {
             String token = request.getHeader("Authorization");
 
@@ -53,7 +52,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 }
             }
         } catch (Exception e) {
-            // 토큰 파싱/검증 단계에서만 나는 예외를 여기서 401로 응답
             ObjectMapper mapper = new ObjectMapper();
             BaseErrorCode code = GlobalErrorCode.UNAUTHORIZED;
 
@@ -62,10 +60,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
             ApiResponse<Void> errorResponse = ApiResponse.onFailure(code, null);
             mapper.writeValue(response.getOutputStream(), errorResponse);
-            return; // 여기서 끝 — doFilter 호출 안 하고 체인 중단
+            return;
         }
 
-        // 토큰 없음 / 토큰 검증 정상 완료 → 항상 여기로 와서 다음 필터로 넘어감
         filterChain.doFilter(request, response);
     }
 }
