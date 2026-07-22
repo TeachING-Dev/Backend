@@ -12,8 +12,6 @@ public interface MaterialAnalysisRepository extends JpaRepository<MaterialAnalys
 
     Optional<MaterialAnalysis> findByMaterialId(Long materialId);
 
-    Optional<MaterialAnalysis> findByMaterialId(Long materialId);
-
     @Query("""
             SELECT ma
             FROM MaterialAnalysis ma
