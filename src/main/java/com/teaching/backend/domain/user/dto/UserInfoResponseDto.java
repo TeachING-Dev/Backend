@@ -24,6 +24,7 @@ public record UserInfoResponseDto(
         String birthDate,
         String profileImageUrl,
         Boolean notificationEnabled,
+        String teacherPersona,
         List<AccountDto> accounts,
         String createdAt
 ) {
@@ -44,6 +45,7 @@ public record UserInfoResponseDto(
                 user.getBirthday() != null ? user.getBirthday().toString() : null,
                 user.getProfileImageUrl(),
                 user.getNotificationsEnabled(),
+                user.getTeacherPersona() != null ? user.getTeacherPersona().name() : null,
                 accountDtos,
                 user.getCreatedAt() != null ? user.getCreatedAt().toString() : null
         );

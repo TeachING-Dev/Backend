@@ -2,6 +2,7 @@ package com.teaching.backend.domain.user.entity;
 
 import com.teaching.backend.global.common.BaseSoftDeleteEntity;
 import com.teaching.backend.domain.user.enums.Gender;
+import com.teaching.backend.domain.user.enums.TeacherPersona;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import lombok.AccessLevel;
@@ -44,15 +45,20 @@ public class User extends BaseSoftDeleteEntity {
     @Column(nullable = false)
     private Boolean notificationsEnabled;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private TeacherPersona teacherPersona;
+
     @Builder(access = AccessLevel.PRIVATE)
     private User(String email, String nickname, LocalDate birthday, Gender gender,
-                 String profileImageUrl, Boolean notificationsEnabled) {
+                 String profileImageUrl, Boolean notificationsEnabled, TeacherPersona teacherPersona) {
         this.email = email;
         this.nickname = nickname;
         this.birthday = birthday;
         this.gender = gender;
         this.profileImageUrl = profileImageUrl;
         this.notificationsEnabled = notificationsEnabled;
+        this.teacherPersona = teacherPersona;
     }
 
     public static User create(String email, String nickname, LocalDate birthday,
@@ -64,6 +70,7 @@ public class User extends BaseSoftDeleteEntity {
                 .gender(gender)
                 .profileImageUrl(profileImageUrl)
                 .notificationsEnabled(true)
+                .teacherPersona(TeacherPersona.FRIENDLY)
                 .build();
     }
 
@@ -80,5 +87,9 @@ public class User extends BaseSoftDeleteEntity {
 
     public void changeNotificationEnabled(Boolean notificationsEnabled) {
         this.notificationsEnabled = notificationsEnabled;
+    }
+
+    public void changeTeacherPersona(TeacherPersona teacherPersona) {
+        this.teacherPersona = teacherPersona;
     }
 }

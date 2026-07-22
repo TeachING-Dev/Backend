@@ -26,7 +26,10 @@ public enum UserErrorCode implements BaseErrorCode {
     WITHDRAWAL_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "USER400_8", "탈퇴 사유를 선택해주세요."),
     WITHDRAWAL_REASON_DETAIL_REQUIRED(HttpStatus.BAD_REQUEST, "USER400_9", "기타 사유를 입력해주세요."),
     WITHDRAWAL_NOT_CONFIRMED(HttpStatus.BAD_REQUEST, "USER400_10", "탈퇴 확인에 동의해주세요."),
-    WITHDRAWAL_REASON_DETAIL_TOO_LONG(HttpStatus.BAD_REQUEST, "USER400_11", "탈퇴 사유 상세는 500자를 초과할 수 없습니다.");
+    WITHDRAWAL_REASON_DETAIL_TOO_LONG(HttpStatus.BAD_REQUEST, "USER400_11", "탈퇴 사유 상세는 500자를 초과할 수 없습니다."),
+
+    // 티칭맵 설정
+    TEACHER_PERSONA_INVALID(HttpStatus.BAD_REQUEST, "USER400_12", "올바른 AI 선생님을 선택해주세요.");
     private final HttpStatus status;
     private final String code;
     private final String message;
