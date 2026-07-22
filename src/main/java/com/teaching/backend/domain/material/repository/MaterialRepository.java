@@ -3,11 +3,18 @@ package com.teaching.backend.domain.material.repository;
 import com.teaching.backend.domain.material.entity.Material;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
+
 public interface MaterialRepository extends JpaRepository<Material, Long> {
+
+    List<Material> findAllByUser_Id(Long userId, Sort sort);
+
+    Page<Material> findAllByUser_Id(Long userId, Pageable pageable);
 
     @Query(
             value = """

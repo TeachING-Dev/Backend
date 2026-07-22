@@ -1,30 +1,72 @@
 package com.teaching.backend.domain.material.controller;
 
+import com.teaching.backend.domain.material.code.MaterialSuccessCode;
 import com.teaching.backend.domain.material.dto.MaterialIndexResponse;
+import com.teaching.backend.domain.material.dto.MaterialListResponse;
 import com.teaching.backend.domain.material.service.MaterialIndexingService;
+import com.teaching.backend.domain.material.service.MaterialService;
+import com.teaching.backend.domain.tag.code.TagSuccessCode;
+import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
+import com.teaching.backend.global.exception.GeneralException;
 import com.teaching.backend.global.response.ApiResponse;
 import com.teaching.backend.global.security.entity.AuthMember;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "Material", description = "자료 색인(청킹/임베딩/Qdrant 저장) API - 자료 분석 완료 파이프라인이 생기기 전까지 쓰는 수동 트리거")
+import java.util.List;
+
+@Tag(name = "Material", description = "자료 API")
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/materials")
 public class MaterialController {
 
     private final MaterialIndexingService materialIndexingService;
+    private final MaterialService materialService;
 
-    // TODO: 자료 분석 완료 이벤트/파이프라인이 생기면 자동 트리거로 대체하고 이 수동 엔드포인트는 제거
+    @GetMapping
+    public ResponseEntity<ApiResponse<List<MaterialListResponse>>> getMaterials(
+            @AuthenticationPrincipal AuthMember authMember,
+            @RequestParam(required = false) Integer size
+    ) {
+        List<MaterialListResponse> result = materialService.getMaterialList(
+                getAuthenticatedUserId(authMember),
+                size
+        );
+
+        return ResponseEntity.ok(
+                ApiResponse.onSuccess(MaterialSuccessCode.MATERIAL_LIST_SUCCESS, result)
+        );
+    }
+
+    @DeleteMapping("/tags/{materialTagId}")
+    public ResponseEntity<ApiResponse<Void>> deleteMaterialTag(
+            @AuthenticationPrincipal AuthMember authMember,
+            @PathVariable Long materialTagId
+    ) {
+        materialService.deleteMaterialTag(
+                getAuthenticatedUserId(authMember),
+                materialTagId
+        );
+
+        return ResponseEntity.ok(
+                ApiResponse.onSuccess(TagSuccessCode.TAG_DELETE_SUCCESS, null)
+        );
+    }
+
     @Operation(
-            summary = "자료 색인 (수동 트리거)",
-            description = "자료의 분석 결과(detailAnalysis)를 청킹 -> 임베딩 -> Qdrant 색인합니다. 이미 색인된 자료는 409로 거부됩니다."
+            summary = "자료 색인",
+            description = "자료의 분석 결과를 chunk로 나누고 Qdrant에 색인합니다."
     )
     @PostMapping("/{materialId}/index")
     public ApiResponse<MaterialIndexResponse> index(
@@ -33,5 +75,13 @@ public class MaterialController {
     ) {
         int chunkCount = materialIndexingService.indexMaterial(materialId, authMember.getUserId());
         return ApiResponse.onSuccess(new MaterialIndexResponse(materialId, chunkCount));
+    }
+
+    private Long getAuthenticatedUserId(AuthMember authMember) {
+        if (authMember == null) {
+            throw new GeneralException(GlobalErrorCode.UNAUTHORIZED);
+        }
+
+        return authMember.getUserId();
     }
 }
