@@ -70,7 +70,7 @@ openai:
 qdrant:
   url: ${QDRANT_URL}
   api-key: ${QDRANT_API_KEY}
-  collection-name: ${QDRANT_COLLECTION_NAME:material_chunks}
+  collection-name: ${QDRANT_COLLECTION_NAME}
   vector-size: ${QDRANT_VECTOR_SIZE:1536}
 
 rag:

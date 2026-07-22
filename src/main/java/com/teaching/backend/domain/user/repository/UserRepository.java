@@ -16,9 +16,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
     //닉네임 중복확인
     boolean existsByNickname(String nickname);
 
-    boolean existsByNicknameAndIdNot(String nickname, Long id);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT u FROM User u WHERE u.id = :userId")
     Optional<User> findByIdForUpdate(@Param("userId") Long userId);
+
+    /** 본인(id)을 제외하고 같은 닉네임이 이미 존재하는지 (닉네임 중복 검사용) */
+    boolean existsByNicknameAndIdNot(String nickname, Long id);
 }

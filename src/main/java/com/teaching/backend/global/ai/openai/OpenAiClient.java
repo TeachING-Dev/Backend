@@ -83,6 +83,25 @@ public class OpenAiClient {
                 0.3
         );
 
+        return requestChatCompletion(request);
+    }
+
+    // OpenAI가 순수 JSON 객체만 반환하도록 강제(response_format=json_object). 자료 AI 분석처럼
+    // 응답을 그대로 파싱해 DB에 저장해야 하는 호출부에서 코드펜스/부연설명 혼입 리스크를 줄이기 위해 사용.
+    public String chatCompleteJson(String systemPrompt, String userMessage) {
+        ChatCompletionRequest request = ChatCompletionRequest.jsonMode(
+                chatModel,
+                List.of(
+                        new ChatCompletionRequest.Message("system", systemPrompt),
+                        new ChatCompletionRequest.Message("user", userMessage)
+                ),
+                0.3
+        );
+
+        return requestChatCompletion(request);
+    }
+
+    private String requestChatCompletion(ChatCompletionRequest request) {
         ChatCompletionResponse response = call(webClient.post()
                 .uri("/v1/chat/completions")
                 .bodyValue(request)
