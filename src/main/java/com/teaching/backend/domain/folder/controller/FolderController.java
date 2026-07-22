@@ -14,6 +14,21 @@ import com.teaching.backend.domain.folder.exception.FolderErrorCode;
 import com.teaching.backend.domain.folder.exception.FolderException;
 import com.teaching.backend.domain.folder.service.FolderService;
 import com.teaching.backend.domain.material.code.MaterialSuccessCode;
+import com.teaching.backend.domain.material.dto.request.MaterialAnalysisGenerateRequest;
+import com.teaching.backend.domain.material.dto.request.MaterialAnalysisSummaryUpdateRequest;
+import com.teaching.backend.domain.material.dto.request.MaterialIdsRequest;
+import com.teaching.backend.domain.material.dto.request.MaterialMoveRequest;
+import com.teaching.backend.domain.material.dto.response.MaterialAnalysisResponse;
+import com.teaching.backend.domain.material.dto.response.MaterialAnalysisSummaryUpdateResponse;
+import com.teaching.backend.domain.material.dto.response.MaterialDetailResponse;
+import com.teaching.backend.domain.material.dto.response.MaterialMoveResponse;
+import com.teaching.backend.domain.material.dto.response.MaterialOriginUrlResponse;
+import com.teaching.backend.domain.material.dto.response.MaterialRestoreResponse;
+import com.teaching.backend.domain.material.dto.response.MaterialTagResponse;
+import com.teaching.backend.domain.material.dto.response.MaterialTrashResponse;
+import com.teaching.backend.domain.material.exception.MaterialErrorCode;
+import com.teaching.backend.domain.material.exception.MaterialException;
+import com.teaching.backend.domain.material.service.MaterialService;
 import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
 import com.teaching.backend.global.response.ApiResponse;
@@ -42,6 +57,7 @@ import java.util.List;
 public class FolderController {
 
     private final FolderService folderService;
+    private final MaterialService materialService;
 
     @Operation(
             summary = "폴더 목록 조회",
@@ -253,6 +269,239 @@ public class FolderController {
         );
     }
 
+    @Operation(
+            summary = "자료 생성 + AI 분석",
+            description = "URL/본문 텍스트를 받아 해당 폴더에 자료를 생성하고, AI 요약/상세 분석/태그를 생성합니다."
+    )
+    @PostMapping("/{folderId}/materials/analyze")
+    public ResponseEntity<ApiResponse<MaterialAnalysisResponse>> generateMaterialWithAnalysis(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal AuthMember authMember,
+
+            @Parameter(description = "저장할 폴더 ID", example = "1")
+            @PathVariable String folderId,
+
+            @RequestBody MaterialAnalysisGenerateRequest request
+    ) {
+        MaterialAnalysisResponse result = materialService.generateMaterialWithAnalysis(
+                getAuthenticatedUserId(authMember),
+                parseFolderId(folderId),
+                request
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(ApiResponse.onSuccess(MaterialSuccessCode.MATERIAL_ANALYSIS_GENERATE_SUCCESS, result));
+    }
+
+    @Operation(
+            summary = "자료 상세 조회",
+            description = "자료 상세 화면에 필요한 기본 정보를 조회합니다."
+    )
+    @GetMapping("/{folderId}/materials/{materialId}")
+    public ResponseEntity<ApiResponse<MaterialDetailResponse>> getMaterialDetail(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal AuthMember authMember,
+
+            @Parameter(description = "폴더 ID", example = "1")
+            @PathVariable String folderId,
+
+            @Parameter(description = "자료 ID", example = "101")
+            @PathVariable String materialId
+    ) {
+        MaterialDetailResponse result = materialService.getMaterialDetail(
+                getAuthenticatedUserId(authMember),
+                parseFolderId(folderId),
+                parseMaterialId(materialId)
+        );
+
+        return ResponseEntity.ok(
+                ApiResponse.onSuccess(MaterialSuccessCode.MATERIAL_DETAIL_SUCCESS, result)
+        );
+    }
+
+    @Operation(
+            summary = "AI 상세 분석 조회",
+            description = "자료 상세 화면에서 AI 요약과 AI 상세 분석 내용을 조회합니다."
+    )
+    @GetMapping("/{folderId}/materials/{materialId}/analysis")
+    public ResponseEntity<ApiResponse<MaterialAnalysisResponse>> getMaterialAnalysis(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal AuthMember authMember,
+
+            @Parameter(description = "폴더 ID", example = "1")
+            @PathVariable String folderId,
+
+            @Parameter(description = "자료 ID", example = "101")
+            @PathVariable String materialId
+    ) {
+        MaterialAnalysisResponse result = materialService.getMaterialAnalysis(
+                getAuthenticatedUserId(authMember),
+                parseFolderId(folderId),
+                parseMaterialId(materialId)
+        );
+
+        return ResponseEntity.ok(
+                ApiResponse.onSuccess(MaterialSuccessCode.MATERIAL_ANALYSIS_SUCCESS, result)
+        );
+    }
+
+    @Operation(
+            summary = "AI 요약 수정",
+            description = "사용자가 AI 요약 내용을 직접 수정합니다."
+    )
+    @PatchMapping("/{folderId}/materials/{materialId}/analysis/summary")
+    public ResponseEntity<ApiResponse<MaterialAnalysisSummaryUpdateResponse>> updateMaterialAnalysisSummary(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal AuthMember authMember,
+
+            @Parameter(description = "폴더 ID", example = "1")
+            @PathVariable String folderId,
+
+            @Parameter(description = "자료 ID", example = "101")
+            @PathVariable String materialId,
+
+            @RequestBody MaterialAnalysisSummaryUpdateRequest request
+    ) {
+        MaterialAnalysisSummaryUpdateResponse result = materialService.updateAnalysisSummary(
+                getAuthenticatedUserId(authMember),
+                parseFolderId(folderId),
+                parseMaterialId(materialId),
+                request
+        );
+
+        return ResponseEntity.ok(
+                ApiResponse.onSuccess(MaterialSuccessCode.MATERIAL_ANALYSIS_SUMMARY_UPDATE_SUCCESS, result)
+        );
+    }
+
+    @Operation(
+            summary = "태그 조회",
+            description = "자료에 연결된 태그 목록을 조회합니다."
+    )
+    @GetMapping("/{folderId}/materials/{materialId}/tags")
+    public ResponseEntity<ApiResponse<List<MaterialTagResponse>>> getMaterialTags(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal AuthMember authMember,
+
+            @Parameter(description = "폴더 ID", example = "1")
+            @PathVariable String folderId,
+
+            @Parameter(description = "자료 ID", example = "101")
+            @PathVariable String materialId
+    ) {
+        List<MaterialTagResponse> result = materialService.getMaterialTags(
+                getAuthenticatedUserId(authMember),
+                parseFolderId(folderId),
+                parseMaterialId(materialId)
+        );
+
+        return ResponseEntity.ok(
+                ApiResponse.onSuccess(MaterialSuccessCode.MATERIAL_TAG_LIST_SUCCESS, result)
+        );
+    }
+
+    @Operation(
+            summary = "원본 URL 조회",
+            description = "자료의 원문 URL을 조회합니다."
+    )
+    @GetMapping("/{folderId}/materials/{materialId}/origin-url")
+    public ResponseEntity<ApiResponse<MaterialOriginUrlResponse>> getMaterialOriginUrl(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal AuthMember authMember,
+
+            @Parameter(description = "폴더 ID", example = "1")
+            @PathVariable String folderId,
+
+            @Parameter(description = "자료 ID", example = "101")
+            @PathVariable String materialId
+    ) {
+        MaterialOriginUrlResponse result = materialService.getMaterialOriginUrl(
+                getAuthenticatedUserId(authMember),
+                parseFolderId(folderId),
+                parseMaterialId(materialId)
+        );
+
+        return ResponseEntity.ok(
+                ApiResponse.onSuccess(MaterialSuccessCode.MATERIAL_ORIGIN_URL_SUCCESS, result)
+        );
+    }
+
+    @Operation(
+            summary = "자료 이동",
+            description = "현재 폴더에 있는 선택 자료를 다른 폴더로 이동합니다."
+    )
+    @PatchMapping("/{folderId}/materials/move")
+    public ResponseEntity<ApiResponse<MaterialMoveResponse>> moveMaterials(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal AuthMember authMember,
+
+            @Parameter(description = "현재 폴더 ID", example = "1")
+            @PathVariable String folderId,
+
+            @RequestBody MaterialMoveRequest request
+    ) {
+        MaterialMoveResponse result = materialService.moveMaterials(
+                getAuthenticatedUserId(authMember),
+                parseFolderId(folderId),
+                request
+        );
+
+        return ResponseEntity.ok(
+                ApiResponse.onSuccess(MaterialSuccessCode.MATERIAL_MOVE_SUCCESS, result)
+        );
+    }
+
+    @Operation(
+            summary = "자료 휴지통 이동",
+            description = "현재 폴더에 있는 선택 자료를 휴지통으로 이동합니다."
+    )
+    @PatchMapping("/{folderId}/materials/trash")
+    public ResponseEntity<ApiResponse<MaterialTrashResponse>> trashMaterials(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal AuthMember authMember,
+
+            @Parameter(description = "현재 폴더 ID", example = "1")
+            @PathVariable String folderId,
+
+            @RequestBody MaterialIdsRequest request
+    ) {
+        MaterialTrashResponse result = materialService.trashMaterials(
+                getAuthenticatedUserId(authMember),
+                parseFolderId(folderId),
+                request
+        );
+
+        return ResponseEntity.ok(
+                ApiResponse.onSuccess(MaterialSuccessCode.MATERIAL_TRASH_SUCCESS, result)
+        );
+    }
+
+    @Operation(
+            summary = "자료 복구",
+            description = "휴지통에 있는 자료를 특정 폴더로 복구합니다."
+    )
+    @PatchMapping("/{folderId}/materials/restore")
+    public ResponseEntity<ApiResponse<MaterialRestoreResponse>> restoreMaterials(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal AuthMember authMember,
+
+            @Parameter(description = "복구될 폴더 ID", example = "1")
+            @PathVariable String folderId,
+
+            @RequestBody MaterialIdsRequest request
+    ) {
+        MaterialRestoreResponse result = materialService.restoreMaterials(
+                getAuthenticatedUserId(authMember),
+                parseFolderId(folderId),
+                request
+        );
+
+        return ResponseEntity.ok(
+                ApiResponse.onSuccess(MaterialSuccessCode.MATERIAL_RESTORE_SUCCESS, result)
+        );
+    }
+
     private Long getAuthenticatedUserId(AuthMember authMember) {
         if (authMember == null) {
             throw new GeneralException(GlobalErrorCode.UNAUTHORIZED);
@@ -270,6 +519,18 @@ public class FolderController {
             return Long.parseLong(folderId);
         } catch (NumberFormatException e) {
             throw new FolderException(FolderErrorCode.INVALID_FOLDER_ID);
+        }
+    }
+
+    private Long parseMaterialId(String materialId) {
+        if (materialId == null || materialId.isBlank()) {
+            throw new MaterialException(MaterialErrorCode.INVALID_MATERIAL_ID);
+        }
+
+        try {
+            return Long.parseLong(materialId);
+        } catch (NumberFormatException e) {
+            throw new MaterialException(MaterialErrorCode.INVALID_MATERIAL_ID);
         }
     }
 }

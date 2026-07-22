@@ -4,7 +4,7 @@ spring:
       on-profile: dev
 
   datasource:
-    url: jdbc:mysql://localhost:3306/${DB_NAME:teaching}?useSSL=false&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
+    url: jdbc:mysql://${DB_HOST:localhost}:3306/${DB_NAME:teaching}?useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -30,6 +30,12 @@ spring:
             scope:
               - profile_nickname
               - account_email
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope:
+              - email
+              - profile
 
         provider:
           kakao:
@@ -51,6 +57,10 @@ app:
 
 cookie:
   secure: false
+
+support:
+  kakao-channel-url: ${SUPPORT_KAKAO_CHANNEL_URL:https://pf.kakao.com/_teaching}
+  email: ${SUPPORT_EMAIL:support@teaching.com}
 
 openai:
   api-key: ${OPENAI_API_KEY}
