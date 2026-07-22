@@ -25,18 +25,9 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
             Long userId
     );
 
-    @Query(
-            value = "SELECT COUNT(*) FROM materials WHERE id IN (:materialIds) AND user_id = :userId AND deleted_at IS NOT NULL",
-            nativeQuery = true
-    )
-    long countDeletedByIdsAndUserId(
-            @Param("materialIds") List<Long> materialIds,
-            @Param("userId") Long userId
-    );
-
     @Modifying
     @Query(
-            value = "UPDATE materials SET deleted_at = NULL, folder_id = :folderId WHERE id IN (:materialIds) AND user_id = :userId AND deleted_at IS NOT NULL",
+            value = "UPDATE materials SET deleted_at = NULL, folder_id = :folderId, updated_at = CURRENT_TIMESTAMP WHERE id IN (:materialIds) AND user_id = :userId AND deleted_at IS NOT NULL",
             nativeQuery = true
     )
     int restoreDeletedMaterials(

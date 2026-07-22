@@ -72,9 +72,12 @@ public class ChatRoomService {
     }
 
     private String generateTitle(String content) {
-        return content.length() > TITLE_MAX_LENGTH
-                ? content.substring(0, TITLE_MAX_LENGTH - TITLE_ELLIPSIS.length()) + TITLE_ELLIPSIS
-                : content;
+        if (content.codePointCount(0, content.length()) <= TITLE_MAX_LENGTH) {
+            return content;
+        }
+
+        int cutIndex = content.offsetByCodePoints(0, TITLE_MAX_LENGTH - TITLE_ELLIPSIS.length());
+        return content.substring(0, cutIndex) + TITLE_ELLIPSIS;
     }
 
     public ChatRoom getChatRoom(Long chatRoomId, Long userId) {

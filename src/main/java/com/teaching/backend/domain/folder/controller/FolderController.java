@@ -402,7 +402,7 @@ public class FolderController {
     }
 
     @Operation(
-            summary = "원문으로 이동",
+            summary = "원본 URL 조회",
             description = "자료의 원문 URL을 조회합니다."
     )
     @GetMapping("/{folderId}/materials/{materialId}/origin-url")

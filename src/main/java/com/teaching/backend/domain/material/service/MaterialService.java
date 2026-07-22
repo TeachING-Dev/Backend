@@ -247,12 +247,10 @@ public class MaterialService {
         getOwnedFolder(userId, folderId);
         List<Long> materialIds = validateMaterialIds(request == null ? null : request.materialIds());
 
-        long deletedCount = materialRepository.countDeletedByIdsAndUserId(materialIds, userId);
-        if (deletedCount != materialIds.size()) {
+        int restoredCount = materialRepository.restoreDeletedMaterials(materialIds, folderId, userId);
+        if (restoredCount != materialIds.size()) {
             throw new MaterialException(MaterialErrorCode.MATERIAL_NOT_FOUND);
         }
-
-        int restoredCount = materialRepository.restoreDeletedMaterials(materialIds, folderId, userId);
 
         return MaterialRestoreResponse.of(restoredCount, folderId);
     }
