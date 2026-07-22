@@ -45,7 +45,7 @@ public record UserInfoResponseDto(
                 user.getBirthday() != null ? user.getBirthday().toString() : null,
                 user.getProfileImageUrl(),
                 user.getNotificationsEnabled(),
-                user.getTeacherPersona().name(),
+                user.getTeacherPersona() != null ? user.getTeacherPersona().name() : null,
                 accountDtos,
                 user.getCreatedAt() != null ? user.getCreatedAt().toString() : null
         );

@@ -72,7 +72,7 @@ public class UserController {
 
     /** [PATCH] /users/me/teacher-persona — AI 선생님 설정(페르소나) 변경 */
     @PatchMapping("/me/teacher-persona")
-    public ApiResponse<TeacherPersonaUpdateResponseDto> updateTeacherPersona(@RequestBody TeacherPersonaUpdateRequestDto request) {
+    public ApiResponse<TeacherPersonaUpdateResponseDto> updateTeacherPersona(@RequestBody(required = false) TeacherPersonaUpdateRequestDto request) {
         Long userId = currentUserProvider.getCurrentUserId();
         return ApiResponse.onSuccess(UserSuccessCode.TEACHER_PERSONA_UPDATED, userService.updateTeacherPersona(userId, request));
     }
