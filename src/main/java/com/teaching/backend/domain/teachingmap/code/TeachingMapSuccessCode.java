@@ -10,7 +10,7 @@ import org.springframework.http.HttpStatus;
 public enum TeachingMapSuccessCode implements BaseSuccessCode {
 
     TEACHING_MAP_LIST_SUCCESS(HttpStatus.OK, "TMAP2000", "티칭맵 목록 조회에 성공했습니다."),
-    TEACHING_MAP_CREATE_SUCCESS(HttpStatus.CREATED,"TMAP2001","티칭맵 생성에 성공하였씁니다.");
+    TEACHING_MAP_CREATE_SUCCESS(HttpStatus.CREATED,"TMAP2001","티칭맵 생성에 성공하였습니다.");
 
     private final HttpStatus status;
     private final String code;

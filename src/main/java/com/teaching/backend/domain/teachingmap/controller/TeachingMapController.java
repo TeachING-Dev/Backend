@@ -64,11 +64,15 @@ public class TeachingMapController {
             description = "사용자의 폴더를 바탕으로 티칭맵을 생성합니다."
     )
     @PostMapping
-    public ApiResponse<TeachingMapCreateResponse> createTeachingMap(@AuthenticationPrincipal AuthMember authmember,@Valid @RequestBody TeachingMapCreateRequest request) {
-
-        TeachingMapCreateResponse response =teachingMapService.createTeachingMap(authmember.getUserId(),request);
+    public ApiResponse<TeachingMapCreateResponse> createTeachingMap(
+            @AuthenticationPrincipal AuthMember authMember,
+            @Valid @RequestBody TeachingMapCreateRequest request
+    ) {
+        TeachingMapCreateResponse response =
+                teachingMapService.createTeachingMap(getAuthenticatedUserId(authMember), request);
         return ApiResponse.onSuccess(TeachingMapSuccessCode.TEACHING_MAP_CREATE_SUCCESS, response);
-
-
     }
+
+    //티칭맵 목록 조회 ( status 별로 )
+
 }

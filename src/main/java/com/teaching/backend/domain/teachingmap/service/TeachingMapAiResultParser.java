@@ -1,5 +1,6 @@
 package com.teaching.backend.domain.teachingmap.service;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
@@ -15,8 +16,12 @@ import java.util.List;
 public class TeachingMapAiResultParser {
 
     public record TeachingMapAiResult(String mode, List<TeachingMapAiNode> nodes) {}
-    public record TeachingMapAiNode(int step, Long materialId, String title, String aiGuide) {}
-
+    public record TeachingMapAiNode(
+            int step,
+            Long materialId,
+            String title,
+            @JsonProperty("ai_guide") String aiGuide
+    ) {}
     private final JsonMapper jsonMapper;
 
     public TeachingMapAiResultParser(JsonMapper jsonMapper) {
