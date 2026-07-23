@@ -86,4 +86,8 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
             @Param("keyword") String keyword,
             Pageable pageable
     );
+
+    List<Material> findAllByFolderId(Long folderId);
+
+
 }
