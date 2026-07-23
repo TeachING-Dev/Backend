@@ -17,7 +17,11 @@ class MaterialPlatformResolverTest {
 
     @Test
     void resolvesYoutubeUrl() {
-        assertThat(resolver.resolve(null, "https://www.youtube.com/watch?v=abc"))
+        assertThat(resolver.resolve(null, "https://youtube.com/watch?v=1"))
+                .isEqualTo(PlatformType.YOUTUBE);
+        assertThat(resolver.resolve(null, "https://www.youtube.com/watch?v=1"))
+                .isEqualTo(PlatformType.YOUTUBE);
+        assertThat(resolver.resolve(null, "https://m.youtube.com/watch?v=1"))
                 .isEqualTo(PlatformType.YOUTUBE);
         assertThat(resolver.resolve(null, "https://youtu.be/abc"))
                 .isEqualTo(PlatformType.YOUTUBE);
@@ -25,7 +29,7 @@ class MaterialPlatformResolverTest {
 
     @Test
     void resolvesNotionUrl() {
-        assertThat(resolver.resolve(null, "https://workspace.notion.so/page"))
+        assertThat(resolver.resolve(null, "https://www.notion.so/page"))
                 .isEqualTo(PlatformType.NOTION);
     }
 
@@ -33,11 +37,37 @@ class MaterialPlatformResolverTest {
     void resolvesPdfUrl() {
         assertThat(resolver.resolve(null, "https://example.com/guide.pdf"))
                 .isEqualTo(PlatformType.PDF);
+        assertThat(resolver.resolve(null, "https://example.com/document.PDF?download=1"))
+                .isEqualTo(PlatformType.PDF);
+        assertThat(resolver.resolve(null, "https://example.com/document.pdf#page=2"))
+                .isEqualTo(PlatformType.PDF);
     }
 
     @Test
     void resolvesGeneralUrlAsWeb() {
         assertThat(resolver.resolve(null, "https://example.com/article"))
+                .isEqualTo(PlatformType.WEB);
+    }
+
+    @Test
+    void doesNotClassifyQueryStringAsYoutube() {
+        assertThat(resolver.resolve(null, "https://example.com/?next=youtube.com"))
+                .isEqualTo(PlatformType.WEB);
+    }
+
+    @Test
+    void doesNotClassifySimilarDomainsAsSupportedPlatforms() {
+        assertThat(resolver.resolve(null, "https://youtube.com.evil.com/page"))
+                .isEqualTo(PlatformType.WEB);
+        assertThat(resolver.resolve(null, "https://notion.so.evil.com/page"))
+                .isEqualTo(PlatformType.WEB);
+    }
+
+    @Test
+    void doesNotClassifyNonPdfPathAsPdf() {
+        assertThat(resolver.resolve(null, "https://example.com/file.pdf.html"))
+                .isEqualTo(PlatformType.WEB);
+        assertThat(resolver.resolve(null, "https://example.com/?file=document.pdf"))
                 .isEqualTo(PlatformType.WEB);
     }
 }

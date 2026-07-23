@@ -12,7 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Optional;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -39,13 +39,30 @@ class MaterialRepositoryTest {
         Material material = materialRepository.save(material(user, folder, "https://example.com/article"));
         flushAndClear();
 
-        Optional<Material> result = materialRepository.findByUser_IdAndOriginalUrl(
+        List<Material> result = materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(
                 user.getId(),
                 "https://example.com/article"
         );
 
-        assertThat(result).isPresent();
-        assertThat(result.get().getId()).isEqualTo(material.getId());
+        assertThat(result).extracting(Material::getId)
+                .containsExactly(material.getId());
+    }
+
+    @Test
+    void findsMultipleActiveMaterialsWithSameOriginalUrlWithoutSingleResultFailure() {
+        User user = userRepository.save(user("owner"));
+        Folder folder = folderRepository.save(Folder.create(user, "Folder E"));
+        Material older = materialRepository.save(material(user, folder, "https://example.com/article"));
+        Material newer = materialRepository.save(material(user, folder, "https://example.com/article"));
+        flushAndClear();
+
+        List<Material> result = materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(
+                user.getId(),
+                "https://example.com/article"
+        );
+
+        assertThat(result).extracting(Material::getId)
+                .containsExactly(newer.getId(), older.getId());
     }
 
     @Test
@@ -55,7 +72,7 @@ class MaterialRepositoryTest {
         materialRepository.save(material(user, folder, "https://example.com/article"));
         flushAndClear();
 
-        Optional<Material> result = materialRepository.findByUser_IdAndOriginalUrl(
+        List<Material> result = materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(
                 user.getId(),
                 "https://example.com/other"
         );
@@ -71,7 +88,7 @@ class MaterialRepositoryTest {
         materialRepository.save(material(owner, folder, "https://example.com/article"));
         flushAndClear();
 
-        Optional<Material> result = materialRepository.findByUser_IdAndOriginalUrl(
+        List<Material> result = materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(
                 other.getId(),
                 "https://example.com/article"
         );
@@ -87,7 +104,7 @@ class MaterialRepositoryTest {
         material.delete();
         flushAndClear();
 
-        Optional<Material> result = materialRepository.findByUser_IdAndOriginalUrl(
+        List<Material> result = materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(
                 user.getId(),
                 "https://example.com/article"
         );

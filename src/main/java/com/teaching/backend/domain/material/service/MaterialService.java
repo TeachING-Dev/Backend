@@ -58,6 +58,7 @@ public class MaterialService {
     private final MaterialAnalysisPromptBuilder materialAnalysisPromptBuilder;
     private final MaterialAiAnalysisResponseParser materialAiAnalysisResponseParser;
     private final MaterialPlatformResolver materialPlatformResolver;
+    private final MaterialUrlValidator materialUrlValidator;
 
     public List<MaterialListResponse> getMaterialList(Long userId, Integer size) {
         List<Material> materials = findRecentMaterials(userId, size);
@@ -300,7 +301,12 @@ public class MaterialService {
             throw new MaterialException(MaterialErrorCode.ORIGINAL_URL_REQUIRED);
         }
 
-        return request.originalUrl().trim();
+        String originalUrl = request.originalUrl().trim();
+        if (!materialUrlValidator.isValidHttpUrl(originalUrl)) {
+            throw new GeneralException(GlobalErrorCode.BAD_REQUEST);
+        }
+
+        return originalUrl;
     }
 
     private String validateAndNormalizeContent(MaterialAnalysisGenerateRequest request) {
