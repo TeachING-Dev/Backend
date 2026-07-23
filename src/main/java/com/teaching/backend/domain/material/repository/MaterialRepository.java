@@ -18,6 +18,8 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
 
     Page<Material> findAllByUser_Id(Long userId, Pageable pageable);
 
+    Optional<Material> findByUser_IdAndOriginalUrl(Long userId, String originalUrl);
+
     Optional<Material> findByIdAndFolder_IdAndUser_Id(
             Long id,
             Long folderId,

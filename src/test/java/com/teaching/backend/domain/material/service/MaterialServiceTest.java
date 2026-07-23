@@ -60,6 +60,9 @@ class MaterialServiceTest {
     @Mock
     private TagRepository tagRepository;
 
+    @Mock
+    private MaterialPlatformResolver materialPlatformResolver;
+
     @InjectMocks
     private MaterialService materialService;
 

@@ -41,7 +41,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -58,6 +57,7 @@ public class MaterialService {
     private final OpenAiClient openAiClient;
     private final MaterialAnalysisPromptBuilder materialAnalysisPromptBuilder;
     private final MaterialAiAnalysisResponseParser materialAiAnalysisResponseParser;
+    private final MaterialPlatformResolver materialPlatformResolver;
 
     public List<MaterialListResponse> getMaterialList(Long userId, Integer size) {
         List<Material> materials = findRecentMaterials(userId, size);
@@ -148,7 +148,7 @@ public class MaterialService {
         String title = validateAndNormalizeTitle(request);
         String originalUrl = validateAndNormalizeOriginalUrl(request);
         String content = validateAndNormalizeContent(request);
-        PlatformType platformType = resolvePlatformType(request, originalUrl);
+        PlatformType platformType = materialPlatformResolver.resolve(request.platformType(), originalUrl);
 
         Material material = materialRepository.save(
                 Material.create(folder.getUser(), folder, title, originalUrl, platformType)
@@ -285,24 +285,6 @@ public class MaterialService {
                             .orElseGet(() -> tagRepository.save(Tag.create(name)));
                     materialTagRepository.save(MaterialTag.create(material, tag));
                 });
-    }
-
-    private PlatformType resolvePlatformType(MaterialAnalysisGenerateRequest request, String originalUrl) {
-        if (request.platformType() != null) {
-            return request.platformType();
-        }
-
-        String url = originalUrl.toLowerCase(Locale.ROOT);
-        if (url.contains("youtube.com") || url.contains("youtu.be")) {
-            return PlatformType.YOUTUBE;
-        }
-        if (url.contains("notion.so")) {
-            return PlatformType.NOTION;
-        }
-        if (url.endsWith(".pdf")) {
-            return PlatformType.PDF;
-        }
-        return PlatformType.WEB;
     }
 
     private String validateAndNormalizeTitle(MaterialAnalysisGenerateRequest request) {
