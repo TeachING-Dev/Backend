@@ -3,6 +3,7 @@ package com.teaching.backend.domain.material.repository;
 import com.teaching.backend.domain.material.entity.Material;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -12,6 +13,10 @@ import java.util.List;
 import java.util.Optional;
 
 public interface MaterialRepository extends JpaRepository<Material, Long> {
+
+    List<Material> findAllByUser_Id(Long userId, Sort sort);
+
+    Page<Material> findAllByUser_Id(Long userId, Pageable pageable);
 
     Optional<Material> findByIdAndFolder_IdAndUser_Id(
             Long id,
@@ -27,7 +32,15 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
 
     @Modifying
     @Query(
-            value = "UPDATE materials SET deleted_at = NULL, folder_id = :folderId, updated_at = CURRENT_TIMESTAMP WHERE id IN (:materialIds) AND user_id = :userId AND deleted_at IS NOT NULL",
+            value = """
+                    UPDATE materials
+                    SET deleted_at = NULL,
+                        folder_id = :folderId,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id IN (:materialIds)
+                      AND user_id = :userId
+                      AND deleted_at IS NOT NULL
+                    """,
             nativeQuery = true
     )
     int restoreDeletedMaterials(

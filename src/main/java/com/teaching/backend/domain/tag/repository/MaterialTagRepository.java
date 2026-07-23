@@ -6,9 +6,21 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface MaterialTagRepository
         extends JpaRepository<MaterialTag, Long> {
+
+    @Query("""
+            SELECT mt
+            FROM MaterialTag mt
+            JOIN FETCH mt.material m
+            JOIN FETCH m.user
+            WHERE mt.id = :materialTagId
+            """)
+    Optional<MaterialTag> findByIdWithMaterialAndUser(
+            @Param("materialTagId") Long materialTagId
+    );
 
     @Query("""
             SELECT mt
