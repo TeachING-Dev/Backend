@@ -4,6 +4,7 @@ import com.teaching.backend.domain.folder.entity.Folder;
 import com.teaching.backend.domain.folder.exception.FolderErrorCode;
 import com.teaching.backend.domain.folder.exception.FolderException;
 import com.teaching.backend.domain.folder.repository.FolderRepository;
+import com.teaching.backend.domain.material.dto.MaterialListResponse;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisResult;
 import com.teaching.backend.domain.material.dto.request.MaterialAnalysisGenerateRequest;
 import com.teaching.backend.domain.material.dto.request.MaterialAnalysisSummaryUpdateRequest;
@@ -24,17 +25,25 @@ import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.exception.MaterialException;
 import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
-import com.teaching.backend.domain.tag.entity.Tag;
 import com.teaching.backend.domain.tag.entity.MaterialTag;
+import com.teaching.backend.domain.tag.entity.Tag;
+import com.teaching.backend.domain.tag.exception.TagErrorCode;
+import com.teaching.backend.domain.tag.exception.TagException;
 import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
 import com.teaching.backend.domain.tag.repository.TagRepository;
 import com.teaching.backend.global.ai.openai.OpenAiClient;
+import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
+import com.teaching.backend.global.exception.GeneralException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -49,6 +58,46 @@ public class MaterialService {
     private final OpenAiClient openAiClient;
     private final MaterialAnalysisPromptBuilder materialAnalysisPromptBuilder;
     private final MaterialAiAnalysisResponseParser materialAiAnalysisResponseParser;
+
+    public List<MaterialListResponse> getMaterialList(Long userId, Integer size) {
+        List<Material> materials = findRecentMaterials(userId, size);
+        if (materials.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> materialIds = materials.stream()
+                .map(Material::getId)
+                .toList();
+
+        Map<Long, String> summaryByMaterialId = materialAnalysisRepository.findAllActiveByMaterialIds(materialIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        analysis -> analysis.getMaterial().getId(),
+                        MaterialAnalysis::getSummary,
+                        (current, ignored) -> current
+                ));
+
+        return materials.stream()
+                .map(material -> MaterialListResponse.of(
+                        material,
+                        summaryByMaterialId.get(material.getId())
+                ))
+                .toList();
+    }
+
+    @Transactional
+    public void deleteMaterialTag(Long userId, Long materialTagId) {
+        validateMaterialTagId(materialTagId);
+
+        MaterialTag materialTag = materialTagRepository.findByIdWithMaterialAndUser(materialTagId)
+                .orElseThrow(() -> new TagException(TagErrorCode.TAG_NOT_FOUND));
+
+        if (!materialTag.getMaterial().getUser().getId().equals(userId)) {
+            throw new TagException(TagErrorCode.TAG_ACCESS_DENIED);
+        }
+
+        materialTagRepository.delete(materialTag);
+    }
 
     public MaterialDetailResponse getMaterialDetail(
             Long userId,
@@ -89,8 +138,6 @@ public class MaterialService {
         return MaterialAnalysisSummaryUpdateResponse.of(materialId, analysis);
     }
 
-    // AI 호출/파싱 실패 시에도 이미 생성된 Material은 FAILED 상태로 남겨야 하므로,
-    // MaterialException으로 인한 롤백은 막고 material.failAnalysis() 저장까지만 커밋한다.
     @Transactional(noRollbackFor = MaterialException.class)
     public MaterialAnalysisResponse generateMaterialWithAnalysis(
             Long userId,
@@ -128,59 +175,6 @@ public class MaterialService {
         material.markAnalysisCompleted();
 
         return MaterialAnalysisResponse.from(analysis);
-    }
-
-    private void saveTags(Material material, List<String> tagNames) {
-        tagNames.stream()
-                .map(String::trim)
-                .filter(name -> !name.isBlank())
-                .distinct()
-                .forEach(name -> {
-                    Tag tag = tagRepository.findByName(name).orElseGet(() -> tagRepository.save(Tag.create(name)));
-                    materialTagRepository.save(MaterialTag.create(material, tag));
-                });
-    }
-
-    private PlatformType resolvePlatformType(MaterialAnalysisGenerateRequest request, String originalUrl) {
-        if (request.platformType() != null) {
-            return request.platformType();
-        }
-
-        String url = originalUrl.toLowerCase(Locale.ROOT);
-        if (url.contains("youtube.com") || url.contains("youtu.be")) {
-            return PlatformType.YOUTUBE;
-        }
-        if (url.contains("notion.so")) {
-            return PlatformType.NOTION;
-        }
-        if (url.endsWith(".pdf")) {
-            return PlatformType.PDF;
-        }
-        return PlatformType.WEB;
-    }
-
-    private String validateAndNormalizeTitle(MaterialAnalysisGenerateRequest request) {
-        if (request == null || request.title() == null || request.title().isBlank()) {
-            throw new MaterialException(MaterialErrorCode.TITLE_REQUIRED);
-        }
-
-        return request.title().trim();
-    }
-
-    private String validateAndNormalizeOriginalUrl(MaterialAnalysisGenerateRequest request) {
-        if (request == null || request.originalUrl() == null || request.originalUrl().isBlank()) {
-            throw new MaterialException(MaterialErrorCode.ORIGINAL_URL_REQUIRED);
-        }
-
-        return request.originalUrl().trim();
-    }
-
-    private String validateAndNormalizeContent(MaterialAnalysisGenerateRequest request) {
-        if (request == null || request.content() == null || request.content().isBlank()) {
-            throw new MaterialException(MaterialErrorCode.CONTENT_REQUIRED);
-        }
-
-        return request.content().trim();
     }
 
     public List<MaterialTagResponse> getMaterialTags(
@@ -253,6 +247,86 @@ public class MaterialService {
         }
 
         return MaterialRestoreResponse.of(restoredCount, folderId);
+    }
+
+    private List<Material> findRecentMaterials(Long userId, Integer size) {
+        Sort recentSort = Sort.by(
+                Sort.Order.desc("createdAt"),
+                Sort.Order.desc("id")
+        );
+
+        if (size == null) {
+            return materialRepository.findAllByUser_Id(userId, recentSort);
+        }
+
+        if (size <= 0) {
+            throw new GeneralException(GlobalErrorCode.BAD_REQUEST);
+        }
+
+        return materialRepository.findAllByUser_Id(
+                userId,
+                PageRequest.of(0, size, recentSort)
+        ).getContent();
+    }
+
+    private void validateMaterialTagId(Long materialTagId) {
+        if (materialTagId == null || materialTagId <= 0) {
+            throw new TagException(TagErrorCode.TAG_NOT_FOUND);
+        }
+    }
+
+    private void saveTags(Material material, List<String> tagNames) {
+        tagNames.stream()
+                .map(String::trim)
+                .filter(name -> !name.isBlank())
+                .distinct()
+                .forEach(name -> {
+                    Tag tag = tagRepository.findByName(name)
+                            .orElseGet(() -> tagRepository.save(Tag.create(name)));
+                    materialTagRepository.save(MaterialTag.create(material, tag));
+                });
+    }
+
+    private PlatformType resolvePlatformType(MaterialAnalysisGenerateRequest request, String originalUrl) {
+        if (request.platformType() != null) {
+            return request.platformType();
+        }
+
+        String url = originalUrl.toLowerCase(Locale.ROOT);
+        if (url.contains("youtube.com") || url.contains("youtu.be")) {
+            return PlatformType.YOUTUBE;
+        }
+        if (url.contains("notion.so")) {
+            return PlatformType.NOTION;
+        }
+        if (url.endsWith(".pdf")) {
+            return PlatformType.PDF;
+        }
+        return PlatformType.WEB;
+    }
+
+    private String validateAndNormalizeTitle(MaterialAnalysisGenerateRequest request) {
+        if (request == null || request.title() == null || request.title().isBlank()) {
+            throw new MaterialException(MaterialErrorCode.TITLE_REQUIRED);
+        }
+
+        return request.title().trim();
+    }
+
+    private String validateAndNormalizeOriginalUrl(MaterialAnalysisGenerateRequest request) {
+        if (request == null || request.originalUrl() == null || request.originalUrl().isBlank()) {
+            throw new MaterialException(MaterialErrorCode.ORIGINAL_URL_REQUIRED);
+        }
+
+        return request.originalUrl().trim();
+    }
+
+    private String validateAndNormalizeContent(MaterialAnalysisGenerateRequest request) {
+        if (request == null || request.content() == null || request.content().isBlank()) {
+            throw new MaterialException(MaterialErrorCode.CONTENT_REQUIRED);
+        }
+
+        return request.content().trim();
     }
 
     private List<Material> findOwnedMaterialsInFolder(
