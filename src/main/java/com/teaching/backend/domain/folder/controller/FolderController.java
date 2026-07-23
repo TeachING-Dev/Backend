@@ -35,6 +35,7 @@ import com.teaching.backend.global.response.ApiResponse;
 import com.teaching.backend.global.security.entity.AuthMember;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -51,6 +52,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+@Tag(name = "Folder", description = "폴더 관련 API")
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/folders")
