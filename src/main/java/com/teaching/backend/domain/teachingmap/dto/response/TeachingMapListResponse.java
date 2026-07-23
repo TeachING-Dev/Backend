@@ -1,4 +1,4 @@
-package com.teaching.backend.domain.teachingmap.dto;
+package com.teaching.backend.domain.teachingmap.dto.response;
 
 import com.teaching.backend.domain.teachingmap.entity.TeachingMap;
 import com.teaching.backend.domain.teachingmap.enums.TeachingMapStatus;

@@ -1,5 +1,6 @@
 package com.teaching.backend.domain.teachingmap.entity;
 
+import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.global.common.BaseSoftDeleteEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -22,6 +23,13 @@ public class TeachingMapStep extends BaseSoftDeleteEntity {
     @JoinColumn(name = "teaching_map_id", nullable = false)
     private TeachingMap teachingMap;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "material_id", nullable = false)
+    private Material material;
+
+    @Column(name = "step_order", nullable = false)
+    private Integer stepOrder;
+
     @Column(name = "step_title", nullable = false, length = 100)
     private String stepTitle;
 
@@ -33,16 +41,22 @@ public class TeachingMapStep extends BaseSoftDeleteEntity {
     private String tip;
 
     @Builder(access = AccessLevel.PRIVATE)
-    private TeachingMapStep(TeachingMap teachingMap, String stepTitle, String tip) {
+    private TeachingMapStep(TeachingMap teachingMap, Material material, Integer stepOrder,
+                            String stepTitle, String tip) {
         this.teachingMap = teachingMap;
+        this.material = material;
+        this.stepOrder = stepOrder;
         this.stepTitle = stepTitle;
         this.tip = tip;
         this.isFinished = false;
     }
 
-    public static TeachingMapStep create(TeachingMap teachingMap, String stepTitle, String tip) {
+    public static TeachingMapStep create(TeachingMap teachingMap, Material material, Integer stepOrder,
+                                         String stepTitle, String tip) {
         return TeachingMapStep.builder()
                 .teachingMap(teachingMap)
+                .material(material)
+                .stepOrder(stepOrder)
                 .stepTitle(stepTitle)
                 .tip(tip)
                 .build();
