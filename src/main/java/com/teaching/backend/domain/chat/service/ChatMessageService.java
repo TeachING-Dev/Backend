@@ -4,10 +4,16 @@ import com.teaching.backend.domain.chat.dto.MessageCreateRequest;
 import com.teaching.backend.domain.chat.entity.ChatMessage;
 import com.teaching.backend.domain.chat.entity.ChatRoom;
 import com.teaching.backend.domain.chat.entity.ChatSource;
+import com.teaching.backend.domain.chat.enums.ChatRole;
+import com.teaching.backend.domain.chat.exception.ChatErrorCode;
+import com.teaching.backend.domain.chat.exception.ChatException;
 import com.teaching.backend.domain.chat.repository.ChatMessageRepository;
 import com.teaching.backend.domain.chat.repository.ChatSourceRepository;
 import com.teaching.backend.domain.material.entity.MaterialChunk;
 import com.teaching.backend.domain.material.service.MaterialSearchService;
+import com.teaching.backend.domain.user.entity.User;
+import com.teaching.backend.domain.user.enums.MembershipType;
+import com.teaching.backend.domain.user.repository.UserRepository;
 import com.teaching.backend.global.ai.openai.OpenAiClient;
 import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
@@ -15,6 +21,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -25,6 +33,8 @@ import java.util.stream.Collectors;
 public class ChatMessageService {
 
     private static final int CONTENT_MAX_LENGTH = 2000;
+    static final int FREE_DAILY_QUESTION_LIMIT = 5;
+    static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private final ChatMessageRepository chatMessageRepository;
     private final ChatSourceRepository chatSourceRepository;
@@ -32,6 +42,7 @@ public class ChatMessageService {
     private final MaterialSearchService materialSearchService;
     private final OpenAiClient openAiClient;
     private final ChatAskWriter chatAskWriter;
+    private final UserRepository userRepository;
 
     @Transactional(readOnly = true)
     public ChatRoomHistoryResult getMessages(Long chatRoomId, Long userId) {
@@ -60,7 +71,14 @@ public class ChatMessageService {
         // 조기 검증: 방이 없거나 소유자가 아니면 외부 호출 전에 실패시킨다.
         chatRoomService.getChatRoom(chatRoomId, userId);
 
-        // TODO: 무료 회원 당일 질문 횟수(5회) 제한(DAILY_QUESTION_LIMIT_EXCEEDED) 정책/사용량 저장소 확정 후 적용
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new GeneralException(GlobalErrorCode.NOT_FOUND));
+
+        // 비용이 드는 외부 호출(벡터 검색, LLM) 전에 무료 회원의 당일 질문 횟수 한도를 먼저 검증한다.
+        if (user.getMembershipType() == MembershipType.FREE
+                && countTodayUserMessages(userId) >= FREE_DAILY_QUESTION_LIMIT) {
+            throw new ChatException(ChatErrorCode.DAILY_QUESTION_LIMIT_EXCEEDED);
+        }
 
         List<MaterialChunk> relevantChunks = materialSearchService.searchTopChunks(request.content(), userId);
 
@@ -71,6 +89,11 @@ public class ChatMessageService {
         boolean isFallback = relevantChunks.isEmpty();
 
         return chatAskWriter.write(chatRoomId, userId, request.content(), answer, isFallback, relevantChunks);
+    }
+
+    private long countTodayUserMessages(Long userId) {
+        return chatMessageRepository.countByChatRoom_User_IdAndRoleAndCreatedAtGreaterThanEqual(
+                userId, ChatRole.USER, LocalDate.now(KST).atStartOfDay());
     }
 
     private void validateContent(String content) {

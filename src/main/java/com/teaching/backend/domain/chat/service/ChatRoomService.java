@@ -1,11 +1,14 @@
 package com.teaching.backend.domain.chat.service;
 
 import com.teaching.backend.domain.chat.entity.ChatRoom;
+import com.teaching.backend.domain.chat.exception.ChatErrorCode;
+import com.teaching.backend.domain.chat.exception.ChatException;
 import com.teaching.backend.domain.chat.repository.ChatRoomRepository;
 import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
 import com.teaching.backend.domain.user.entity.User;
-import jakarta.persistence.EntityManager;
+import com.teaching.backend.domain.user.enums.MembershipType;
+import com.teaching.backend.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,9 +24,10 @@ public class ChatRoomService {
 
     private static final int TITLE_MAX_LENGTH = 15;
     private static final String TITLE_ELLIPSIS = "...";
+    private static final int FREE_CHATROOM_LIMIT = 10;
 
     private final ChatRoomRepository chatRoomRepository;
-    private final EntityManager entityManager;
+    private final UserRepository userRepository;
 
     public ChatRoomPageResult getChatRooms(Long userId, Long cursor, int size) {
         List<ChatRoom> chatRooms = chatRoomRepository.findByUserIdAndDeletedAtIsNull(userId);
@@ -63,9 +67,14 @@ public class ChatRoomService {
 
     @Transactional
     public ChatRoom createChatRoom(Long userId, String content) {
-        // TODO: 무료 회원 대화방 개수 제한(CHATROOM_LIMIT_EXCEEDED) 정책 확정 후 적용
-        // TODO: User 도메인 구축 완료 후 UserRepository 조회로 교체
-        User user = entityManager.getReference(User.class, userId);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new GeneralException(GlobalErrorCode.NOT_FOUND));
+
+        if (user.getMembershipType() == MembershipType.FREE
+                && chatRoomRepository.countByUserIdAndDeletedAtIsNull(userId) >= FREE_CHATROOM_LIMIT) {
+            throw new ChatException(ChatErrorCode.CHATROOM_LIMIT_EXCEEDED);
+        }
+
         ChatRoom chatRoom = ChatRoom.create(user, generateTitle(content));
 
         return chatRoomRepository.save(chatRoom);
