@@ -9,6 +9,11 @@ import org.springframework.http.HttpStatus;
 @AllArgsConstructor
 public enum TeachingMapErrorCode implements BaseErrorCode {
 
+    FOLDER_NOT_FOUND(HttpStatus.NOT_FOUND, "TEACHING_MAP_404_1", "존재하지 않는 폴더입니다."),
+    FOLDER_MATERIAL_NOT_ENOUGH(HttpStatus.BAD_REQUEST, "TEACHING_MAP_400_1", "자료 부족: 최소 3개 이상의 자료가 필요합니다."),
+    AI_RESPONSE_PARSE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "TEACHING_MAP_500_1", "AI 응답을 파싱하는데 실패했습니다."),
+    AI_RESULT_MATERIAL_MISMATCH(HttpStatus.INTERNAL_SERVER_ERROR, "TEACHING_MAP_500_2", "AI가 반환한 자료 정보가 폴더 내 자료와 일치하지 않습니다."),
+    AI_RESULT_INVALID(HttpStatus.INTERNAL_SERVER_ERROR, "TEACHING_MAP_500_3", "AI 응답이 유효하지 않습니다."),
     TEACHING_MAP_NOT_FOUND(HttpStatus.NOT_FOUND, "TMAP4041", "티칭맵을 찾을 수 없습니다."),
     TEACHING_MAP_NOT_IN_TRASH(HttpStatus.CONFLICT, "TMAP4093", "휴지통에 있는 티칭맵이 아닙니다.");
 

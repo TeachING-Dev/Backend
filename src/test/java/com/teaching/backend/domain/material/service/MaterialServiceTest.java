@@ -1,11 +1,16 @@
 package com.teaching.backend.domain.material.service;
 
 import com.teaching.backend.domain.folder.entity.Folder;
+import com.teaching.backend.domain.folder.repository.FolderRepository;
 import com.teaching.backend.domain.material.dto.MaterialListResponse;
+import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisResult;
+import com.teaching.backend.domain.material.dto.request.MaterialAnalysisGenerateRequest;
 import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.entity.MaterialAnalysis;
 import com.teaching.backend.domain.material.enums.AiStatus;
 import com.teaching.backend.domain.material.enums.PlatformType;
+import com.teaching.backend.domain.material.exception.MaterialErrorCode;
+import com.teaching.backend.domain.material.exception.MaterialException;
 import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
 import com.teaching.backend.domain.tag.entity.MaterialTag;
@@ -15,6 +20,7 @@ import com.teaching.backend.domain.tag.exception.TagException;
 import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
 import com.teaching.backend.domain.tag.repository.TagRepository;
 import com.teaching.backend.domain.user.entity.User;
+import com.teaching.backend.global.ai.openai.OpenAiClient;
 import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
 import org.junit.jupiter.api.Test;
@@ -47,6 +53,7 @@ class MaterialServiceTest {
 
     private static final Long USER_ID = 1L;
     private static final Long OTHER_USER_ID = 2L;
+    private static final Long FOLDER_ID = 10L;
 
     @Mock
     private MaterialRepository materialRepository;
@@ -59,6 +66,24 @@ class MaterialServiceTest {
 
     @Mock
     private TagRepository tagRepository;
+
+    @Mock
+    private FolderRepository folderRepository;
+
+    @Mock
+    private OpenAiClient openAiClient;
+
+    @Mock
+    private MaterialAnalysisPromptBuilder materialAnalysisPromptBuilder;
+
+    @Mock
+    private MaterialAiAnalysisResponseParser materialAiAnalysisResponseParser;
+
+    @Mock
+    private MaterialPlatformResolver materialPlatformResolver;
+
+    @Mock
+    private MaterialUrlValidator materialUrlValidator;
 
     @InjectMocks
     private MaterialService materialService;
@@ -222,11 +247,164 @@ class MaterialServiceTest {
         verify(materialTagRepository, never()).delete(any(MaterialTag.class));
     }
 
+    @Test
+    void generateMaterialWithAnalysisAcceptsHttpsUrlAndStoresTrimmedUrl() {
+        MaterialAnalysisGenerateRequest request = new MaterialAnalysisGenerateRequest(
+                "Title",
+                "  https://example.com/article  ",
+                "content",
+                null
+        );
+        givenSuccessfulAnalysis("https://example.com/article", PlatformType.WEB);
+
+        materialService.generateMaterialWithAnalysis(USER_ID, FOLDER_ID, request);
+
+        ArgumentCaptor<Material> materialCaptor = ArgumentCaptor.forClass(Material.class);
+        verify(materialRepository).save(materialCaptor.capture());
+        assertThat(materialCaptor.getValue().getOriginalUrl()).isEqualTo("https://example.com/article");
+        verify(materialUrlValidator).isValidHttpUrl("https://example.com/article");
+        verify(materialPlatformResolver).resolve(null, "https://example.com/article");
+    }
+
+    @Test
+    void generateMaterialWithAnalysisAcceptsHttpUrl() {
+        MaterialAnalysisGenerateRequest request = new MaterialAnalysisGenerateRequest(
+                "Title",
+                "http://example.com/article",
+                "content",
+                null
+        );
+        givenSuccessfulAnalysis("http://example.com/article", PlatformType.WEB);
+
+        assertThatCode(() -> materialService.generateMaterialWithAnalysis(USER_ID, FOLDER_ID, request))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void generateMaterialWithAnalysisRejectsInvalidUrl() {
+        MaterialAnalysisGenerateRequest request = new MaterialAnalysisGenerateRequest(
+                "Title",
+                "ftp://example.com",
+                "content",
+                null
+        );
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(folder(USER_ID, FOLDER_ID)));
+        when(materialUrlValidator.isValidHttpUrl("ftp://example.com")).thenReturn(false);
+
+        assertBadRequestThrown(() -> materialService.generateMaterialWithAnalysis(USER_ID, FOLDER_ID, request));
+        verify(materialRepository, never()).save(any(Material.class));
+        verify(materialPlatformResolver, never()).resolve(any(), any());
+        verify(openAiClient, never()).chatCompleteJson(any(), any());
+    }
+
+    @Test
+    void generateMaterialWithAnalysisRejectsUrlWithoutScheme() {
+        MaterialAnalysisGenerateRequest request = new MaterialAnalysisGenerateRequest(
+                "Title",
+                "example.com",
+                "content",
+                null
+        );
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(folder(USER_ID, FOLDER_ID)));
+        when(materialUrlValidator.isValidHttpUrl("example.com")).thenReturn(false);
+
+        assertBadRequestThrown(() -> materialService.generateMaterialWithAnalysis(USER_ID, FOLDER_ID, request));
+        verify(materialRepository, never()).save(any(Material.class));
+        verify(materialPlatformResolver, never()).resolve(any(), any());
+        verify(openAiClient, never()).chatCompleteJson(any(), any());
+    }
+
+    @Test
+    void generateMaterialWithAnalysisRejectsUrlWithoutHost() {
+        MaterialAnalysisGenerateRequest request = new MaterialAnalysisGenerateRequest(
+                "Title",
+                "https:///article",
+                "content",
+                null
+        );
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(folder(USER_ID, FOLDER_ID)));
+        when(materialUrlValidator.isValidHttpUrl("https:///article")).thenReturn(false);
+
+        assertBadRequestThrown(() -> materialService.generateMaterialWithAnalysis(USER_ID, FOLDER_ID, request));
+        verify(materialRepository, never()).save(any(Material.class));
+        verify(materialPlatformResolver, never()).resolve(any(), any());
+        verify(openAiClient, never()).chatCompleteJson(any(), any());
+    }
+
+    @Test
+    void generateMaterialWithAnalysisRejectsNullUrlAsOriginalUrlRequired() {
+        MaterialAnalysisGenerateRequest request = new MaterialAnalysisGenerateRequest(
+                "Title",
+                null,
+                "content",
+                null
+        );
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(folder(USER_ID, FOLDER_ID)));
+
+        assertMaterialExceptionThrown(
+                () -> materialService.generateMaterialWithAnalysis(USER_ID, FOLDER_ID, request),
+                MaterialErrorCode.ORIGINAL_URL_REQUIRED
+        );
+        verify(materialUrlValidator, never()).isValidHttpUrl(any());
+        verify(materialRepository, never()).save(any(Material.class));
+        verify(materialPlatformResolver, never()).resolve(any(), any());
+        verify(openAiClient, never()).chatCompleteJson(any(), any());
+    }
+
+    @Test
+    void generateMaterialWithAnalysisRejectsBlankUrlAsOriginalUrlRequired() {
+        MaterialAnalysisGenerateRequest request = new MaterialAnalysisGenerateRequest(
+                "Title",
+                "   ",
+                "content",
+                null
+        );
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(folder(USER_ID, FOLDER_ID)));
+
+        assertMaterialExceptionThrown(
+                () -> materialService.generateMaterialWithAnalysis(USER_ID, FOLDER_ID, request),
+                MaterialErrorCode.ORIGINAL_URL_REQUIRED
+        );
+        verify(materialUrlValidator, never()).isValidHttpUrl(any());
+        verify(materialRepository, never()).save(any(Material.class));
+        verify(materialPlatformResolver, never()).resolve(any(), any());
+        verify(openAiClient, never()).chatCompleteJson(any(), any());
+    }
+
     private void assertTagExceptionThrown(Runnable action, TagErrorCode errorCode) {
         assertThatThrownBy(action::run)
                 .isInstanceOf(TagException.class)
                 .extracting("errorCode")
                 .isEqualTo(errorCode);
+    }
+
+    private void assertMaterialExceptionThrown(Runnable action, MaterialErrorCode errorCode) {
+        assertThatThrownBy(action::run)
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(errorCode);
+    }
+
+    private void assertBadRequestThrown(Runnable action) {
+        assertThatThrownBy(action::run)
+                .isInstanceOf(GeneralException.class)
+                .extracting("errorCode")
+                .isEqualTo(GlobalErrorCode.BAD_REQUEST);
+    }
+
+    private void givenSuccessfulAnalysis(String originalUrl, PlatformType platformType) {
+        Folder folder = folder(USER_ID, FOLDER_ID);
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(folder));
+        when(materialUrlValidator.isValidHttpUrl(originalUrl)).thenReturn(true);
+        when(materialPlatformResolver.resolve(null, originalUrl)).thenReturn(platformType);
+        when(materialRepository.save(any(Material.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(materialAnalysisPromptBuilder.buildSystemPrompt(USER_ID)).thenReturn("system");
+        when(materialAnalysisPromptBuilder.buildUserMessage(originalUrl, "content")).thenReturn("user");
+        when(openAiClient.chatCompleteJson("system", "user")).thenReturn("raw");
+        when(materialAiAnalysisResponseParser.parse("raw")).thenReturn(
+                new MaterialAiAnalysisResult("summary", "detail", List.of(), null, null)
+        );
+        when(materialAnalysisRepository.save(any(MaterialAnalysis.class))).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     private Material material(
@@ -244,6 +422,12 @@ class MaterialServiceTest {
         ReflectionTestUtils.setField(material, "aiStatus", aiStatus);
         ReflectionTestUtils.setField(material, "createdAt", createdAt);
         return material;
+    }
+
+    private Folder folder(Long userId, Long folderId) {
+        Folder folder = Folder.create(user(userId), "Folder");
+        ReflectionTestUtils.setField(folder, "id", folderId);
+        return folder;
     }
 
     private MaterialAnalysis analysis(Material material, String summary) {

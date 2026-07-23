@@ -1,7 +1,7 @@
 package com.teaching.backend.domain.teachingmap.service;
 
 import com.teaching.backend.domain.folder.entity.Folder;
-import com.teaching.backend.domain.teachingmap.dto.TeachingMapListResponse;
+import com.teaching.backend.domain.teachingmap.dto.response.TeachingMapListResponse;
 import com.teaching.backend.domain.teachingmap.entity.TeachingMap;
 import com.teaching.backend.domain.teachingmap.enums.TeachingMapStatus;
 import com.teaching.backend.domain.teachingmap.enums.TeachingMapType;

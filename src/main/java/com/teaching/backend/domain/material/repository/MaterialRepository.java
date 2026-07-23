@@ -18,6 +18,11 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
 
     Page<Material> findAllByUser_Id(Long userId, Pageable pageable);
 
+    List<Material> findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(
+            Long userId,
+            String originalUrl
+    );
+
     Optional<Material> findByIdAndFolder_IdAndUser_Id(
             Long id,
             Long folderId,
@@ -134,4 +139,8 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
             @Param("keyword") String keyword,
             Pageable pageable
     );
+
+    List<Material> findAllByFolderId(Long folderId);
+
+
 }

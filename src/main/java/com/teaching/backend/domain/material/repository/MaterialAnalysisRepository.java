@@ -21,4 +21,6 @@ public interface MaterialAnalysisRepository extends JpaRepository<MaterialAnalys
     List<MaterialAnalysis> findAllActiveByMaterialIds(
             @Param("materialIds") List<Long> materialIds
     );
+
+    List<MaterialAnalysis> findAllByMaterialIdIn(List<Long> materialIds);
 }
