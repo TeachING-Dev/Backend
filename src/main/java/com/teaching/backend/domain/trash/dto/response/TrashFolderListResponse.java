@@ -1,20 +1,19 @@
 package com.teaching.backend.domain.trash.dto.response;
 
 import com.teaching.backend.domain.folder.entity.Folder;
-
-import java.time.LocalDateTime;
+import com.teaching.backend.domain.trash.util.RelativeTimeFormatter;
 
 public record TrashFolderListResponse(
         Long folderId,
         String name,
-        LocalDateTime deletedAt
+        String deletedAt
 ) {
 
     public static TrashFolderListResponse from(Folder folder) {
         return new TrashFolderListResponse(
                 folder.getId(),
                 folder.getName(),
-                folder.getDeletedAt()
+                RelativeTimeFormatter.format(folder.getDeletedAt())
         );
     }
 }
