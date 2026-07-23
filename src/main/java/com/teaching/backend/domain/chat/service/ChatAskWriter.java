@@ -4,10 +4,16 @@ import com.teaching.backend.domain.chat.entity.ChatMessage;
 import com.teaching.backend.domain.chat.entity.ChatRoom;
 import com.teaching.backend.domain.chat.entity.ChatSource;
 import com.teaching.backend.domain.chat.enums.ChatRole;
+import com.teaching.backend.domain.chat.exception.ChatErrorCode;
+import com.teaching.backend.domain.chat.exception.ChatException;
 import com.teaching.backend.domain.chat.repository.ChatMessageRepository;
 import com.teaching.backend.domain.chat.repository.ChatSourceRepository;
 import com.teaching.backend.domain.material.entity.MaterialChunk;
+import com.teaching.backend.domain.user.entity.User;
 import com.teaching.backend.domain.user.enums.MembershipType;
+import com.teaching.backend.domain.user.repository.UserRepository;
+import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
+import com.teaching.backend.global.exception.GeneralException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +31,7 @@ class ChatAskWriter {
     private final ChatRoomService chatRoomService;
     private final ChatMessageRepository chatMessageRepository;
     private final ChatSourceRepository chatSourceRepository;
+    private final UserRepository userRepository;
 
     AskResult write(
             Long chatRoomId,
@@ -36,6 +43,18 @@ class ChatAskWriter {
     ) {
         // 외부 호출(검색/LLM) 도중 방이 삭제되는 경우를 대비해 쓰기 시점에 다시 조회
         ChatRoom chatRoom = chatRoomService.getChatRoom(chatRoomId, userId);
+
+        // ask()의 사전 체크는 외부 호출 전 빠른 실패용일 뿐, 동시 요청 시 한도를 넘길 수 있다.
+        // 실제 저장이 일어나는 이 트랜잭션 안에서 유저 행에 락을 걸고 확정 체크를 한 번 더 수행한다.
+        User user = userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new GeneralException(GlobalErrorCode.NOT_FOUND));
+
+        if (user.getMembershipType() == MembershipType.FREE
+                && chatMessageRepository.countByChatRoom_User_IdAndRoleAndCreatedAtGreaterThanEqual(
+                        userId, ChatRole.USER, LocalDate.now(ChatMessageService.KST).atStartOfDay())
+                        >= ChatMessageService.FREE_DAILY_QUESTION_LIMIT) {
+            throw new ChatException(ChatErrorCode.DAILY_QUESTION_LIMIT_EXCEEDED);
+        }
 
         ChatMessage userMessage = chatMessageRepository.save(
                 ChatMessage.createUserMessage(chatRoom, userContent)

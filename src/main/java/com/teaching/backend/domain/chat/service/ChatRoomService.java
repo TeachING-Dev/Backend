@@ -67,7 +67,8 @@ public class ChatRoomService {
 
     @Transactional
     public ChatRoom createChatRoom(Long userId, String content) {
-        User user = userRepository.findById(userId)
+        // 동시에 여러 요청이 들어와도 개수 확인과 생성이 원자적으로 처리되도록 유저 행에 쓰기 락을 건다.
+        User user = userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new GeneralException(GlobalErrorCode.NOT_FOUND));
 
         if (user.getMembershipType() == MembershipType.FREE
