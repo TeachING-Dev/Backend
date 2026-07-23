@@ -61,6 +61,10 @@ app:
 cookie:
   secure: true
 
+support:
+  kakao-channel-url: ${SUPPORT_KAKAO_CHANNEL_URL:https://pf.kakao.com/_teaching}
+  email: ${SUPPORT_EMAIL:support@teaching.com}
+
 openai:
   api-key: ${OPENAI_API_KEY}
   base-url: ${OPENAI_BASE_URL:https://api.openai.com}
