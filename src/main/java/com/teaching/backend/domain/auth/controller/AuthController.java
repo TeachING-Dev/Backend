@@ -35,7 +35,7 @@ public class AuthController {
     @Value("${cookie.secure}")
     private boolean cookieSecure;
 
-    //refresh Token 발급
+    //refresh Token 발급 api
 
     @Operation(
             summary = "AccessToken 재발급",
