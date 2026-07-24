@@ -84,22 +84,17 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
             @Param("userId") Long userId
     );
 
-    @Query(
-            value = """
-                    SELECT COUNT(*) FROM materials m
-                    JOIN folders f ON f.id = m.folder_id
-                    WHERE m.id = :materialId AND m.user_id = :userId AND f.deleted_at IS NOT NULL
-                    """,
-            nativeQuery = true
-    )
-    long countWithTrashedParentFolder(
-            @Param("materialId") Long materialId,
-            @Param("userId") Long userId
-    );
-
     @Modifying
     @Query(
-            value = "UPDATE materials SET deleted_at = NULL WHERE id = :materialId AND user_id = :userId AND deleted_at IS NOT NULL",
+            value = """
+                    UPDATE materials m
+                    JOIN folders f ON f.id = m.folder_id
+                    SET m.deleted_at = NULL
+                    WHERE m.id = :materialId
+                      AND m.user_id = :userId
+                      AND m.deleted_at IS NOT NULL
+                      AND f.deleted_at IS NULL
+                    """,
             nativeQuery = true
     )
     int restoreDeletedMaterial(
