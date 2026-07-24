@@ -2,6 +2,7 @@ package com.teaching.backend.domain.user.entity;
 
 import com.teaching.backend.global.common.BaseSoftDeleteEntity;
 import com.teaching.backend.domain.user.enums.Gender;
+import com.teaching.backend.domain.user.enums.MembershipType;
 import com.teaching.backend.domain.user.enums.TeacherPersona;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
@@ -49,9 +50,14 @@ public class User extends BaseSoftDeleteEntity {
     @Column(nullable = false)
     private TeacherPersona teacherPersona;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private MembershipType membershipType;
+
     @Builder(access = AccessLevel.PRIVATE)
     private User(String email, String nickname, LocalDate birthday, Gender gender,
-                 String profileImageUrl, Boolean notificationsEnabled, TeacherPersona teacherPersona) {
+                 String profileImageUrl, Boolean notificationsEnabled, TeacherPersona teacherPersona,
+                 MembershipType membershipType) {
         this.email = email;
         this.nickname = nickname;
         this.birthday = birthday;
@@ -59,6 +65,7 @@ public class User extends BaseSoftDeleteEntity {
         this.profileImageUrl = profileImageUrl;
         this.notificationsEnabled = notificationsEnabled;
         this.teacherPersona = teacherPersona;
+        this.membershipType = membershipType;
     }
 
     public static User create(String email, String nickname, LocalDate birthday,
@@ -71,6 +78,7 @@ public class User extends BaseSoftDeleteEntity {
                 .profileImageUrl(profileImageUrl)
                 .notificationsEnabled(true)
                 .teacherPersona(TeacherPersona.FRIENDLY)
+                .membershipType(MembershipType.FREE)
                 .build();
     }
 
