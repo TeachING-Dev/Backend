@@ -58,6 +58,8 @@ app:
   oauth2:
     redirect-uri: ${APP_OAUTH2_REDIRECT_URI}
 
+  icon-base-url: ${ICON_BASE_URL}
+
 cookie:
   secure: true
 
