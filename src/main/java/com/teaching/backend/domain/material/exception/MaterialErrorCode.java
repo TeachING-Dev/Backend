@@ -19,6 +19,7 @@ public enum MaterialErrorCode implements BaseErrorCode {
     MATERIAL_ACCESS_DENIED(HttpStatus.FORBIDDEN, "MATERIAL4031", "해당 자료에 접근할 권한이 없습니다."),
     MATERIAL_NOT_FOUND(HttpStatus.NOT_FOUND, "MATERIAL4041", "자료를 찾을 수 없습니다."),
     MATERIAL_ANALYSIS_NOT_FOUND(HttpStatus.NOT_FOUND, "MATERIAL4042", "자료의 AI 분석 결과를 찾을 수 없습니다."),
+    MATERIAL_NOT_IN_TRASH(HttpStatus.CONFLICT, "MATERIAL4093", "휴지통에 있는 자료가 아닙니다."),
     AI_ANALYSIS_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "MATERIAL5001", "AI 자료 분석 생성에 실패했습니다."),
     AI_ANALYSIS_PARSE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "MATERIAL5002", "AI 분석 응답을 해석하지 못했습니다.");
 

@@ -17,7 +17,8 @@ public enum FolderErrorCode implements BaseErrorCode {
     FOLDER_ACCESS_DENIED(HttpStatus.FORBIDDEN, "FOLDER4031", "해당 폴더에 접근할 권한이 없습니다."),
     FOLDER_NOT_FOUND(HttpStatus.NOT_FOUND, "FOLDER4041", "폴더를 찾을 수 없습니다."),
     DUPLICATE_FOLDER_NAME(HttpStatus.CONFLICT, "FOLDER4091", "이미 존재하는 폴더명입니다."),
-    FOLDER_ALREADY_DELETED(HttpStatus.CONFLICT, "FOLDER4092", "이미 휴지통으로 이동된 폴더입니다.");
+    FOLDER_ALREADY_DELETED(HttpStatus.CONFLICT, "FOLDER4092", "이미 휴지통으로 이동된 폴더입니다."),
+    PARENT_FOLDER_IN_TRASH(HttpStatus.CONFLICT, "FOLDER4093", "소속된 상위 폴더가 휴지통에 있습니다. 폴더를 먼저 복구해주세요.");
 
     private final HttpStatus status;
     private final String code;
