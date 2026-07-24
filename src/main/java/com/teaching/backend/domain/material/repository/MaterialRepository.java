@@ -89,7 +89,8 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
             value = """
                     UPDATE materials m
                     JOIN folders f ON f.id = m.folder_id
-                    SET m.deleted_at = NULL
+                    SET m.deleted_at = NULL,
+                        m.updated_at = CURRENT_TIMESTAMP
                     WHERE m.id = :materialId
                       AND m.user_id = :userId
                       AND m.deleted_at IS NOT NULL

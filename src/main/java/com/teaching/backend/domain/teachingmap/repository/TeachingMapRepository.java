@@ -68,7 +68,7 @@ public interface TeachingMapRepository extends JpaRepository<TeachingMap, Long> 
 
     @Modifying
     @Query(
-            value = "UPDATE teaching_maps SET deleted_at = NULL WHERE id = :teachingMapId AND user_id = :userId AND deleted_at IS NOT NULL",
+            value = "UPDATE teaching_maps SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = :teachingMapId AND user_id = :userId AND deleted_at IS NOT NULL",
             nativeQuery = true
     )
     int restoreDeletedTeachingMap(
