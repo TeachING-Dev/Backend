@@ -135,12 +135,21 @@ public class QdrantClient {
                 true
         );
 
+        // 자료를 한 건도 색인하지 않은 유저는 컬렉션 자체가 아직 없을 수 있다(404) — 이 경우 검색 결과 없음으로 취급해
+        // 챗봇 질문이 실패하지 않고 fallback 답변으로 이어지도록 한다.
         QdrantSearchResponse response = call(webClient.post()
                 .uri("/collections/{name}/points/search", collectionName)
                 .bodyValue(request)
-                .retrieve()
-                .onStatus(HttpStatusCode::isError, this::mapError)
-                .bodyToMono(QdrantSearchResponse.class));
+                .exchangeToMono(clientResponse -> {
+                    if (clientResponse.statusCode().value() == 404) {
+                        return clientResponse.releaseBody().then(Mono.<QdrantSearchResponse>empty());
+                    }
+                    if (clientResponse.statusCode().isError()) {
+                        return clientResponse.releaseBody()
+                                .then(Mono.error(new GeneralException(GlobalErrorCode.INTERNAL_SERVER_ERROR)));
+                    }
+                    return clientResponse.bodyToMono(QdrantSearchResponse.class);
+                }));
 
         return response == null || response.result() == null ? List.of() : response.result();
     }
