@@ -4,6 +4,8 @@ import com.teaching.backend.domain.folder.entity.Folder;
 import com.teaching.backend.domain.folder.exception.FolderErrorCode;
 import com.teaching.backend.domain.folder.exception.FolderException;
 import com.teaching.backend.domain.folder.service.FolderService;
+import com.teaching.backend.domain.material.dto.extract.ExtractedMaterialContent;
+import com.teaching.backend.domain.material.dto.extract.MaterialAnalysisPreparationResult;
 import com.teaching.backend.domain.material.dto.request.MaterialAnalyzeRequest;
 import com.teaching.backend.domain.material.dto.response.MaterialAnalyzeResponse;
 import com.teaching.backend.domain.material.entity.Material;
@@ -13,6 +15,7 @@ import com.teaching.backend.domain.material.enums.PlatformType;
 import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.exception.MaterialException;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
+import com.teaching.backend.domain.material.service.extract.MaterialContentExtractorRegistry;
 import com.teaching.backend.domain.user.entity.User;
 import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
@@ -54,6 +57,9 @@ class MaterialUrlAnalysisServiceTest {
     @Mock
     private MaterialPlatformResolver materialPlatformResolver;
 
+    @Mock
+    private MaterialContentExtractorRegistry materialContentExtractorRegistry;
+
     @InjectMocks
     private MaterialUrlAnalysisService materialUrlAnalysisService;
 
@@ -76,6 +82,7 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(result.originalUrl()).isEqualTo(URL);
         assertThat(result.platformType()).isEqualTo("VELOG");
         assertThat(result.status()).isEqualTo("COMPLETED");
+        verify(materialContentExtractorRegistry, never()).extract(any(), anyString());
     }
 
     @Test
@@ -101,6 +108,7 @@ class MaterialUrlAnalysisServiceTest {
         givenValidRequest();
         when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
                 .thenReturn(List.of(completed));
+        givenSuccessfulExtraction();
 
         MaterialAnalyzeResponse result = materialUrlAnalysisService.analyze(
                 USER_ID,
@@ -112,6 +120,8 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(result.originalUrl()).isEqualTo(URL);
         assertThat(result.platformType()).isEqualTo("VELOG");
         assertThat(result.status()).isNull();
+        verify(materialContentExtractorRegistry).extract(PlatformType.VELOG, URL);
+        verify(materialRepository, never()).save(any(Material.class));
     }
 
     @Test
@@ -120,6 +130,7 @@ class MaterialUrlAnalysisServiceTest {
         givenValidRequest();
         when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
                 .thenReturn(List.of(failed));
+        givenSuccessfulExtraction();
 
         MaterialAnalyzeResponse result = materialUrlAnalysisService.analyze(
                 USER_ID,
@@ -128,6 +139,7 @@ class MaterialUrlAnalysisServiceTest {
 
         assertThat(result.resultType()).isEqualTo(MaterialAnalyzeResultType.ANALYSIS_REQUIRED);
         assertThat(result.existingMaterialId()).isNull();
+        verify(materialContentExtractorRegistry).extract(PlatformType.VELOG, URL);
     }
 
     @Test
@@ -135,6 +147,7 @@ class MaterialUrlAnalysisServiceTest {
         givenValidRequest();
         when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
                 .thenReturn(List.of());
+        givenSuccessfulExtraction();
 
         MaterialAnalyzeResponse result = materialUrlAnalysisService.analyze(
                 USER_ID,
@@ -146,6 +159,7 @@ class MaterialUrlAnalysisServiceTest {
         verify(materialUrlValidator).isValidHttpUrl(URL);
         verify(materialPlatformResolver).resolve(null, URL);
         verify(materialRepository).findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL);
+        verify(materialContentExtractorRegistry).extract(PlatformType.VELOG, URL);
     }
 
     @Test
@@ -153,6 +167,7 @@ class MaterialUrlAnalysisServiceTest {
         givenValidRequest();
         when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
                 .thenReturn(List.of());
+        givenSuccessfulExtraction();
 
         materialUrlAnalysisService.analyze(USER_ID, new MaterialAnalyzeRequest(URL, FOLDER_ID, false));
 
@@ -173,6 +188,7 @@ class MaterialUrlAnalysisServiceTest {
                 .extracting("errorCode")
                 .isEqualTo(FolderErrorCode.FOLDER_NOT_FOUND);
         verify(materialRepository, never()).findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(any(), anyString());
+        verify(materialContentExtractorRegistry, never()).extract(any(), anyString());
     }
 
     @Test
@@ -241,6 +257,7 @@ class MaterialUrlAnalysisServiceTest {
         verify(folderService, never()).getOwnedFolder(any(), any());
         verify(materialPlatformResolver, never()).resolve(any(), anyString());
         verify(materialRepository, never()).findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(any(), anyString());
+        verify(materialContentExtractorRegistry, never()).extract(any(), anyString());
     }
 
     @Test
@@ -248,6 +265,7 @@ class MaterialUrlAnalysisServiceTest {
         givenValidRequest();
         when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
                 .thenReturn(List.of());
+        givenSuccessfulExtraction();
 
         materialUrlAnalysisService.analyze(USER_ID, new MaterialAnalyzeRequest(URL, FOLDER_ID, false));
 
@@ -259,10 +277,63 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(userIdCaptor.getValue()).isEqualTo(USER_ID);
     }
 
+    @Test
+    void prepareAnalysisReturnsExtractedContentForNextAnalysisBundle() {
+        ExtractedMaterialContent extractedContent = extractedContent();
+        when(materialContentExtractorRegistry.extract(PlatformType.VELOG, URL)).thenReturn(extractedContent);
+
+        MaterialAnalysisPreparationResult result = materialUrlAnalysisService.prepareAnalysis(
+                USER_ID,
+                FOLDER_ID,
+                URL,
+                PlatformType.VELOG
+        );
+
+        assertThat(result.userId()).isEqualTo(USER_ID);
+        assertThat(result.folderId()).isEqualTo(FOLDER_ID);
+        assertThat(result.originalUrl()).isEqualTo(URL);
+        assertThat(result.platformType()).isEqualTo(PlatformType.VELOG);
+        assertThat(result.extractedContent()).isEqualTo(extractedContent);
+    }
+
+    @Test
+    void propagatesExtractionFailureOnAnalysisRequiredPath() {
+        givenValidRequest();
+        when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
+                .thenReturn(List.of());
+        when(materialContentExtractorRegistry.extract(PlatformType.VELOG, URL))
+                .thenThrow(new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED));
+
+        assertThatThrownBy(() -> materialUrlAnalysisService.analyze(
+                USER_ID,
+                new MaterialAnalyzeRequest(URL, FOLDER_ID, false)
+        ))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
+        verify(materialRepository, never()).save(any(Material.class));
+    }
+
     private void givenValidRequest() {
         when(materialUrlValidator.isValidHttpUrl(URL)).thenReturn(true);
         when(folderService.getOwnedFolder(USER_ID, FOLDER_ID)).thenReturn(folder(USER_ID, FOLDER_ID));
         when(materialPlatformResolver.resolve(null, URL)).thenReturn(PlatformType.VELOG);
+    }
+
+    private void givenSuccessfulExtraction() {
+        when(materialContentExtractorRegistry.extract(PlatformType.VELOG, URL)).thenReturn(extractedContent());
+    }
+
+    private ExtractedMaterialContent extractedContent() {
+        return new ExtractedMaterialContent(
+                URL,
+                PlatformType.VELOG,
+                "Title",
+                "Extracted content for next analysis bundle",
+                "https://example.com/thumb.jpg",
+                "author",
+                createdAt(1)
+        );
     }
 
     private Material material(

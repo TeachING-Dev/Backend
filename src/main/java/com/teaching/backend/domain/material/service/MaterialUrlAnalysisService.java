@@ -3,6 +3,8 @@ package com.teaching.backend.domain.material.service;
 import com.teaching.backend.domain.folder.exception.FolderErrorCode;
 import com.teaching.backend.domain.folder.exception.FolderException;
 import com.teaching.backend.domain.folder.service.FolderService;
+import com.teaching.backend.domain.material.dto.extract.ExtractedMaterialContent;
+import com.teaching.backend.domain.material.dto.extract.MaterialAnalysisPreparationResult;
 import com.teaching.backend.domain.material.dto.request.MaterialAnalyzeRequest;
 import com.teaching.backend.domain.material.dto.response.MaterialAnalyzeResponse;
 import com.teaching.backend.domain.material.entity.Material;
@@ -11,6 +13,7 @@ import com.teaching.backend.domain.material.enums.PlatformType;
 import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.exception.MaterialException;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
+import com.teaching.backend.domain.material.service.extract.MaterialContentExtractorRegistry;
 import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +33,7 @@ public class MaterialUrlAnalysisService {
     private final MaterialRepository materialRepository;
     private final MaterialUrlValidator materialUrlValidator;
     private final MaterialPlatformResolver materialPlatformResolver;
+    private final MaterialContentExtractorRegistry materialContentExtractorRegistry;
 
     public MaterialAnalyzeResponse analyze(
             Long userId,
@@ -46,7 +50,16 @@ public class MaterialUrlAnalysisService {
             return MaterialAnalyzeResponse.alreadyAnalyzed(completedMaterial.get());
         }
 
-        return prepareAnalysis(originalUrl, platformType);
+        MaterialAnalysisPreparationResult preparationResult = prepareAnalysis(
+                userId,
+                folderId,
+                originalUrl,
+                platformType
+        );
+        return MaterialAnalyzeResponse.analysisRequired(
+                preparationResult.originalUrl(),
+                preparationResult.platformType()
+        );
     }
 
     private String validateAndNormalizeUrl(MaterialAnalyzeRequest request) {
@@ -87,10 +100,19 @@ public class MaterialUrlAnalysisService {
                         .thenComparing(Material::getId));
     }
 
-    private MaterialAnalyzeResponse prepareAnalysis(
+    MaterialAnalysisPreparationResult prepareAnalysis(
+            Long userId,
+            Long folderId,
             String originalUrl,
             PlatformType platformType
     ) {
-        return MaterialAnalyzeResponse.analysisRequired(originalUrl, platformType);
+        ExtractedMaterialContent extractedContent = materialContentExtractorRegistry.extract(platformType, originalUrl);
+        return new MaterialAnalysisPreparationResult(
+                userId,
+                folderId,
+                originalUrl,
+                extractedContent.platformType(),
+                extractedContent
+        );
     }
 }
