@@ -12,6 +12,7 @@ import com.teaching.backend.domain.material.dto.extract.MaterialAnalysisPreparat
 import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.entity.MaterialAnalysis;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
+import com.teaching.backend.domain.material.service.MaterialIndexingService;
 import com.teaching.backend.domain.user.entity.User;
 import com.teaching.backend.domain.user.exception.UserErrorCode;
 import com.teaching.backend.domain.user.exception.UserException;
@@ -34,6 +35,7 @@ public class MaterialAiAnalysisOrchestrator {
     private final MaterialRepository materialRepository;
     private final MaterialAiAnalysisStageRegistry materialAiAnalysisStageRegistry;
     private final MaterialAiAnalysisPersistenceService materialAiAnalysisPersistenceService;
+    private final MaterialIndexingService materialIndexingService;
 
     @Transactional
     public MaterialAiAnalysisPipelineResult analyze(MaterialAnalysisPreparationResult preparationResult) {
@@ -74,6 +76,12 @@ public class MaterialAiAnalysisOrchestrator {
             recommendedFolderName = stageResult.recommendedFolderName();
         }
 
+        int chunkCount = materialIndexingService.indexMaterialContent(
+                material,
+                preparationResult.extractedContent().content()
+        );
+        material.markAnalysisCompleted();
+
         return new MaterialAiAnalysisPipelineResult(
                 material.getId(),
                 preparationResult.userId(),
@@ -81,6 +89,7 @@ public class MaterialAiAnalysisOrchestrator {
                 preparationResult.platformType(),
                 preparationResult.extractedContent(),
                 savedAnalysis == null ? null : savedAnalysis.getId(),
+                chunkCount,
                 highlights,
                 recommendedFolderName
         );

@@ -62,4 +62,10 @@ public class MaterialChunk {
                 .position(position)
                 .build();
     }
+
+    public void updateContent(String chunkText, String qdrantPointId, String position) {
+        this.chunkText = chunkText;
+        this.qdrantPointId = qdrantPointId;
+        this.position = position;
+    }
 }

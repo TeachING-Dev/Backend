@@ -18,6 +18,7 @@ import com.teaching.backend.domain.material.enums.PlatformType;
 import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.exception.MaterialException;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
+import com.teaching.backend.domain.material.service.MaterialIndexingService;
 import com.teaching.backend.domain.user.entity.User;
 import com.teaching.backend.domain.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -62,11 +63,14 @@ class MaterialAiAnalysisOrchestratorTest {
     @Mock
     private MaterialAiAnalysisPersistenceService persistenceService;
 
+    @Mock
+    private MaterialIndexingService materialIndexingService;
+
     @InjectMocks
     private MaterialAiAnalysisOrchestrator orchestrator;
 
     @Test
-    void analyzesPreparationResultAndSavesGeneralDbDataWithoutCompletedStatus() {
+    void analyzesPreparationResultIndexesContentAndCompletesMaterial() {
         User user = user();
         Folder folder = folder(user);
         MaterialAiAnalysisResult aiResult = new MaterialAiAnalysisResult("summary", "detail", List.of("tag"), null, null);
@@ -104,17 +108,23 @@ class MaterialAiAnalysisOrchestratorTest {
         when(stageRegistry.stagesInOrder()).thenReturn(List.of(stage));
         when(persistenceService.saveAnalysisResult(any(Material.class), any(MaterialAiAnalysisResult.class)))
                 .thenReturn(analysis);
+        when(materialIndexingService.indexMaterialContent(any(Material.class), any(String.class))).thenReturn(3);
 
         MaterialAiAnalysisPipelineResult result = orchestrator.analyze(preparationResult());
 
         assertThat(result.materialId()).isEqualTo(100L);
         assertThat(result.materialAnalysisId()).isEqualTo(200L);
+        assertThat(result.chunkCount()).isEqualTo(3);
         assertThat(result.extractedContent().content()).isEqualTo("source content for chunk later");
         assertThat(result.highlights()).containsExactly(highlight);
         assertThat(result.recommendedFolderName()).isEqualTo("Folder");
         ArgumentCaptor<Material> materialCaptor = ArgumentCaptor.forClass(Material.class);
         verify(materialRepository).save(materialCaptor.capture());
-        assertThat(materialCaptor.getValue().getAiStatus()).isEqualTo(AiStatus.ANALYZING);
+        verify(materialIndexingService).indexMaterialContent(
+                materialCaptor.getValue(),
+                "source content for chunk later"
+        );
+        assertThat(materialCaptor.getValue().getAiStatus()).isEqualTo(AiStatus.COMPLETED);
     }
 
     @Test
@@ -142,6 +152,41 @@ class MaterialAiAnalysisOrchestratorTest {
                 .extracting("errorCode")
                 .isEqualTo(MaterialErrorCode.AI_ANALYSIS_GENERATION_FAILED);
         verify(persistenceService, never()).saveAnalysisResult(any(), any());
+        verify(materialIndexingService, never()).indexMaterialContent(any(), any());
+    }
+
+    @Test
+    void indexingFailureIsPropagatedBeforeCompletedStatus() {
+        User user = user();
+        Folder folder = folder(user);
+        MaterialAiAnalysisResult aiResult = new MaterialAiAnalysisResult("summary", "detail", List.of("tag"), null, null);
+        Material savedMaterial = Material.create(user, folder, "Title", "https://example.com", PlatformType.BLOG);
+        ReflectionTestUtils.setField(savedMaterial, "id", 100L);
+        MaterialAnalysis analysis = MaterialAnalysis.create(savedMaterial, "summary", "detail", "v1");
+        MaterialAiAnalysisStage stage = new MaterialAiAnalysisStage() {
+            @Override
+            public MaterialAiStageType type() {
+                return MaterialAiStageType.CONTENT_ANALYSIS;
+            }
+
+            @Override
+            public MaterialAiStageResult execute(MaterialAiStageContext context) {
+                return new MaterialAiStageResult(MaterialAiStageType.CONTENT_ANALYSIS, aiResult);
+            }
+        };
+        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+        when(folderService.getOwnedFolder(USER_ID, FOLDER_ID)).thenReturn(folder);
+        when(materialRepository.save(any(Material.class))).thenReturn(savedMaterial);
+        when(stageRegistry.stagesInOrder()).thenReturn(List.of(stage));
+        when(persistenceService.saveAnalysisResult(savedMaterial, aiResult)).thenReturn(analysis);
+        when(materialIndexingService.indexMaterialContent(savedMaterial, "source content for chunk later"))
+                .thenThrow(new MaterialException(MaterialErrorCode.MATERIAL_INDEXING_FAILED));
+
+        assertThatThrownBy(() -> orchestrator.analyze(preparationResult()))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_INDEXING_FAILED);
+        assertThat(savedMaterial.getAiStatus()).isEqualTo(AiStatus.ANALYZING);
     }
 
     @Test

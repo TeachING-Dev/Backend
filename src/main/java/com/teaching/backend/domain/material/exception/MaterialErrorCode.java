@@ -9,6 +9,10 @@ import org.springframework.http.HttpStatus;
 @AllArgsConstructor
 public enum MaterialErrorCode implements BaseErrorCode {
 
+    MATERIAL_INDEXING_TEXT_EMPTY(HttpStatus.BAD_REQUEST, "MATERIAL4009", "색인할 자료 본문이 비어 있습니다."),
+    MATERIAL_INDEXING_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "MATERIAL5003", "자료 색인에 실패했습니다."),
+    MATERIAL_EMBEDDING_FAILED(HttpStatus.BAD_GATEWAY, "MATERIAL5023", "자료 임베딩 생성에 실패했습니다."),
+    MATERIAL_VECTOR_STORE_FAILED(HttpStatus.BAD_GATEWAY, "MATERIAL5024", "자료 벡터 저장에 실패했습니다."),
     INVALID_MATERIAL_ID(HttpStatus.BAD_REQUEST, "MATERIAL4001", "올바르지 않은 자료 ID입니다."),
     MATERIAL_IDS_REQUIRED(HttpStatus.BAD_REQUEST, "MATERIAL4002", "자료 ID 목록을 입력해주세요."),
     TARGET_FOLDER_ID_REQUIRED(HttpStatus.BAD_REQUEST, "MATERIAL4003", "이동할 대상 폴더 ID를 입력해주세요."),

@@ -12,6 +12,7 @@ public record MaterialAiAnalysisPipelineResult(
         PlatformType platformType,
         ExtractedMaterialContent extractedContent,
         Long materialAnalysisId,
+        int chunkCount,
         List<MaterialAiHighlightResult> highlights,
         String recommendedFolderName
 ) {
@@ -34,6 +35,7 @@ public record MaterialAiAnalysisPipelineResult(
                 platformType,
                 extractedContent,
                 materialAnalysisId,
+                0,
                 List.of(),
                 null
         );
