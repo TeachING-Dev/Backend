@@ -71,6 +71,10 @@ public class TeachingMap extends BaseSoftDeleteEntity {
         if (totalSteps == null || totalSteps <= 0) {
                        throw new IllegalArgumentException("totalSteps는 1 이상이어야 합니다.");
                    }
+
+    if (type == TeachingMapType.ALL) {
+        throw new IllegalArgumentException("ALL은 티칭맵 생성 시 사용할 수 없습니다.");
+    }
         return TeachingMap.builder()
                 .folder(folder)
                 .user(user)

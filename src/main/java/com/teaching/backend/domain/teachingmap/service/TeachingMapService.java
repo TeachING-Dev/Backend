@@ -7,13 +7,17 @@ import com.teaching.backend.domain.folder.repository.FolderRepository;
 import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.entity.MaterialAnalysis;
 import com.teaching.backend.domain.material.enums.AiStatus;
+import com.teaching.backend.domain.material.enums.PlatformType;
 import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
 import com.teaching.backend.domain.teachingmap.dto.request.TeachingMapCreateRequest;
+import com.teaching.backend.domain.teachingmap.dto.response.SourcePlatform;
 import com.teaching.backend.domain.teachingmap.dto.response.TeachingMapCreateResponse;
+import com.teaching.backend.domain.teachingmap.dto.response.TeachingMapListItem;
 import com.teaching.backend.domain.teachingmap.dto.response.TeachingMapListResponse;
 import com.teaching.backend.domain.teachingmap.entity.TeachingMap;
 import com.teaching.backend.domain.teachingmap.entity.TeachingMapStep;
+import com.teaching.backend.domain.teachingmap.enums.TeachingMapListSort;
 import com.teaching.backend.domain.teachingmap.enums.TeachingMapStatus;
 import com.teaching.backend.domain.teachingmap.enums.TeachingMapType;
 import com.teaching.backend.domain.teachingmap.exception.TeachingMapErrorCode;
@@ -28,6 +32,7 @@ import com.teaching.backend.global.ai.openai.OpenAiClient;
 import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -54,77 +59,48 @@ public class TeachingMapService {
     private final TeachingMapPromptGenerator promptGenerator;
     private final TeachingMapAiResultParser resultParser;
     private final MaterialAnalysisRepository materialAnalysisRepository;
+    @Value("${app.icon-base-url}")
+    private String iconBaseUrl;
 
+//티칭맵 전체목록 조회
 
-    public List<TeachingMapListResponse> getTeachingMaps(
-            Long userId,
-            TeachingMapStatus status,
-            Integer size
-    ) {
-        validateUserId(userId);
-        validateSize(size);
+    @Transactional(readOnly = true)
+    public TeachingMapListResponse getTeachingMaps(Long userId, TeachingMapStatus status,
+                                                   TeachingMapType type, TeachingMapListSort sort) {
 
-        return findTeachingMaps(userId, status, size)
-                .stream()
-                .map(TeachingMapListResponse::from)
+        boolean isDraft = (status == TeachingMapStatus.TEMPORARY);
+        TeachingMapStatus entityStatus = isDraft ? null : TeachingMapStatus.valueOf(status.name());
+        TeachingMapType entityType = (type == TeachingMapType.ALL) ? null : TeachingMapType.valueOf(type.name());
+
+        Sort sortOption = (sort == TeachingMapListSort.OLDEST)
+                ? Sort.by(Sort.Direction.ASC, "createdAt")
+                : Sort.by(Sort.Direction.DESC, "createdAt");
+
+        List<TeachingMap> teachingMaps = teachingMapRepository.findAllByFilter(userId, isDraft, entityStatus, entityType, sortOption);
+
+        List<TeachingMapListItem> items = teachingMaps.stream()
+                .map(tm -> toListItem(tm, isDraft))
                 .toList();
+
+        return new TeachingMapListResponse(status.name(), type.name(), sort.name(), items);
     }
 
-    private List<TeachingMap> findTeachingMaps(
-            Long userId,
-            TeachingMapStatus status,
-            Integer size
-    ) {
-        Sort recentSort = recentSort();
+    private TeachingMapListItem toListItem(TeachingMap tm, boolean isDraft) {
+        List<PlatformType> platformTypes = stepRepository.findDistinctPlatformTypesByTeachingMapId(tm.getId());
 
-        if (size == null) {
-            if (status == null) {
-                return teachingMapRepository.findAllByUser_IdAndIsDraftFalseAndDeletedAtIsNull(
-                        userId,
-                        recentSort
-                );
-            }
+        List<SourcePlatform> sourcePlatforms = platformTypes.stream()
+                .limit(3)
+                .map(p -> new SourcePlatform(p.name(), buildIconUrl(p.getIconPath())))
+                .toList();
+        int extraCount = Math.max(0, platformTypes.size() - 3);
 
-            return teachingMapRepository.findAllByUser_IdAndStatusAndIsDraftFalseAndDeletedAtIsNull(
-                    userId,
-                    status,
-                    recentSort
-            );
-        }
-
-        PageRequest pageRequest = PageRequest.of(0, size, recentSort);
-        if (status == null) {
-            return teachingMapRepository.findAllByUser_IdAndIsDraftFalseAndDeletedAtIsNull(
-                    userId,
-                    pageRequest
-            ).getContent();
-        }
-
-        return teachingMapRepository.findAllByUser_IdAndStatusAndIsDraftFalseAndDeletedAtIsNull(
-                userId,
-                status,
-                pageRequest
-        ).getContent();
+        return TeachingMapListItem.from(tm, isDraft, sourcePlatforms, extraCount);
     }
 
-    private void validateUserId(Long userId) {
-        if (userId == null) {
-            throw new GeneralException(GlobalErrorCode.UNAUTHORIZED);
-        }
+    private String buildIconUrl(String iconPath) {
+        return iconBaseUrl + "/" + iconPath;
     }
 
-    private void validateSize(Integer size) {
-        if (size != null && size <= 0) {
-            throw new GeneralException(GlobalErrorCode.BAD_REQUEST);
-        }
-    }
-
-    private Sort recentSort() {
-        return Sort.by(
-                Sort.Order.desc("createdAt"),
-                Sort.Order.desc("id")
-        );
-    }
 
     // 티칭맵 생성
     @Transactional

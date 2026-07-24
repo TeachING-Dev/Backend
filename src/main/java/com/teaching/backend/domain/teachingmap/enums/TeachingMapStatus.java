@@ -6,7 +6,8 @@ import lombok.Getter;
 public enum TeachingMapStatus {
 
     IN_PROGRESS("진행중"),
-    FINISHED("완료");
+    FINISHED("완료"),
+    TEMPORARY("임시저장");
 
     private final String description;
 
