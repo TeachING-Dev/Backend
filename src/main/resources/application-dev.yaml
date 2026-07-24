@@ -58,6 +58,9 @@ app:
 cookie:
   secure: false
 
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:https://frontend-seven-ivory-16.vercel.app,http://localhost:5173}
+
 support:
   kakao-channel-url: ${SUPPORT_KAKAO_CHANNEL_URL:https://pf.kakao.com/_teaching}
   email: ${SUPPORT_EMAIL:support@teaching.com}
