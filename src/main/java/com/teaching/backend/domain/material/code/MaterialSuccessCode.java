@@ -19,7 +19,8 @@ public enum MaterialSuccessCode implements BaseSuccessCode {
     MATERIAL_ANALYSIS_SUCCESS(HttpStatus.OK, "ANALYSIS2100", "AI 분석 조회에 성공했습니다."),
     MATERIAL_ANALYSIS_SUMMARY_UPDATE_SUCCESS(HttpStatus.OK, "ANALYSIS2101", "AI 요약이 수정되었습니다."),
     MATERIAL_TAG_LIST_SUCCESS(HttpStatus.OK, "TAG2100", "태그 조회에 성공했습니다."),
-    MATERIAL_ANALYSIS_GENERATE_SUCCESS(HttpStatus.CREATED, "ANALYSIS2102", "AI 자료 분석 생성에 성공했습니다.");
+    MATERIAL_ANALYSIS_GENERATE_SUCCESS(HttpStatus.CREATED, "ANALYSIS2102", "AI 자료 분석 생성에 성공했습니다."),
+    MATERIAL_URL_ANALYSIS_READY(HttpStatus.OK, "ANALYSIS2103", "URL 분석 요청 검증에 성공했습니다.");
 
     private final HttpStatus status;
     private final String code;

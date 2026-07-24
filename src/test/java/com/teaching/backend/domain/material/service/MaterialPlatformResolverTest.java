@@ -29,8 +29,34 @@ class MaterialPlatformResolverTest {
 
     @Test
     void resolvesNotionUrl() {
+        assertThat(resolver.resolve(null, "https://notion.so/page"))
+                .isEqualTo(PlatformType.NOTION);
         assertThat(resolver.resolve(null, "https://www.notion.so/page"))
                 .isEqualTo(PlatformType.NOTION);
+    }
+
+    @Test
+    void resolvesVelogUrl() {
+        assertThat(resolver.resolve(null, "https://velog.io/@example/spring"))
+                .isEqualTo(PlatformType.VELOG);
+        assertThat(resolver.resolve(null, "https://team.velog.io/post"))
+                .isEqualTo(PlatformType.VELOG);
+    }
+
+    @Test
+    void resolvesRepresentativeBlogUrl() {
+        assertThat(resolver.resolve(null, "https://blog.naver.com/example/1"))
+                .isEqualTo(PlatformType.BLOG);
+        assertThat(resolver.resolve(null, "https://example.tistory.com/post"))
+                .isEqualTo(PlatformType.BLOG);
+    }
+
+    @Test
+    void resolvesRepresentativeCafeUrl() {
+        assertThat(resolver.resolve(null, "https://cafe.naver.com/example/1"))
+                .isEqualTo(PlatformType.CAFE);
+        assertThat(resolver.resolve(null, "https://cafe.daum.net/example/1"))
+                .isEqualTo(PlatformType.CAFE);
     }
 
     @Test
@@ -60,6 +86,10 @@ class MaterialPlatformResolverTest {
         assertThat(resolver.resolve(null, "https://youtube.com.evil.com/page"))
                 .isEqualTo(PlatformType.WEB);
         assertThat(resolver.resolve(null, "https://notion.so.evil.com/page"))
+                .isEqualTo(PlatformType.WEB);
+        assertThat(resolver.resolve(null, "https://velog.io.evil.com/page"))
+                .isEqualTo(PlatformType.WEB);
+        assertThat(resolver.resolve(null, "https://cafe.naver.com.evil.com/page"))
                 .isEqualTo(PlatformType.WEB);
     }
 
