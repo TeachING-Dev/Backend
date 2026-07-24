@@ -22,6 +22,7 @@ import com.teaching.backend.domain.teachingmap.enums.TeachingMapStatus;
 import com.teaching.backend.domain.teachingmap.enums.TeachingMapType;
 import com.teaching.backend.domain.teachingmap.exception.TeachingMapErrorCode;
 import com.teaching.backend.domain.teachingmap.exception.TeachingMapException;
+import com.teaching.backend.domain.teachingmap.repository.TeachingMapPlatformProjection;
 import com.teaching.backend.domain.teachingmap.repository.TeachingMapRepository;
 import com.teaching.backend.domain.teachingmap.repository.TeachingMapStepRepository;
 import com.teaching.backend.domain.user.entity.User;
@@ -78,16 +79,22 @@ public class TeachingMapService {
 
         List<TeachingMap> teachingMaps = teachingMapRepository.findAllByFilter(userId, isDraft, entityStatus, entityType, sortOption);
 
+        List<Long> teachingMapIds = teachingMaps.stream().map(TeachingMap::getId).toList();
+        Map<Long, List<PlatformType>> platformTypesByTeachingMapId = stepRepository
+                .findDistinctPlatformTypesByTeachingMapIdIn(teachingMapIds).stream()
+                .collect(Collectors.groupingBy(
+                        TeachingMapPlatformProjection::getTeachingMapId,
+                        Collectors.mapping(TeachingMapPlatformProjection::getPlatformType, Collectors.toList())
+                ));
+
         List<TeachingMapListItem> items = teachingMaps.stream()
-                .map(tm -> toListItem(tm, isDraft))
+                .map(tm -> toListItem(tm, isDraft, platformTypesByTeachingMapId.getOrDefault(tm.getId(), List.of())))
                 .toList();
 
         return new TeachingMapListResponse(status.name(), type.name(), sort.name(), items);
     }
 
-    private TeachingMapListItem toListItem(TeachingMap tm, boolean isDraft) {
-        List<PlatformType> platformTypes = stepRepository.findDistinctPlatformTypesByTeachingMapId(tm.getId());
-
+    private TeachingMapListItem toListItem(TeachingMap tm, boolean isDraft,  List<PlatformType> platformTypes) {
         List<SourcePlatform> sourcePlatforms = platformTypes.stream()
                 .limit(3)
                 .map(p -> new SourcePlatform(p.name(), buildIconUrl(p.getIconPath())))

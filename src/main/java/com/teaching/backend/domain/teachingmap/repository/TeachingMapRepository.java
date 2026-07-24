@@ -40,6 +40,7 @@ public interface TeachingMapRepository extends JpaRepository<TeachingMap, Long> 
         SELECT tm FROM TeachingMap tm
         WHERE tm.user.id = :userId
         AND tm.isDraft = :isDraft
+        AND tm.deletedAt IS NULL
         AND (:status IS NULL OR tm.status = :status)
         AND (:type IS NULL OR tm.type = :type)
     """)

@@ -18,6 +18,15 @@ import java.util.List;
         WHERE s.teachingMap.id = :teachingMapId
     """)
         List<PlatformType> findDistinctPlatformTypesByTeachingMapId(@Param("teachingMapId") Long teachingMapId);
+
+        @Query("""
+        SELECT DISTINCT s.teachingMap.id AS teachingMapId, s.material.platformType AS platformType
+        FROM TeachingMapStep s
+        WHERE s.teachingMap.id IN :teachingMapIds
+    """)
+        List<TeachingMapPlatformProjection> findDistinctPlatformTypesByTeachingMapIdIn(
+                @Param("teachingMapIds") List<Long> teachingMapIds
+        );
     }
 
 
