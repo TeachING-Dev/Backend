@@ -5,6 +5,7 @@ import lombok.Getter;
 @Getter
 public enum TeachingMapType {
 
+    ALL("전체"),
     SHORTCUT("숏컷"),
     DEEPDIVE("딥다이브");
 

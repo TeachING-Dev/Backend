@@ -36,6 +36,18 @@ public interface FolderRepository extends JpaRepository<Folder, Long> {
             Long userId
     );
 
+    @Query(
+            value = "SELECT * FROM folders WHERE user_id = :userId AND deleted_at IS NOT NULL ORDER BY deleted_at DESC",
+            nativeQuery = true
+    )
+    List<Folder> findTrashedByUserIdOrderByDeletedAtDesc(@Param("userId") Long userId);
+
+    @Query(
+            value = "SELECT * FROM folders WHERE user_id = :userId AND deleted_at IS NOT NULL ORDER BY deleted_at ASC",
+            nativeQuery = true
+    )
+    List<Folder> findTrashedByUserIdOrderByDeletedAtAsc(@Param("userId") Long userId);
+
     @Query("""
             SELECT CASE WHEN COUNT(f) > 0 THEN true ELSE false END
             FROM Folder f

@@ -2,10 +2,14 @@ package com.teaching.backend.domain.teachingmap.repository;
 
 import com.teaching.backend.domain.teachingmap.entity.TeachingMap;
 import com.teaching.backend.domain.teachingmap.enums.TeachingMapStatus;
+import com.teaching.backend.domain.teachingmap.enums.TeachingMapType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
@@ -31,5 +35,61 @@ public interface TeachingMapRepository extends JpaRepository<TeachingMap, Long> 
             Long userId,
             TeachingMapStatus status,
             Pageable pageable
+    );
+
+    @Query("""
+        SELECT tm FROM TeachingMap tm
+        WHERE tm.user.id = :userId
+        AND tm.isDraft = :isDraft
+        AND tm.deletedAt IS NULL
+        AND (:status IS NULL OR tm.status = :status)
+        AND (:type IS NULL OR tm.type = :type)
+    """)
+    List<TeachingMap> findAllByFilter(
+            @Param("userId") Long userId,
+            @Param("isDraft") boolean isDraft,
+            @Param("status") TeachingMapStatus status,
+            @Param("type") TeachingMapType type,
+            Sort sort
+    );
+
+    @Query(
+            value = "SELECT * FROM teaching_maps WHERE user_id = :userId AND deleted_at IS NOT NULL ORDER BY deleted_at DESC",
+            nativeQuery = true
+    )
+    List<TeachingMap> findTrashedByUserIdOrderByDeletedAtDesc(@Param("userId") Long userId);
+
+    @Query(
+            value = "SELECT * FROM teaching_maps WHERE user_id = :userId AND deleted_at IS NOT NULL ORDER BY deleted_at ASC",
+            nativeQuery = true
+    )
+    List<TeachingMap> findTrashedByUserIdOrderByDeletedAtAsc(@Param("userId") Long userId);
+
+    @Query(
+            value = "SELECT COUNT(*) FROM teaching_maps WHERE id = :teachingMapId AND user_id = :userId",
+            nativeQuery = true
+    )
+    long countByIdAndUserIdIncludingDeleted(
+            @Param("teachingMapId") Long teachingMapId,
+            @Param("userId") Long userId
+    );
+
+    @Query(
+            value = "SELECT COUNT(*) FROM teaching_maps WHERE id = :teachingMapId AND user_id = :userId AND deleted_at IS NOT NULL",
+            nativeQuery = true
+    )
+    long countDeletedByIdAndUserId(
+            @Param("teachingMapId") Long teachingMapId,
+            @Param("userId") Long userId
+    );
+
+    @Modifying
+    @Query(
+            value = "UPDATE teaching_maps SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = :teachingMapId AND user_id = :userId AND deleted_at IS NOT NULL",
+            nativeQuery = true
+    )
+    int restoreDeletedTeachingMap(
+            @Param("teachingMapId") Long teachingMapId,
+            @Param("userId") Long userId
     );
 }

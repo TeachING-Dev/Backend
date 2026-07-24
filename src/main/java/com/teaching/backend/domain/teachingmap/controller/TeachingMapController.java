@@ -4,7 +4,9 @@ import com.teaching.backend.domain.teachingmap.code.TeachingMapSuccessCode;
 import com.teaching.backend.domain.teachingmap.dto.request.TeachingMapCreateRequest;
 import com.teaching.backend.domain.teachingmap.dto.response.TeachingMapCreateResponse;
 import com.teaching.backend.domain.teachingmap.dto.response.TeachingMapListResponse;
+import com.teaching.backend.domain.teachingmap.enums.TeachingMapListSort;
 import com.teaching.backend.domain.teachingmap.enums.TeachingMapStatus;
+import com.teaching.backend.domain.teachingmap.enums.TeachingMapType;
 import com.teaching.backend.domain.teachingmap.service.TeachingMapService;
 import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
@@ -30,31 +32,29 @@ public class TeachingMapController {
     private final TeachingMapService teachingMapService;
 
     @Operation(
-            summary = "학습중인 티칭맵 전체 목록 조회",
-            description = "학습중인 티칭맵 전체 목록을 조회합니다."
+            summary = "티칭맵 전체 목록 조회",
+            description = "티칭맵 전체 목록을 조회합니다."
     )
     @GetMapping
-    public ResponseEntity<ApiResponse<List<TeachingMapListResponse>>> getTeachingMaps(
+    public ApiResponse<TeachingMapListResponse> getTeachingMaps(
             @AuthenticationPrincipal AuthMember authMember,
-            @RequestParam(required = false) TeachingMapStatus status,
-            @RequestParam(required = false) Integer size
+            @RequestParam(defaultValue = "IN_PROGRESS") TeachingMapStatus status,
+            @RequestParam(defaultValue = "ALL") TeachingMapType type,
+            @RequestParam(defaultValue = "LATEST") TeachingMapListSort sort
     ) {
-        List<TeachingMapListResponse> result = teachingMapService.getTeachingMaps(
+        TeachingMapListResponse result = teachingMapService.getTeachingMaps(
                 getAuthenticatedUserId(authMember),
                 status,
-                size
+                type,
+                sort
         );
-
-        return ResponseEntity.ok(
-                ApiResponse.onSuccess(TeachingMapSuccessCode.TEACHING_MAP_LIST_SUCCESS, result)
-        );
+        return ApiResponse.onSuccess(TeachingMapSuccessCode.TEACHING_MAP_LIST_SUCCESS, result);
     }
 
     private Long getAuthenticatedUserId(AuthMember authMember) {
         if (authMember == null) {
             throw new GeneralException(GlobalErrorCode.UNAUTHORIZED);
         }
-
         return authMember.getUserId();
     }
 
@@ -68,8 +68,9 @@ public class TeachingMapController {
             @AuthenticationPrincipal AuthMember authMember,
             @Valid @RequestBody TeachingMapCreateRequest request
     ) {
+        Long userId = getAuthenticatedUserId(authMember);
         TeachingMapCreateResponse response =
-                teachingMapService.createTeachingMap(getAuthenticatedUserId(authMember), request);
+                teachingMapService.createTeachingMap(userId, request);
         return ApiResponse.onSuccess(TeachingMapSuccessCode.TEACHING_MAP_CREATE_SUCCESS, response);
     }
 
