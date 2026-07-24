@@ -1,12 +1,17 @@
 package com.teaching.backend.domain.material.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.teaching.backend.domain.material.dto.ai.MaterialAiHighlightResult;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisResult;
+import com.teaching.backend.domain.material.dto.ai.MaterialUrlAnalysisParseResult;
+import com.teaching.backend.domain.material.enums.MaterialAiHighlightType;
 import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.exception.MaterialException;
 import org.springframework.stereotype.Component;
 
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -19,25 +24,20 @@ public class MaterialAiAnalysisResponseParser {
 
     private static final Pattern CODE_FENCE_PATTERN =
             Pattern.compile("```(?:json)?\\s*([\\s\\S]*?)\\s*```");
+    private static final Pattern MARKDOWN_BULLET_PATTERN =
+            Pattern.compile("(?m)^\\s*\\*\\s+");
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public MaterialAiAnalysisResult parse(String rawContent) {
-        String jsonText = stripCodeFence(rawContent);
-
-        MaterialAiAnalysisResult result;
-        try {
-            result = objectMapper.readValue(jsonText, MaterialAiAnalysisResult.class);
-        } catch (Exception e) {
-            throw new MaterialException(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED);
-        }
+        MaterialAiAnalysisResult result = readResult(rawContent);
 
         if (result.shortSummary() == null || result.shortSummary().isBlank()
                 || result.longAnalysis() == null || result.longAnalysis().isBlank()) {
             throw new MaterialException(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED);
         }
 
-        List<String> tags = result.tags() == null ? List.of() : result.tags();
+        List<String> tags = normalizeTags(result.tags());
 
         return new MaterialAiAnalysisResult(
                 result.shortSummary().trim(),
@@ -46,6 +46,126 @@ public class MaterialAiAnalysisResponseParser {
                 result.highlights(),
                 result.recommendedFolder()
         );
+    }
+
+    public MaterialUrlAnalysisParseResult parseUrlAnalysis(
+            String rawContent,
+            List<String> folderNames
+    ) {
+        MaterialAiAnalysisResult result = readResult(rawContent);
+        String shortSummary = requiredTrimmed(result.shortSummary());
+        String longAnalysis = requiredTrimmed(result.longAnalysis());
+        validateMarkdownAnalysis(longAnalysis);
+
+        List<MaterialAiHighlightResult> highlights = validateHighlights(result.highlights(), longAnalysis);
+        List<String> tags = validateTags(result.tags());
+        String recommendedFolderName = normalizeRecommendedFolder(result.recommendedFolder(), folderNames);
+
+        MaterialAiAnalysisResult normalized = new MaterialAiAnalysisResult(
+                shortSummary,
+                longAnalysis,
+                tags,
+                highlights.stream()
+                        .map(highlight -> new MaterialAiAnalysisResult.Highlight(
+                                highlight.text(),
+                                highlight.type().getLabel()
+                        ))
+                        .toList(),
+                recommendedFolderName
+        );
+
+        return new MaterialUrlAnalysisParseResult(normalized, highlights, recommendedFolderName);
+    }
+
+    private MaterialAiAnalysisResult readResult(String rawContent) {
+        String jsonText = stripCodeFence(rawContent);
+
+        try {
+            return objectMapper.readValue(jsonText, MaterialAiAnalysisResult.class);
+        } catch (Exception e) {
+            throw new MaterialException(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED);
+        }
+    }
+
+    private String requiredTrimmed(String value) {
+        if (value == null || value.isBlank()) {
+            throw new MaterialException(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED);
+        }
+        return value.trim();
+    }
+
+    private void validateMarkdownAnalysis(String longAnalysis) {
+        if (!longAnalysis.contains("##")
+                || !MARKDOWN_BULLET_PATTERN.matcher(longAnalysis).find()
+                || !longAnalysis.contains("**")) {
+            throw new MaterialException(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED);
+        }
+    }
+
+    private List<MaterialAiHighlightResult> validateHighlights(
+            List<MaterialAiAnalysisResult.Highlight> highlights,
+            String longAnalysis
+    ) {
+        if (highlights == null || highlights.size() < 3 || highlights.size() > 5) {
+            throw new MaterialException(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED);
+        }
+
+        Set<String> seenTexts = new LinkedHashSet<>();
+        return highlights.stream()
+                .map(highlight -> {
+                    String text = requiredTrimmed(highlight == null ? null : highlight.text());
+                    if (!seenTexts.add(text) || !longAnalysis.contains(text)) {
+                        throw new MaterialException(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED);
+                    }
+                    MaterialAiHighlightType type = MaterialAiHighlightType.fromLabel(highlight.type());
+                    return new MaterialAiHighlightResult(text, type);
+                })
+                .toList();
+    }
+
+    private List<String> validateTags(List<String> tags) {
+        if (tags == null || tags.size() < 3 || tags.size() > 5) {
+            throw new MaterialException(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED);
+        }
+
+        Set<String> seenTags = new LinkedHashSet<>();
+        for (String tag : tags) {
+            String normalized = requiredTrimmed(tag);
+            if (normalized.length() > 10 || !seenTags.add(normalized)) {
+                throw new MaterialException(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED);
+            }
+        }
+        return List.copyOf(seenTags);
+    }
+
+    private String normalizeRecommendedFolder(String recommendedFolder, List<String> folderNames) {
+        if (recommendedFolder == null || recommendedFolder.isBlank()) {
+            return null;
+        }
+
+        Set<String> availableFolderNames = new LinkedHashSet<>();
+        if (folderNames != null) {
+            folderNames.stream()
+                    .map(name -> name == null ? "" : name.trim())
+                    .filter(name -> !name.isBlank())
+                    .forEach(availableFolderNames::add);
+        }
+
+        String normalized = recommendedFolder.trim();
+        return availableFolderNames.contains(normalized) ? normalized : null;
+    }
+
+    private List<String> normalizeTags(List<String> tags) {
+        if (tags == null || tags.isEmpty()) {
+            return List.of();
+        }
+
+        return new LinkedHashSet<>(tags.stream()
+                .map(tag -> tag == null ? "" : tag.trim())
+                .filter(tag -> !tag.isBlank())
+                .toList())
+                .stream()
+                .toList();
     }
 
     private String stripCodeFence(String rawContent) {
