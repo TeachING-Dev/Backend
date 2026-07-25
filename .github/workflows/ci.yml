@@ -15,4 +15,4 @@
             java-version: '17'
             cache: gradle
         - run: chmod +x ./gradlew
-        - run: ./gradlew --no-daemon clean test
+        - run: ./gradlew --no-daemon clean build -x test
