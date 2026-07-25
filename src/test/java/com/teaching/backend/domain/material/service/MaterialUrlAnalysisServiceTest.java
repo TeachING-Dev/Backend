@@ -10,11 +10,15 @@ import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisPipelineRes
 import com.teaching.backend.domain.material.dto.request.MaterialAnalyzeRequest;
 import com.teaching.backend.domain.material.dto.response.MaterialAnalyzeResponse;
 import com.teaching.backend.domain.material.entity.Material;
+import com.teaching.backend.domain.material.entity.MaterialAnalysis;
+import com.teaching.backend.domain.material.entity.MaterialChunk;
 import com.teaching.backend.domain.material.enums.AiStatus;
 import com.teaching.backend.domain.material.enums.MaterialAnalyzeResultType;
 import com.teaching.backend.domain.material.enums.PlatformType;
 import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.exception.MaterialException;
+import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
+import com.teaching.backend.domain.material.repository.MaterialChunkRepository;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
 import com.teaching.backend.domain.material.service.ai.MaterialAiAnalysisOrchestrator;
 import com.teaching.backend.domain.material.service.extract.MaterialContentExtractorRegistry;
@@ -31,6 +35,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -55,6 +60,12 @@ class MaterialUrlAnalysisServiceTest {
     private MaterialRepository materialRepository;
 
     @Mock
+    private MaterialAnalysisRepository materialAnalysisRepository;
+
+    @Mock
+    private MaterialChunkRepository materialChunkRepository;
+
+    @Mock
     private MaterialUrlValidator materialUrlValidator;
 
     @Mock
@@ -76,6 +87,14 @@ class MaterialUrlAnalysisServiceTest {
         givenValidRequest();
         when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
                 .thenReturn(List.of(newerFailed, olderCompleted));
+        when(materialAnalysisRepository.findByMaterialId(101L))
+                .thenReturn(Optional.of(materialAnalysis(301L, olderCompleted)));
+        when(materialChunkRepository.findAllByMaterial_IdOrderByChunkIndexAsc(101L))
+                .thenReturn(List.of(
+                        materialChunk(olderCompleted, 0),
+                        materialChunk(olderCompleted, 1),
+                        materialChunk(olderCompleted, 2)
+                ));
 
         MaterialAnalyzeResponse result = materialUrlAnalysisService.analyze(
                 USER_ID,
@@ -88,6 +107,29 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(result.originalUrl()).isEqualTo(URL);
         assertThat(result.platformType()).isEqualTo("VELOG");
         assertThat(result.status()).isEqualTo("COMPLETED");
+        assertThat(result.materialAnalysisId()).isEqualTo(301L);
+        assertThat(result.chunkCount()).isEqualTo(3);
+        verify(materialContentExtractorRegistry, never()).extract(any(), anyString());
+        verify(materialAiAnalysisOrchestrator, never()).analyze(any());
+    }
+
+    @Test
+    void alreadyAnalyzedResponseAllowsMissingAnalysisAndChunksForLegacyData() {
+        Material completed = material(101L, "Completed", URL, PlatformType.VELOG, AiStatus.COMPLETED, createdAt(1));
+        givenValidRequest();
+        when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
+                .thenReturn(List.of(completed));
+        when(materialAnalysisRepository.findByMaterialId(101L)).thenReturn(Optional.empty());
+        when(materialChunkRepository.findAllByMaterial_IdOrderByChunkIndexAsc(101L)).thenReturn(List.of());
+
+        MaterialAnalyzeResponse result = materialUrlAnalysisService.analyze(
+                USER_ID,
+                new MaterialAnalyzeRequest(URL, FOLDER_ID, false)
+        );
+
+        assertThat(result.resultType()).isEqualTo(MaterialAnalyzeResultType.ALREADY_ANALYZED);
+        assertThat(result.materialAnalysisId()).isNull();
+        assertThat(result.chunkCount()).isZero();
         verify(materialContentExtractorRegistry, never()).extract(any(), anyString());
         verify(materialAiAnalysisOrchestrator, never()).analyze(any());
     }
@@ -99,6 +141,8 @@ class MaterialUrlAnalysisServiceTest {
         givenValidRequest();
         when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
                 .thenReturn(List.of(olderCompleted, newerCompleted));
+        when(materialAnalysisRepository.findByMaterialId(102L)).thenReturn(Optional.empty());
+        when(materialChunkRepository.findAllByMaterial_IdOrderByChunkIndexAsc(102L)).thenReturn(List.of());
 
         MaterialAnalyzeResponse result = materialUrlAnalysisService.analyze(
                 USER_ID,
@@ -437,6 +481,22 @@ class MaterialUrlAnalysisServiceTest {
         ReflectionTestUtils.setField(material, "aiStatus", aiStatus);
         ReflectionTestUtils.setField(material, "createdAt", createdAt);
         return material;
+    }
+
+    private MaterialAnalysis materialAnalysis(Long analysisId, Material material) {
+        MaterialAnalysis analysis = MaterialAnalysis.create(material, "summary", "detail", "v1");
+        ReflectionTestUtils.setField(analysis, "id", analysisId);
+        return analysis;
+    }
+
+    private MaterialChunk materialChunk(Material material, int chunkIndex) {
+        return MaterialChunk.create(
+                material,
+                chunkIndex,
+                "chunk " + chunkIndex,
+                "point-" + chunkIndex,
+                "chunk-" + chunkIndex
+        );
     }
 
     private Folder folder(Long userId, Long folderId) {

@@ -17,19 +17,23 @@ public record MaterialAnalyzeResponse(
         Integer chunkCount
 ) {
 
-    public static MaterialAnalyzeResponse alreadyAnalyzed(Material material) {
+    public static MaterialAnalyzeResponse alreadyAnalyzed(
+            Material material,
+            Long materialAnalysisId,
+            Integer chunkCount
+    ) {
         PlatformType platformType = material.getPlatformType();
 
         return new MaterialAnalyzeResponse(
                 MaterialAnalyzeResultType.ALREADY_ANALYZED,
                 material.getId(),
                 material.getId(),
-                null,
+                materialAnalysisId,
                 material.getTitle(),
                 material.getOriginalUrl(),
                 platformType == null ? null : platformType.name(),
                 material.getAiStatus() == null ? null : material.getAiStatus().name(),
-                null
+                chunkCount
         );
     }
 

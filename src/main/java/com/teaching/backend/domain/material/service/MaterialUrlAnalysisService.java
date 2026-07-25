@@ -9,10 +9,13 @@ import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisPipelineRes
 import com.teaching.backend.domain.material.dto.request.MaterialAnalyzeRequest;
 import com.teaching.backend.domain.material.dto.response.MaterialAnalyzeResponse;
 import com.teaching.backend.domain.material.entity.Material;
+import com.teaching.backend.domain.material.entity.MaterialAnalysis;
 import com.teaching.backend.domain.material.enums.AiStatus;
 import com.teaching.backend.domain.material.enums.PlatformType;
 import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.exception.MaterialException;
+import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
+import com.teaching.backend.domain.material.repository.MaterialChunkRepository;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
 import com.teaching.backend.domain.material.service.ai.MaterialAiAnalysisOrchestrator;
 import com.teaching.backend.domain.material.service.extract.MaterialContentExtractorRegistry;
@@ -34,6 +37,8 @@ public class MaterialUrlAnalysisService {
 
     private final FolderService folderService;
     private final MaterialRepository materialRepository;
+    private final MaterialAnalysisRepository materialAnalysisRepository;
+    private final MaterialChunkRepository materialChunkRepository;
     private final MaterialUrlValidator materialUrlValidator;
     private final MaterialPlatformResolver materialPlatformResolver;
     private final MaterialContentExtractorRegistry materialContentExtractorRegistry;
@@ -52,7 +57,7 @@ public class MaterialUrlAnalysisService {
 
         Optional<Material> completedMaterial = findLatestCompletedMaterial(userId, originalUrl);
         if (completedMaterial.isPresent() && !request.isForceAnalyze()) {
-            return MaterialAnalyzeResponse.alreadyAnalyzed(completedMaterial.get());
+            return alreadyAnalyzedResponse(completedMaterial.get());
         }
 
         MaterialAnalysisPreparationResult preparationResult = prepareAnalysis(
@@ -100,7 +105,16 @@ public class MaterialUrlAnalysisService {
                 .filter(material -> material.getAiStatus() == AiStatus.COMPLETED)
                 .max(Comparator
                         .comparing(Material::getCreatedAt)
-                        .thenComparing(Material::getId));
+                .thenComparing(Material::getId));
+    }
+
+    private MaterialAnalyzeResponse alreadyAnalyzedResponse(Material material) {
+        Long materialAnalysisId = materialAnalysisRepository.findByMaterialId(material.getId())
+                .map(MaterialAnalysis::getId)
+                .orElse(null);
+        int chunkCount = materialChunkRepository.findAllByMaterial_IdOrderByChunkIndexAsc(material.getId()).size();
+
+        return MaterialAnalyzeResponse.alreadyAnalyzed(material, materialAnalysisId, chunkCount);
     }
 
     MaterialAnalysisPreparationResult prepareAnalysis(
