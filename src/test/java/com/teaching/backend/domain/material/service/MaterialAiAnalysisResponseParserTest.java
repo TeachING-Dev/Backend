@@ -115,6 +115,47 @@ class MaterialAiAnalysisResponseParserTest {
     }
 
     @Test
+    void parsesUrlAnalysisJsonWithHyphenMarkdownBullets() {
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis("""
+                {
+                  "short_summary": "로그인 로직의 핵심을 요약합니다.",
+                  "long_analysis": "## 개요\\n- **로그인 로직**을 정리합니다. 로그인 로직은 인증 성공 이후 사용자 세션을 안전하게 유지하는 흐름입니다. 토큰 검증은 요청마다 수행되어야 합니다. 예외 처리는 인증 실패와 권한 부족을 분리해야 합니다.",
+                  "highlights": [
+                    {"text": "로그인 로직은 인증 성공 이후 사용자 세션을 안전하게 유지하는 흐름입니다.", "type": "핵심"},
+                    {"text": "토큰 검증은 요청마다 수행되어야 합니다.", "type": "주의"},
+                    {"text": "예외 처리는 인증 실패와 권한 부족을 분리해야 합니다.", "type": "핵심"}
+                  ],
+                  "tags": ["로그인", "인증", "토큰"],
+                  "recommended_folder": "Backend"
+                }
+                """, List.of("Backend"));
+
+        assertThat(result.analysisResult().shortSummary()).isEqualTo("로그인 로직의 핵심을 요약합니다.");
+        assertThat(result.highlights()).hasSize(3);
+        assertThat(result.recommendedFolderName()).isEqualTo("Backend");
+    }
+
+    @Test
+    void stringNullRecommendedFolderIsNormalizedToNull() {
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis(
+                validUrlAnalysisJson("null"),
+                List.of("Backend", "null")
+        );
+
+        assertThat(result.recommendedFolderName()).isNull();
+        assertThat(result.analysisResult().recommendedFolder()).isNull();
+    }
+
+    @Test
+    void malformedUrlAnalysisJsonPreservesCause() {
+        assertThatThrownBy(() -> parser.parseUrlAnalysis("{", List.of("Backend")))
+                .isInstanceOf(MaterialException.class)
+                .hasCauseInstanceOf(Exception.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED);
+    }
+
+    @Test
     void unknownRecommendedFolderIsNormalizedToNull() {
         MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis(validUrlAnalysisJson("Unknown"), List.of("Backend"));
 

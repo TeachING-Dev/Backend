@@ -3,6 +3,7 @@ package com.teaching.backend.domain.material.service.extract;
 import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.exception.MaterialException;
 import io.netty.channel.ChannelOption;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatusCode;
@@ -22,9 +23,11 @@ import java.util.List;
 import java.util.Locale;
 
 @Component
+@Slf4j
 public class ExternalHtmlDocumentClient {
 
     private static final int MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+    private static final int ERROR_BODY_LOG_LIMIT = 500;
 
     private final WebClient webClient;
     private final Duration responseTimeout;
@@ -73,28 +76,49 @@ public class ExternalHtmlDocumentClient {
     }
 
     public HtmlDocument fetch(String originalUrl) {
-        validateFetchTarget(originalUrl);
+        URI uri = validateFetchTarget(originalUrl);
+        String host = uri.getHost();
 
         try {
             HtmlDocument document = webClient.get()
-                    .uri(originalUrl)
+                    .uri(uri)
                     .exchangeToMono(response -> {
                         HttpStatusCode statusCode = response.statusCode();
                         if (!statusCode.is2xxSuccessful()) {
-                            return response.releaseBody()
-                                    .then(Mono.error(new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED)));
+                            return response.bodyToMono(String.class)
+                                    .defaultIfEmpty("")
+                                    .flatMap(body -> extractionFailed(
+                                            "fetch",
+                                            host,
+                                            statusCode,
+                                            body,
+                                            null
+                                    ));
                         }
 
                         MediaType contentType = response.headers().contentType().orElse(null);
                         if (!isHtml(contentType)) {
-                            return response.releaseBody()
-                                    .then(Mono.error(new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED)));
+                            return response.bodyToMono(String.class)
+                                    .defaultIfEmpty("")
+                                    .flatMap(body -> extractionFailed(
+                                            "fetch",
+                                            host,
+                                            statusCode,
+                                            body,
+                                            null
+                                    ));
                         }
 
                         long contentLength = response.headers().contentLength().orElse(-1L);
                         if (contentLength > MAX_RESPONSE_BYTES) {
                             return response.releaseBody()
-                                    .then(Mono.error(new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED)));
+                                    .then(extractionFailed(
+                                            "fetch",
+                                            host,
+                                            statusCode,
+                                            "contentLength=" + contentLength,
+                                            null
+                                    ));
                         }
 
                         return response.bodyToMono(String.class)
@@ -116,16 +140,17 @@ public class ExternalHtmlDocumentClient {
         } catch (MaterialException e) {
             throw e;
         } catch (RuntimeException e) {
-            throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
+            logExtractionFailure("fetch", host, null, null, e);
+            throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED, e);
         }
     }
 
-    void validateFetchTarget(String originalUrl) {
+    URI validateFetchTarget(String originalUrl) {
         URI uri;
         try {
             uri = URI.create(originalUrl);
         } catch (IllegalArgumentException e) {
-            throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
+            throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED, e);
         }
 
         String scheme = uri.getScheme();
@@ -141,6 +166,8 @@ public class ExternalHtmlDocumentClient {
         if (blockPrivateNetwork) {
             validateResolvedAddresses(host);
         }
+
+        return uri;
     }
 
     private boolean isHtml(MediaType contentType) {
@@ -176,7 +203,7 @@ public class ExternalHtmlDocumentClient {
         try {
             addresses = hostAddressResolver.resolve(host);
         } catch (UnknownHostException e) {
-            throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
+            throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED, e);
         }
 
         if (addresses.isEmpty() || addresses.stream().anyMatch(this::isBlockedAddress)) {
@@ -215,5 +242,64 @@ public class ExternalHtmlDocumentClient {
                 || (numbers[0] == 172 && numbers[1] >= 16 && numbers[1] <= 31)
                 || (numbers[0] == 192 && numbers[1] == 168)
                 || (numbers[0] == 169 && numbers[1] == 254);
+    }
+
+    private Mono<HtmlDocument> extractionFailed(
+            String operation,
+            String host,
+            HttpStatusCode statusCode,
+            String responseBody,
+            Throwable cause
+    ) {
+        logExtractionFailure(operation, host, statusCode, responseBody, cause);
+        if (cause == null) {
+            return Mono.error(new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED));
+        }
+        return Mono.error(new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED, cause));
+    }
+
+    private void logExtractionFailure(
+            String operation,
+            String host,
+            HttpStatusCode statusCode,
+            String responseBody,
+            Throwable exception
+    ) {
+        Throwable rootCause = rootCause(exception);
+        log.warn(
+                "Material content extraction failed. operation={}, host={}, status={}, bodyPrefix={}, exception={}, message={}, rootCause={}, rootCauseMessage={}",
+                operation,
+                host,
+                statusCode == null ? null : statusCode.value(),
+                truncate(responseBody),
+                exception == null ? null : exception.getClass().getName(),
+                exception == null ? null : exception.getMessage(),
+                rootCause == null ? null : rootCause.getClass().getName(),
+                rootCause == null ? null : rootCause.getMessage()
+        );
+    }
+
+    private Throwable rootCause(Throwable exception) {
+        if (exception == null) {
+            return null;
+        }
+
+        Throwable current = exception;
+        while (current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        return current;
+    }
+
+    private String truncate(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        String normalized = value.replaceAll("[\\r\\n\\t ]+", " ").trim();
+        if (normalized.length() <= ERROR_BODY_LOG_LIMIT) {
+            return normalized;
+        }
+        return normalized.substring(0, ERROR_BODY_LOG_LIMIT) + "...";
     }
 }

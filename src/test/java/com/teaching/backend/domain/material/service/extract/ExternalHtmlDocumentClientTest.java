@@ -6,6 +6,7 @@ import com.teaching.backend.domain.material.exception.MaterialException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -14,6 +15,7 @@ import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -38,6 +40,25 @@ class ExternalHtmlDocumentClientTest {
 
         assertThat(result.body()).contains("content");
         assertThat(result.contentType()).contains("text/html");
+    }
+
+    @Test
+    void fetchPreservesAlreadyEncodedPath() throws IOException {
+        AtomicReference<String> rawPath = new AtomicReference<>();
+        String url = startServer(
+                200,
+                "text/html",
+                "<html><body>encoded path content</body></html>",
+                0,
+                rawPath
+        ) + "%ED%95%9C%EA%B8%80";
+        ExternalHtmlDocumentClient client = testClient(Duration.ofSeconds(2));
+
+        HtmlDocument result = client.fetch(url);
+
+        assertThat(result.body()).contains("encoded path content");
+        assertThat(rawPath.get()).isEqualTo("/%ED%95%9C%EA%B8%80");
+        assertThat(rawPath.get()).doesNotContain("%25");
     }
 
     @Test
@@ -138,6 +159,26 @@ class ExternalHtmlDocumentClientTest {
     }
 
     @Test
+    void preservesRootCauseWhenWebClientFails() throws Exception {
+        IllegalStateException rootCause = new IllegalStateException("boom");
+        WebClient failingWebClient = WebClient.builder()
+                .exchangeFunction(request -> Mono.error(rootCause))
+                .build();
+        ExternalHtmlDocumentClient client = new ExternalHtmlDocumentClient(
+                failingWebClient,
+                Duration.ofSeconds(1),
+                true,
+                host -> List.of(InetAddress.getByName("93.184.216.34"))
+        );
+
+        assertThatThrownBy(() -> client.fetch("http://public-looking.example/article"))
+                .isInstanceOf(MaterialException.class)
+                .hasCause(rootCause)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
+    }
+
+    @Test
     void blocksHostnameResolvedToLoopbackAddress() throws Exception {
         ExternalHtmlDocumentClient client = productionLikeClient(host -> List.of(
                 InetAddress.getByName("127.0.0.1")
@@ -207,9 +248,22 @@ class ExternalHtmlDocumentClientTest {
             String body,
             long delayMillis
     ) throws IOException {
+        return startServer(status, contentType, body, delayMillis, null);
+    }
+
+    private String startServer(
+            int status,
+            String contentType,
+            String body,
+            long delayMillis,
+            AtomicReference<String> rawPath
+    ) throws IOException {
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/", exchange -> {
             try {
+                if (rawPath != null) {
+                    rawPath.set(exchange.getRequestURI().getRawPath());
+                }
                 if (delayMillis > 0) {
                     Thread.sleep(delayMillis);
                 }

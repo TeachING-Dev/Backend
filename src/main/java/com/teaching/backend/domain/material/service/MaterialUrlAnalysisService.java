@@ -5,6 +5,7 @@ import com.teaching.backend.domain.folder.exception.FolderException;
 import com.teaching.backend.domain.folder.service.FolderService;
 import com.teaching.backend.domain.material.dto.extract.ExtractedMaterialContent;
 import com.teaching.backend.domain.material.dto.extract.MaterialAnalysisPreparationResult;
+import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisPipelineResult;
 import com.teaching.backend.domain.material.dto.request.MaterialAnalyzeRequest;
 import com.teaching.backend.domain.material.dto.response.MaterialAnalyzeResponse;
 import com.teaching.backend.domain.material.entity.Material;
@@ -13,11 +14,13 @@ import com.teaching.backend.domain.material.enums.PlatformType;
 import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.exception.MaterialException;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
+import com.teaching.backend.domain.material.service.ai.MaterialAiAnalysisOrchestrator;
 import com.teaching.backend.domain.material.service.extract.MaterialContentExtractorRegistry;
 import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
@@ -34,7 +37,9 @@ public class MaterialUrlAnalysisService {
     private final MaterialUrlValidator materialUrlValidator;
     private final MaterialPlatformResolver materialPlatformResolver;
     private final MaterialContentExtractorRegistry materialContentExtractorRegistry;
+    private final MaterialAiAnalysisOrchestrator materialAiAnalysisOrchestrator;
 
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public MaterialAnalyzeResponse analyze(
             Long userId,
             MaterialAnalyzeRequest request
@@ -56,10 +61,8 @@ public class MaterialUrlAnalysisService {
                 originalUrl,
                 platformType
         );
-        return MaterialAnalyzeResponse.analysisRequired(
-                preparationResult.originalUrl(),
-                preparationResult.platformType()
-        );
+        MaterialAiAnalysisPipelineResult analysisResult = materialAiAnalysisOrchestrator.analyze(preparationResult);
+        return MaterialAnalyzeResponse.completed(analysisResult);
     }
 
     private String validateAndNormalizeUrl(MaterialAnalyzeRequest request) {

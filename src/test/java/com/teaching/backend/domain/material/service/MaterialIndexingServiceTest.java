@@ -27,7 +27,9 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -78,7 +80,9 @@ class MaterialIndexingServiceTest {
 
         assertThat(chunkCount).isEqualTo(1);
         ArgumentCaptor<Map<String, Object>> payloadCaptor = ArgumentCaptor.forClass(Map.class);
-        verify(qdrantClient).upsertPoint(eq("material-100-chunk-0"), any(float[].class), payloadCaptor.capture());
+        String expectedPointId = MaterialIndexingService.qdrantPointIdOf(100L, 0);
+        UUID.fromString(expectedPointId);
+        verify(qdrantClient).upsertPoint(eq(expectedPointId), any(float[].class), payloadCaptor.capture());
         assertThat(payloadCaptor.getValue())
                 .containsEntry("materialChunkId", 300L)
                 .containsEntry("materialId", 100L)
@@ -91,11 +95,28 @@ class MaterialIndexingServiceTest {
     }
 
     @Test
+    void pointIdIsDeterministicUuid() {
+        String first = MaterialIndexingService.qdrantPointIdOf(100L, 0);
+        String second = MaterialIndexingService.qdrantPointIdOf(100L, 0);
+        String differentChunk = MaterialIndexingService.qdrantPointIdOf(100L, 1);
+        String differentMaterial = MaterialIndexingService.qdrantPointIdOf(101L, 0);
+
+        assertThat(first).isEqualTo(second);
+        assertThat(first).isNotEqualTo(differentChunk);
+        assertThat(first).isNotEqualTo(differentMaterial);
+        assertThatCode(() -> UUID.fromString(first)).doesNotThrowAnyException();
+        assertThatCode(() -> UUID.fromString(differentChunk)).doesNotThrowAnyException();
+        assertThatCode(() -> UUID.fromString(differentMaterial)).doesNotThrowAnyException();
+    }
+
+    @Test
     void reindexReusesExistingChunkAndDeletesExcessChunks() {
         Material material = material();
         MaterialTextChunk textChunk = new MaterialTextChunk(0, "new text", "청크 1");
-        MaterialChunk first = chunk(material, 0, "old text", "material-100-chunk-0", 300L);
-        MaterialChunk excess = chunk(material, 1, "old extra", "material-100-chunk-1", 301L);
+        String firstPointId = MaterialIndexingService.qdrantPointIdOf(100L, 0);
+        String excessPointId = MaterialIndexingService.qdrantPointIdOf(100L, 1);
+        MaterialChunk first = chunk(material, 0, "old text", firstPointId, 300L);
+        MaterialChunk excess = chunk(material, 1, "old extra", excessPointId, 301L);
         when(materialTextChunker.chunk("source text")).thenReturn(List.of(textChunk));
         when(materialEmbeddingService.embedChunks(List.of(textChunk)))
                 .thenReturn(List.of(new EmbeddedMaterialTextChunk(textChunk, new float[]{0.1f})));
@@ -104,8 +125,9 @@ class MaterialIndexingServiceTest {
         indexingService.indexMaterialContent(material, "source text");
 
         assertThat(first.getChunkText()).isEqualTo("new text");
+        assertThat(first.getQdrantPointId()).isEqualTo(firstPointId);
         verify(materialChunkRepository, never()).save(any(MaterialChunk.class));
-        verify(qdrantClient).deletePoints(List.of("material-100-chunk-1"));
+        verify(qdrantClient).deletePoints(List.of(excessPointId));
         verify(materialChunkRepository).deleteAll(List.of(excess));
     }
 
@@ -137,12 +159,46 @@ class MaterialIndexingServiceTest {
         });
         org.mockito.Mockito.doThrow(new RuntimeException("qdrant"))
                 .when(qdrantClient)
-                .upsertPoint(eq("material-100-chunk-0"), any(float[].class), any());
+                .upsertPoint(eq(MaterialIndexingService.qdrantPointIdOf(100L, 0)), any(float[].class), any());
 
         assertThatThrownBy(() -> indexingService.indexMaterialContent(material, "source text"))
                 .isInstanceOf(MaterialException.class)
                 .extracting("errorCode")
                 .isEqualTo(MaterialErrorCode.MATERIAL_VECTOR_STORE_FAILED);
+    }
+
+    @Test
+    void newMaterialIndexingFailureCleansUpAlreadyUpsertedPoints() {
+        Material material = material();
+        MaterialTextChunk first = new MaterialTextChunk(0, "first chunk", "chunk 1");
+        MaterialTextChunk second = new MaterialTextChunk(1, "second chunk", "chunk 2");
+        String firstPointId = MaterialIndexingService.qdrantPointIdOf(100L, 0);
+        String secondPointId = MaterialIndexingService.qdrantPointIdOf(100L, 1);
+        when(materialTextChunker.chunk("source text")).thenReturn(List.of(first, second));
+        when(materialEmbeddingService.embedChunks(List.of(first, second)))
+                .thenReturn(List.of(
+                        new EmbeddedMaterialTextChunk(first, new float[]{0.1f}),
+                        new EmbeddedMaterialTextChunk(second, new float[]{0.2f})
+                ));
+        when(materialChunkRepository.findAllByMaterial_IdOrderByChunkIndexAsc(100L)).thenReturn(List.of());
+        when(materialChunkRepository.save(any(MaterialChunk.class))).thenAnswer(invocation -> {
+            MaterialChunk chunk = invocation.getArgument(0);
+            ReflectionTestUtils.setField(chunk, "id", 300L + chunk.getChunkIndex());
+            return chunk;
+        });
+        org.mockito.Mockito.doNothing()
+                .doThrow(new RuntimeException("qdrant"))
+                .when(qdrantClient)
+                .upsertPoint(any(), any(float[].class), any());
+
+        assertThatThrownBy(() -> indexingService.indexMaterialContent(material, "source text"))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_VECTOR_STORE_FAILED);
+        verify(qdrantClient).upsertPoint(eq(firstPointId), any(float[].class), any());
+        ArgumentCaptor<List<String>> deletedPointIds = ArgumentCaptor.forClass(List.class);
+        verify(qdrantClient).deletePoints(deletedPointIds.capture());
+        assertThat(deletedPointIds.getValue()).containsExactly(firstPointId);
     }
 
     @Test

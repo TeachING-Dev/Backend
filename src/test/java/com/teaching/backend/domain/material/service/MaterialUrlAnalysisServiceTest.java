@@ -6,6 +6,7 @@ import com.teaching.backend.domain.folder.exception.FolderException;
 import com.teaching.backend.domain.folder.service.FolderService;
 import com.teaching.backend.domain.material.dto.extract.ExtractedMaterialContent;
 import com.teaching.backend.domain.material.dto.extract.MaterialAnalysisPreparationResult;
+import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisPipelineResult;
 import com.teaching.backend.domain.material.dto.request.MaterialAnalyzeRequest;
 import com.teaching.backend.domain.material.dto.response.MaterialAnalyzeResponse;
 import com.teaching.backend.domain.material.entity.Material;
@@ -15,6 +16,7 @@ import com.teaching.backend.domain.material.enums.PlatformType;
 import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.exception.MaterialException;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
+import com.teaching.backend.domain.material.service.ai.MaterialAiAnalysisOrchestrator;
 import com.teaching.backend.domain.material.service.extract.MaterialContentExtractorRegistry;
 import com.teaching.backend.domain.user.entity.User;
 import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
@@ -36,6 +38,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -60,6 +63,9 @@ class MaterialUrlAnalysisServiceTest {
     @Mock
     private MaterialContentExtractorRegistry materialContentExtractorRegistry;
 
+    @Mock
+    private MaterialAiAnalysisOrchestrator materialAiAnalysisOrchestrator;
+
     @InjectMocks
     private MaterialUrlAnalysisService materialUrlAnalysisService;
 
@@ -83,6 +89,7 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(result.platformType()).isEqualTo("VELOG");
         assertThat(result.status()).isEqualTo("COMPLETED");
         verify(materialContentExtractorRegistry, never()).extract(any(), anyString());
+        verify(materialAiAnalysisOrchestrator, never()).analyze(any());
     }
 
     @Test
@@ -100,6 +107,8 @@ class MaterialUrlAnalysisServiceTest {
 
         assertThat(result.existingMaterialId()).isEqualTo(102L);
         assertThat(result.title()).isEqualTo("Newer");
+        verify(materialContentExtractorRegistry, never()).extract(any(), anyString());
+        verify(materialAiAnalysisOrchestrator, never()).analyze(any());
     }
 
     @Test
@@ -109,37 +118,47 @@ class MaterialUrlAnalysisServiceTest {
         when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
                 .thenReturn(List.of(completed));
         givenSuccessfulExtraction();
+        givenSuccessfulPipeline();
 
         MaterialAnalyzeResponse result = materialUrlAnalysisService.analyze(
                 USER_ID,
                 new MaterialAnalyzeRequest(URL, FOLDER_ID, true)
         );
 
-        assertThat(result.resultType()).isEqualTo(MaterialAnalyzeResultType.ANALYSIS_REQUIRED);
+        assertThat(result.resultType()).isEqualTo(MaterialAnalyzeResultType.ANALYSIS_COMPLETED);
         assertThat(result.existingMaterialId()).isNull();
+        assertThat(result.materialId()).isEqualTo(200L);
+        assertThat(result.materialAnalysisId()).isEqualTo(300L);
         assertThat(result.originalUrl()).isEqualTo(URL);
         assertThat(result.platformType()).isEqualTo("VELOG");
-        assertThat(result.status()).isNull();
+        assertThat(result.status()).isEqualTo("COMPLETED");
+        assertThat(result.chunkCount()).isEqualTo(2);
         verify(materialContentExtractorRegistry).extract(PlatformType.VELOG, URL);
+        verify(materialAiAnalysisOrchestrator).analyze(any(MaterialAnalysisPreparationResult.class));
         verify(materialRepository, never()).save(any(Material.class));
     }
 
     @Test
-    void returnsAnalysisRequiredWhenNoCompletedMaterialExists() {
+    void runsFullPipelineWhenNoCompletedMaterialExists() {
         Material failed = material(101L, "Failed", URL, PlatformType.VELOG, AiStatus.FAILED, createdAt(1));
         givenValidRequest();
         when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
                 .thenReturn(List.of(failed));
         givenSuccessfulExtraction();
+        givenSuccessfulPipeline();
 
         MaterialAnalyzeResponse result = materialUrlAnalysisService.analyze(
                 USER_ID,
                 new MaterialAnalyzeRequest(URL, FOLDER_ID, false)
         );
 
-        assertThat(result.resultType()).isEqualTo(MaterialAnalyzeResultType.ANALYSIS_REQUIRED);
+        assertThat(result.resultType()).isEqualTo(MaterialAnalyzeResultType.ANALYSIS_COMPLETED);
         assertThat(result.existingMaterialId()).isNull();
+        assertThat(result.materialId()).isEqualTo(200L);
+        assertThat(result.materialAnalysisId()).isEqualTo(300L);
+        assertThat(result.status()).isEqualTo("COMPLETED");
         verify(materialContentExtractorRegistry).extract(PlatformType.VELOG, URL);
+        verify(materialAiAnalysisOrchestrator).analyze(any(MaterialAnalysisPreparationResult.class));
     }
 
     @Test
@@ -148,13 +167,14 @@ class MaterialUrlAnalysisServiceTest {
         when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
                 .thenReturn(List.of());
         givenSuccessfulExtraction();
+        givenSuccessfulPipeline();
 
         MaterialAnalyzeResponse result = materialUrlAnalysisService.analyze(
                 USER_ID,
                 new MaterialAnalyzeRequest("  " + URL + "  ", FOLDER_ID, null)
         );
 
-        assertThat(result.resultType()).isEqualTo(MaterialAnalyzeResultType.ANALYSIS_REQUIRED);
+        assertThat(result.resultType()).isEqualTo(MaterialAnalyzeResultType.ANALYSIS_COMPLETED);
         assertThat(result.originalUrl()).isEqualTo(URL);
         verify(materialUrlValidator).isValidHttpUrl(URL);
         verify(materialPlatformResolver).resolve(null, URL);
@@ -168,6 +188,7 @@ class MaterialUrlAnalysisServiceTest {
         when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
                 .thenReturn(List.of());
         givenSuccessfulExtraction();
+        givenSuccessfulPipeline();
 
         materialUrlAnalysisService.analyze(USER_ID, new MaterialAnalyzeRequest(URL, FOLDER_ID, false));
 
@@ -266,6 +287,7 @@ class MaterialUrlAnalysisServiceTest {
         when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
                 .thenReturn(List.of());
         givenSuccessfulExtraction();
+        givenSuccessfulPipeline();
 
         materialUrlAnalysisService.analyze(USER_ID, new MaterialAnalyzeRequest(URL, FOLDER_ID, false));
 
@@ -275,6 +297,30 @@ class MaterialUrlAnalysisServiceTest {
                 anyString()
         );
         assertThat(userIdCaptor.getValue()).isEqualTo(USER_ID);
+    }
+
+    @Test
+    void passesPreparationResultToPipelineWithoutExternalRoundTrip() {
+        givenValidRequest();
+        when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
+                .thenReturn(List.of());
+        ExtractedMaterialContent extractedContent = extractedContent();
+        when(materialContentExtractorRegistry.extract(PlatformType.VELOG, URL)).thenReturn(extractedContent);
+        when(materialAiAnalysisOrchestrator.analyze(any(MaterialAnalysisPreparationResult.class)))
+                .thenReturn(pipelineResult(extractedContent));
+
+        materialUrlAnalysisService.analyze(USER_ID, new MaterialAnalyzeRequest(URL, FOLDER_ID, false));
+
+        ArgumentCaptor<MaterialAnalysisPreparationResult> captor =
+                ArgumentCaptor.forClass(MaterialAnalysisPreparationResult.class);
+        verify(materialContentExtractorRegistry, times(1)).extract(PlatformType.VELOG, URL);
+        verify(materialAiAnalysisOrchestrator).analyze(captor.capture());
+        assertThat(captor.getValue().userId()).isEqualTo(USER_ID);
+        assertThat(captor.getValue().folderId()).isEqualTo(FOLDER_ID);
+        assertThat(captor.getValue().originalUrl()).isEqualTo(URL);
+        assertThat(captor.getValue().extractedContent()).isEqualTo(extractedContent);
+        assertThat(captor.getValue().extractedContent().content())
+                .isEqualTo("Extracted content for next analysis bundle");
     }
 
     @Test
@@ -312,6 +358,26 @@ class MaterialUrlAnalysisServiceTest {
                 .extracting("errorCode")
                 .isEqualTo(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
         verify(materialRepository, never()).save(any(Material.class));
+        verify(materialAiAnalysisOrchestrator, never()).analyze(any());
+    }
+
+    @Test
+    void propagatesPipelineFailureAfterExtraction() {
+        givenValidRequest();
+        when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
+                .thenReturn(List.of());
+        givenSuccessfulExtraction();
+        when(materialAiAnalysisOrchestrator.analyze(any(MaterialAnalysisPreparationResult.class)))
+                .thenThrow(new MaterialException(MaterialErrorCode.MATERIAL_VECTOR_STORE_FAILED));
+
+        assertThatThrownBy(() -> materialUrlAnalysisService.analyze(
+                USER_ID,
+                new MaterialAnalyzeRequest(URL, FOLDER_ID, false)
+        ))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_VECTOR_STORE_FAILED);
+        verify(materialContentExtractorRegistry).extract(PlatformType.VELOG, URL);
     }
 
     private void givenValidRequest() {
@@ -322,6 +388,26 @@ class MaterialUrlAnalysisServiceTest {
 
     private void givenSuccessfulExtraction() {
         when(materialContentExtractorRegistry.extract(PlatformType.VELOG, URL)).thenReturn(extractedContent());
+    }
+
+    private void givenSuccessfulPipeline() {
+        when(materialAiAnalysisOrchestrator.analyze(any(MaterialAnalysisPreparationResult.class)))
+                .thenAnswer(invocation -> pipelineResult(invocation.getArgument(0, MaterialAnalysisPreparationResult.class)
+                        .extractedContent()));
+    }
+
+    private MaterialAiAnalysisPipelineResult pipelineResult(ExtractedMaterialContent extractedContent) {
+        return new MaterialAiAnalysisPipelineResult(
+                200L,
+                USER_ID,
+                URL,
+                PlatformType.VELOG,
+                extractedContent,
+                300L,
+                2,
+                List.of(),
+                null
+        );
     }
 
     private ExtractedMaterialContent extractedContent() {

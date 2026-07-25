@@ -20,8 +20,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -71,10 +74,11 @@ public class MaterialIndexingService {
                 .collect(Collectors.toMap(MaterialChunk::getChunkIndex, Function.identity(), (current, ignored) -> current));
 
         ensureCollection();
+        List<String> upsertedPointIds = new ArrayList<>();
         try {
             for (EmbeddedMaterialTextChunk embeddedChunk : embeddedChunks) {
                 MaterialTextChunk textChunk = embeddedChunk.chunk();
-                String pointId = pointIdOf(material.getId(), textChunk.chunkIndex());
+                String pointId = qdrantPointIdOf(material.getId(), textChunk.chunkIndex());
                 MaterialChunk chunk = existingChunkByIndex.get(textChunk.chunkIndex());
                 if (chunk == null) {
                     chunk = materialChunkRepository.save(
@@ -85,9 +89,11 @@ public class MaterialIndexingService {
                 }
 
                 upsertPoint(material, chunk, embeddedChunk.vector());
+                upsertedPointIds.add(chunk.getQdrantPointId());
             }
             deleteExcessChunks(existingChunks, chunks.size());
         } catch (RuntimeException e) {
+            compensateNewMaterialPoints(existingChunks, upsertedPointIds);
             log.warn("Material indexing failed. materialId={}, reason={}", material.getId(), e.getClass().getSimpleName());
             throw e;
         }
@@ -139,7 +145,24 @@ public class MaterialIndexingService {
         materialChunkRepository.deleteAll(excessChunks);
     }
 
-    private String pointIdOf(Long materialId, int chunkIndex) {
-        return "material-%d-chunk-%d".formatted(materialId, chunkIndex);
+    private void compensateNewMaterialPoints(List<MaterialChunk> existingChunks, List<String> upsertedPointIds) {
+        if (!existingChunks.isEmpty() || upsertedPointIds.isEmpty()) {
+            return;
+        }
+
+        try {
+            qdrantClient.deletePoints(upsertedPointIds);
+        } catch (RuntimeException cleanupFailure) {
+            log.warn(
+                    "Failed to clean up Qdrant points after indexing failure. pointCount={}, reason={}",
+                    upsertedPointIds.size(),
+                    cleanupFailure.getClass().getSimpleName()
+            );
+        }
+    }
+
+    static String qdrantPointIdOf(Long materialId, int chunkIndex) {
+        String source = "material:%d:chunk:%d".formatted(materialId, chunkIndex);
+        return UUID.nameUUIDFromBytes(source.getBytes(StandardCharsets.UTF_8)).toString();
     }
 }
