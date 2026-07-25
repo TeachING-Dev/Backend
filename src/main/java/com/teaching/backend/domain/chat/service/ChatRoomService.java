@@ -16,7 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Comparator;
 import java.util.List;
 
-// 채팅방 조회/생성/삭제 및 커서 기반 페이지네이션 로직을 담당하는 서비스
+// 채팅방 조회/생성 및 커서 기반 페이지네이션 로직을 담당하는 서비스
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -101,11 +101,5 @@ public class ChatRoomService {
         }
 
         return chatRoom;
-    }
-
-    @Transactional
-    public void deleteChatRoom(Long chatRoomId, Long userId) {
-        ChatRoom chatRoom = getChatRoom(chatRoomId, userId);
-        chatRoom.delete();
     }
 }

@@ -17,16 +17,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-// 채팅방 생성, 목록 조회(커서 페이지네이션), 삭제를 처리하는 컨트롤러
-@Tag(name = "ChatRoom", description = "채팅방 생성/조회/삭제 API")
+// 채팅방 생성, 목록 조회(커서 페이지네이션)를 처리하는 컨트롤러
+@Tag(name = "ChatRoom", description = "채팅방 생성/조회 API")
 @RestController
 @RequiredArgsConstructor
 @Validated
@@ -67,20 +65,5 @@ public class ChatRoomController {
         ChatRoomResponse response = ChatRoomConverter.toResponse(chatRoom);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.onSuccess(response));
-    }
-
-    @Operation(
-            summary = "채팅방 삭제",
-            description = "본인 소유 채팅방을 소프트 삭제합니다."
-    )
-    @DeleteMapping("/{chatRoomId}")
-    public ApiResponse<Void> deleteChatRoom(
-            @AuthenticationPrincipal AuthMember authMember,
-            @PathVariable Long chatRoomId
-    ) {
-        Long userId = authMember.getUserId();
-
-        chatRoomService.deleteChatRoom(chatRoomId, userId);
-        return ApiResponse.onSuccess(null);
     }
 }
