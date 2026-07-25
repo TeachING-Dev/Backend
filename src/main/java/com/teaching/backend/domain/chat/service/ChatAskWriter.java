@@ -46,9 +46,11 @@ class ChatAskWriter {
             throw new ChatException(ChatErrorCode.DAILY_QUESTION_LIMIT_EXCEEDED);
         }
 
+        boolean isFirstMessage = chatMessageRepository.countByChatRoomId(chatRoomId) == 0;
+
         ChatMessage userMessage = chatMessageRepository.save(ChatMessage.createUserMessage(chatRoom, content));
 
-        return new Reservation(chatRoomId, userId, userMessage);
+        return new Reservation(chatRoomId, userId, userMessage, isFirstMessage);
     }
 
     // 외부 호출이 실패한 경우 예약해둔 유저 메시지를 삭제해 quota를 반환한다.
@@ -62,6 +64,10 @@ class ChatAskWriter {
     AskResult finalizeAnswer(Reservation reservation, String answer, boolean isFallback, List<MaterialChunk> relevantChunks) {
         // 외부 호출 도중 방이 삭제되는 경우를 대비해 쓰기 시점에 다시 조회
         ChatRoom chatRoom = chatRoomService.getChatRoom(reservation.chatRoomId(), reservation.userId());
+
+        if (reservation.isFirstMessage()) {
+            chatRoom.updateTitle(chatRoomService.generateTitle(reservation.userMessage().getContent()));
+        }
 
         // isFallback은 LLM 답변 텍스트를 파싱하는 게 아니라 "근거로 삼을 청크가 있었는가"를 구조적으로 반영
         ChatMessage aiMessage = chatMessageRepository.save(
@@ -98,6 +104,6 @@ class ChatAskWriter {
         return chunk.getPosition() != null ? chunk.getPosition() : ("청크 " + chunk.getChunkIndex());
     }
 
-    record Reservation(Long chatRoomId, Long userId, ChatMessage userMessage) {
+    record Reservation(Long chatRoomId, Long userId, ChatMessage userMessage, boolean isFirstMessage) {
     }
 }

@@ -3,7 +3,6 @@ package com.teaching.backend.domain.chat.controller;
 import com.teaching.backend.domain.chat.converter.ChatRoomConverter;
 import com.teaching.backend.domain.chat.dto.ChatRoomListResponse;
 import com.teaching.backend.domain.chat.dto.ChatRoomResponse;
-import com.teaching.backend.domain.chat.dto.MessageCreateRequest;
 import com.teaching.backend.domain.chat.entity.ChatRoom;
 import com.teaching.backend.domain.chat.service.ChatRoomPageResult;
 import com.teaching.backend.domain.chat.service.ChatRoomService;
@@ -22,7 +21,6 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -57,16 +55,15 @@ public class ChatRoomController {
 
     @Operation(
             summary = "채팅방 생성",
-            description = "첫 질문 내용을 받아 새 채팅방을 생성합니다. 채팅방 제목은 질문 내용으로 자동 생성됩니다."
+            description = "기본 제목(\"새 채팅\")으로 빈 채팅방을 생성합니다. 채팅방 제목은 첫 질문 시점에 자동으로 갱신됩니다."
     )
     @PostMapping
     public ResponseEntity<ApiResponse<ChatRoomResponse>> createChatRoom(
-            @AuthenticationPrincipal AuthMember authMember,
-            @RequestBody MessageCreateRequest request
+            @AuthenticationPrincipal AuthMember authMember
     ) {
         Long userId = authMember.getUserId();
 
-        ChatRoom chatRoom = chatRoomService.createChatRoom(userId, request.content());
+        ChatRoom chatRoom = chatRoomService.createChatRoom(userId);
         ChatRoomResponse response = ChatRoomConverter.toResponse(chatRoom);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.onSuccess(response));

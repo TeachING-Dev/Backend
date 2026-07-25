@@ -14,5 +14,8 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
 
     // 무료 회원 일일 질문 횟수 제한 검증용: 특정 유저가 기준 시각 이후 보낸 유저 메시지 수
     long countByChatRoom_User_IdAndRoleAndCreatedAtGreaterThanEqual(Long userId, ChatRole role, LocalDateTime createdAt);
+
+    // 채팅방의 첫 질문인지 판별용
+    long countByChatRoomId(Long chatRoomId);
 }
 
