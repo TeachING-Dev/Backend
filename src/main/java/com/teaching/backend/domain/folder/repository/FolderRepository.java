@@ -39,14 +39,14 @@ public interface FolderRepository extends JpaRepository<Folder, Long> {
     );
 
     @Query(
-            value = "SELECT * FROM folders WHERE user_id = :userId AND deleted_at IS NOT NULL ORDER BY deleted_at DESC",
+            value = "SELECT * FROM folders WHERE user_id = :userId AND deleted_at IS NOT NULL ORDER BY deleted_at DESC, id DESC",
             countQuery = "SELECT COUNT(*) FROM folders WHERE user_id = :userId AND deleted_at IS NOT NULL",
             nativeQuery = true
     )
     Page<Folder> findTrashedByUserIdOrderByDeletedAtDesc(@Param("userId") Long userId, Pageable pageable);
 
     @Query(
-            value = "SELECT * FROM folders WHERE user_id = :userId AND deleted_at IS NOT NULL ORDER BY deleted_at ASC",
+            value = "SELECT * FROM folders WHERE user_id = :userId AND deleted_at IS NOT NULL ORDER BY deleted_at ASC, id ASC",
             countQuery = "SELECT COUNT(*) FROM folders WHERE user_id = :userId AND deleted_at IS NOT NULL",
             nativeQuery = true
     )

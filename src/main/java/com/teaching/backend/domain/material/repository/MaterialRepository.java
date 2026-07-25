@@ -55,14 +55,14 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
     );
 
     @Query(
-            value = "SELECT * FROM materials WHERE user_id = :userId AND deleted_at IS NOT NULL ORDER BY deleted_at DESC",
+            value = "SELECT * FROM materials WHERE user_id = :userId AND deleted_at IS NOT NULL ORDER BY deleted_at DESC, id DESC",
             countQuery = "SELECT COUNT(*) FROM materials WHERE user_id = :userId AND deleted_at IS NOT NULL",
             nativeQuery = true
     )
     Page<Material> findTrashedByUserIdOrderByDeletedAtDesc(@Param("userId") Long userId, Pageable pageable);
 
     @Query(
-            value = "SELECT * FROM materials WHERE user_id = :userId AND deleted_at IS NOT NULL ORDER BY deleted_at ASC",
+            value = "SELECT * FROM materials WHERE user_id = :userId AND deleted_at IS NOT NULL ORDER BY deleted_at ASC, id ASC",
             countQuery = "SELECT COUNT(*) FROM materials WHERE user_id = :userId AND deleted_at IS NOT NULL",
             nativeQuery = true
     )

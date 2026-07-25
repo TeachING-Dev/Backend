@@ -29,6 +29,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 /**
@@ -124,7 +125,7 @@ public class TrashService {
     }
 
     private List<Long> failedIds(List<Long> requestedIds, List<Long> restoredIds) {
-        List<Long> failed = new ArrayList<>(requestedIds);
+        List<Long> failed = new ArrayList<>(new LinkedHashSet<>(requestedIds));
         failed.removeAll(restoredIds);
         return failed;
     }
