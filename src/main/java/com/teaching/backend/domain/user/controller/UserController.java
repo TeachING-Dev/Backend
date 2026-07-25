@@ -20,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -54,13 +55,13 @@ public class UserController {
         return ApiResponse.onSuccess(UserSuccessCode.USER_INFO_FOUND, userService.getMyInfo(userId));
     }
 
-    /** [PATCH] /users/me — 프로필 부분 수정 */
+    /** [PATCH] /users/me — 프로필 부분 수정 (multipart/form-data) */
     @Operation(
             summary = "프로필 수정",
-            description = "닉네임, 프로필 이미지 URL 중 전달된 필드만 부분 수정합니다."
+            description = "닉네임, 프로필 이미지, 생년월일 중 전달된 필드만 부분 수정합니다. profileImage를 함께 보내면 즉시 S3에 업로드하고 그 URL을 프로필에 반영합니다. birthYear/birthMonth/birthDay는 셋 다 보내거나 셋 다 생략해야 합니다."
     )
-    @PatchMapping("/me")
-    public ApiResponse<UserUpdateResponseDto> updateProfile(@RequestBody UserUpdateRequestDto request) {
+    @PatchMapping(value = "/me", consumes = "multipart/form-data")
+    public ApiResponse<UserUpdateResponseDto> updateProfile(@ModelAttribute UserUpdateRequestDto request) {
         Long userId = currentUserProvider.getCurrentUserId();
         return ApiResponse.onSuccess(UserSuccessCode.PROFILE_UPDATED, userService.updateProfile(userId, request));
     }

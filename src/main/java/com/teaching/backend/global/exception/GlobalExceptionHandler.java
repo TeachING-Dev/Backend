@@ -14,6 +14,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.HashMap;
@@ -126,6 +127,16 @@ public class GlobalExceptionHandler {
             cause = cause.getCause();
         }
         return cause.getMessage() != null ? cause.getMessage() : "";
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Object>> handleMaxUploadSizeExceededException(
+            MaxUploadSizeExceededException e
+    ) {
+        log.warn("Upload size exceeded: {}", e.getMessage());
+        return ResponseEntity
+                .status(GlobalErrorCode.BAD_REQUEST.getStatus())
+                .body(ApiResponse.onFailure(GlobalErrorCode.BAD_REQUEST, "업로드 가능한 파일 용량을 초과했습니다."));
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)

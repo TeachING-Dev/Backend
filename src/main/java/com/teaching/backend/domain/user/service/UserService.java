@@ -19,12 +19,15 @@ import com.teaching.backend.domain.user.exception.UserException;
 import com.teaching.backend.domain.user.repository.AccountRepository;
 import com.teaching.backend.domain.user.repository.UserRepository;
 import com.teaching.backend.domain.user.repository.WithdrawalHistoryRepository;
+import com.teaching.backend.global.storage.s3.S3Uploader;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
-import java.net.URI;
+import java.time.DateTimeException;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -44,9 +47,13 @@ public class UserService {
     private final AccountRepository accountRepository;
     private final WithdrawalHistoryRepository withdrawalHistoryRepository;
     private final AuthService authService;
+    private final S3Uploader s3Uploader;
 
     /** 탈퇴 사유 상세 최대 길이 */
     private static final int WITHDRAWAL_REASON_DETAIL_MAX_LENGTH = 500;
+
+    /** S3 프로필 이미지 저장 디렉토리 */
+    private static final String PROFILE_IMAGE_DIRECTORY = "profile-images";
 
     /** 닉네임: 2~10자의 한글/영문/숫자 */
     private static final Pattern NICKNAME_PATTERN = Pattern.compile("^[가-힣a-zA-Z0-9]{2,10}$");
@@ -67,7 +74,7 @@ public class UserService {
 
         User user = getActiveUser(userId);
 
-        if (request.nickname() != null) {
+        if (request.hasNickname()) {
             String nickname = request.nickname();
             if (!NICKNAME_PATTERN.matcher(nickname).matches()) {
                 throw new UserException(UserErrorCode.NICKNAME_INVALID_FORMAT);
@@ -85,25 +92,36 @@ public class UserService {
             }
         }
 
-        if (request.profileImageUrl() != null) {
-            String url = request.profileImageUrl();
-            URI uri;
-            try {
-                uri = URI.create(url);
-            } catch (IllegalArgumentException e) {
-                throw new UserException(UserErrorCode.PROFILE_IMAGE_INVALID);
+        if (request.profileImage() != null && !request.profileImage().isEmpty()) {
+            MultipartFile profileImage = request.profileImage();
+            String contentType = profileImage.getContentType();
+            if (contentType == null || !contentType.startsWith("image/")) {
+                throw new UserException(UserErrorCode.PROFILE_IMAGE_TYPE_INVALID);
             }
-            String scheme = uri.getScheme();
-            boolean validScheme = "http".equals(scheme) || "https".equals(scheme);
-            boolean hasHost = uri.getHost() != null && !uri.getHost().isBlank();
-            if (!validScheme || !hasHost) {
-                throw new UserException(UserErrorCode.PROFILE_IMAGE_INVALID);
-            }
-            user.changeProfileImageUrl(url);
+
+            String uploadedUrl = s3Uploader.upload(profileImage, PROFILE_IMAGE_DIRECTORY);
+            user.changeProfileImageUrl(uploadedUrl);
+        }
+
+        if (request.hasAnyBirthField()) {
+            user.changeBirthday(parseBirthday(request));
         }
 
         // 영속 상태 엔티티라 변경 감지(dirty checking)로 트랜잭션 커밋 시 반영된다.
         return UserUpdateResponseDto.from(user);
+    }
+
+    /** 년/월/일 중 일부만 채워졌으면 BIRTHDATE_INCOMPLETE, 실존하지 않는 날짜면 BIRTHDATE_INVALID. */
+    private LocalDate parseBirthday(UserUpdateRequestDto request) {
+        if (!request.hasAllBirthFields()) {
+            throw new UserException(UserErrorCode.BIRTHDATE_INCOMPLETE);
+        }
+
+        try {
+            return LocalDate.of(request.birthYear(), request.birthMonth(), request.birthDay());
+        } catch (DateTimeException e) {
+            throw new UserException(UserErrorCode.BIRTHDATE_INVALID);
+        }
     }
 
     /** [PATCH] /users/me/notifications */

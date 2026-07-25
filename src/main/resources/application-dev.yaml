@@ -17,6 +17,11 @@ spring:
       hibernate:
         format_sql: true
 
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 5MB
+
   security:
     oauth2:
       client:
@@ -65,6 +70,11 @@ cors:
 support:
   kakao-channel-url: ${SUPPORT_KAKAO_CHANNEL_URL:https://pf.kakao.com/_teaching}
   email: ${SUPPORT_EMAIL:support@teaching.com}
+
+aws:
+  s3:
+    bucket: ${AWS_S3_BUCKET:teaching-dev-bucket}
+    region: ${AWS_S3_REGION:ap-northeast-2}
 
 openai:
   api-key: ${OPENAI_API_KEY}

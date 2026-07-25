@@ -19,7 +19,6 @@ public enum UserErrorCode implements BaseErrorCode {
     NICKNAME_INVALID_FORMAT(HttpStatus.BAD_REQUEST, "USER400_4", "닉네임은 2~10자의 한글, 영문, 숫자만 가능합니다."),
     NICKNAME_DUPLICATED(HttpStatus.CONFLICT, "USER409_2", "이미 사용 중인 닉네임입니다."),
     PROFILE_NO_UPDATE_FIELD(HttpStatus.BAD_REQUEST, "USER400_5", "수정할 값을 최소 1개 이상 입력해주세요."),
-    PROFILE_IMAGE_INVALID(HttpStatus.BAD_REQUEST, "USER400_6", "프로필 이미지 URL 형식이 올바르지 않습니다."),
     NOTIFICATION_INVALID(HttpStatus.BAD_REQUEST, "USER400_7", "알림 수신 여부 값이 올바르지 않습니다."),
 
     // 회원 탈퇴
@@ -29,7 +28,14 @@ public enum UserErrorCode implements BaseErrorCode {
     WITHDRAWAL_REASON_DETAIL_TOO_LONG(HttpStatus.BAD_REQUEST, "USER400_11", "탈퇴 사유 상세는 500자를 초과할 수 없습니다."),
 
     // 티칭맵 설정
-    TEACHER_PERSONA_INVALID(HttpStatus.BAD_REQUEST, "USER400_12", "올바른 AI 선생님을 선택해주세요.");
+    TEACHER_PERSONA_INVALID(HttpStatus.BAD_REQUEST, "USER400_12", "올바른 AI 선생님을 선택해주세요."),
+
+    // 프로필 이미지 업로드
+    PROFILE_IMAGE_TYPE_INVALID(HttpStatus.BAD_REQUEST, "USER400_15", "이미지 파일만 업로드할 수 있습니다."),
+
+    // 생년월일 수정
+    BIRTHDATE_INCOMPLETE(HttpStatus.BAD_REQUEST, "USER400_16", "생년월일을 모두 선택해 주세요."),
+    BIRTHDATE_INVALID(HttpStatus.BAD_REQUEST, "USER400_17", "존재하지 않는 날짜입니다.");
     private final HttpStatus status;
     private final String code;
     private final String message;
