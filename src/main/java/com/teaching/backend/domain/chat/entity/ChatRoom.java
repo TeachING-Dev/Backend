@@ -46,4 +46,8 @@ public class ChatRoom extends BaseSoftDeleteEntity {
     public void updateLastMessageAt(LocalDateTime lastMessageAt) {
         this.lastMessageAt = lastMessageAt;
     }
+
+    public void updateTitle(String title) {
+        this.title = title;
+    }
 }

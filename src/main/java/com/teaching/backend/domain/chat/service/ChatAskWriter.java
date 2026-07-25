@@ -63,6 +63,12 @@ class ChatAskWriter {
         // 외부 호출 도중 방이 삭제되는 경우를 대비해 쓰기 시점에 다시 조회
         ChatRoom chatRoom = chatRoomService.getChatRoom(reservation.chatRoomId(), reservation.userId());
 
+        // 예약 시점이 아니라 확정 시점에 판단해야, 먼저 예약됐다가 실패한 메시지 때문에
+        // 실제로 살아남은 첫 메시지가 "첫 질문"으로 인정 못 받는 경우를 피할 수 있다.
+        if (ChatRoomService.DEFAULT_TITLE.equals(chatRoom.getTitle())) {
+            chatRoom.updateTitle(chatRoomService.generateTitle(reservation.userMessage().getContent()));
+        }
+
         // isFallback은 LLM 답변 텍스트를 파싱하는 게 아니라 "근거로 삼을 청크가 있었는가"를 구조적으로 반영
         ChatMessage aiMessage = chatMessageRepository.save(
                 isFallback
