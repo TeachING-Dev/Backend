@@ -45,6 +45,5 @@ jobs:
             aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin ${{ steps.ecr-login.outputs.registry }}
             cd ~/Backend
             docker-compose pull
-            docker-compose up -d
             docker-compose up -d --force-recreate --remove-orphans
             docker image prune -f
