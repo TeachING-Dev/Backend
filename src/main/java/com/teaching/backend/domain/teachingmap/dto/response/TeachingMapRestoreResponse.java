@@ -1,14 +1,16 @@
 package com.teaching.backend.domain.teachingmap.dto.response;
 
+import java.util.List;
+
 public record TeachingMapRestoreResponse(
-        Long teachingMapId,
-        Boolean isDeleted
+        List<Long> restoredIds,
+        List<Long> failedIds
 ) {
 
     public static TeachingMapRestoreResponse of(
-            Long teachingMapId,
-            Boolean isDeleted
+            List<Long> restoredIds,
+            List<Long> failedIds
     ) {
-        return new TeachingMapRestoreResponse(teachingMapId, isDeleted);
+        return new TeachingMapRestoreResponse(restoredIds, failedIds);
     }
 }

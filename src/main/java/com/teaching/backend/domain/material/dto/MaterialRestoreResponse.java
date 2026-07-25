@@ -1,14 +1,16 @@
 package com.teaching.backend.domain.material.dto;
 
+import java.util.List;
+
 public record MaterialRestoreResponse(
-        Long materialId,
-        Boolean isDeleted
+        List<Long> restoredIds,
+        List<Long> failedIds
 ) {
 
     public static MaterialRestoreResponse of(
-            Long materialId,
-            Boolean isDeleted
+            List<Long> restoredIds,
+            List<Long> failedIds
     ) {
-        return new MaterialRestoreResponse(materialId, isDeleted);
+        return new MaterialRestoreResponse(restoredIds, failedIds);
     }
 }

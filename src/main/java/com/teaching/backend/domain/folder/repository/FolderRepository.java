@@ -1,6 +1,8 @@
 package com.teaching.backend.domain.folder.repository;
 
 import com.teaching.backend.domain.folder.entity.Folder;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -38,15 +40,17 @@ public interface FolderRepository extends JpaRepository<Folder, Long> {
 
     @Query(
             value = "SELECT * FROM folders WHERE user_id = :userId AND deleted_at IS NOT NULL ORDER BY deleted_at DESC",
+            countQuery = "SELECT COUNT(*) FROM folders WHERE user_id = :userId AND deleted_at IS NOT NULL",
             nativeQuery = true
     )
-    List<Folder> findTrashedByUserIdOrderByDeletedAtDesc(@Param("userId") Long userId);
+    Page<Folder> findTrashedByUserIdOrderByDeletedAtDesc(@Param("userId") Long userId, Pageable pageable);
 
     @Query(
             value = "SELECT * FROM folders WHERE user_id = :userId AND deleted_at IS NOT NULL ORDER BY deleted_at ASC",
+            countQuery = "SELECT COUNT(*) FROM folders WHERE user_id = :userId AND deleted_at IS NOT NULL",
             nativeQuery = true
     )
-    List<Folder> findTrashedByUserIdOrderByDeletedAtAsc(@Param("userId") Long userId);
+    Page<Folder> findTrashedByUserIdOrderByDeletedAtAsc(@Param("userId") Long userId, Pageable pageable);
 
     @Query("""
             SELECT CASE WHEN COUNT(f) > 0 THEN true ELSE false END

@@ -56,50 +56,49 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
 
     @Query(
             value = "SELECT * FROM materials WHERE user_id = :userId AND deleted_at IS NOT NULL ORDER BY deleted_at DESC",
+            countQuery = "SELECT COUNT(*) FROM materials WHERE user_id = :userId AND deleted_at IS NOT NULL",
             nativeQuery = true
     )
-    List<Material> findTrashedByUserIdOrderByDeletedAtDesc(@Param("userId") Long userId);
+    Page<Material> findTrashedByUserIdOrderByDeletedAtDesc(@Param("userId") Long userId, Pageable pageable);
 
     @Query(
             value = "SELECT * FROM materials WHERE user_id = :userId AND deleted_at IS NOT NULL ORDER BY deleted_at ASC",
+            countQuery = "SELECT COUNT(*) FROM materials WHERE user_id = :userId AND deleted_at IS NOT NULL",
             nativeQuery = true
     )
-    List<Material> findTrashedByUserIdOrderByDeletedAtAsc(@Param("userId") Long userId);
+    Page<Material> findTrashedByUserIdOrderByDeletedAtAsc(@Param("userId") Long userId, Pageable pageable);
 
-    @Query(
-            value = "SELECT COUNT(*) FROM materials WHERE id = :materialId AND user_id = :userId",
-            nativeQuery = true
-    )
-    long countByIdAndUserIdIncludingDeleted(
-            @Param("materialId") Long materialId,
-            @Param("userId") Long userId
-    );
-
-    @Query(
-            value = "SELECT COUNT(*) FROM materials WHERE id = :materialId AND user_id = :userId AND deleted_at IS NOT NULL",
-            nativeQuery = true
-    )
-    long countDeletedByIdAndUserId(
-            @Param("materialId") Long materialId,
-            @Param("userId") Long userId
-    );
-
-    @Modifying
+    /** 요청한 자료ID 중 실제로 복구 가능한(휴지통에 있고 상위 폴더가 활성 상태인) ID만 골라낸다. */
     @Query(
             value = """
-                    UPDATE materials m
+                    SELECT m.id FROM materials m
                     JOIN folders f ON f.id = m.folder_id
-                    SET m.deleted_at = NULL,
-                        m.updated_at = CURRENT_TIMESTAMP
-                    WHERE m.id = :materialId
+                    WHERE m.id IN (:materialIds)
                       AND m.user_id = :userId
                       AND m.deleted_at IS NOT NULL
                       AND f.deleted_at IS NULL
                     """,
             nativeQuery = true
     )
-    int restoreDeletedMaterial(
-            @Param("materialId") Long materialId,
+    List<Long> findRestorableTrashedIds(
+            @Param("materialIds") List<Long> materialIds,
+            @Param("userId") Long userId
+    );
+
+    @Modifying
+    @Query(
+            value = """
+                    UPDATE materials
+                    SET deleted_at = NULL,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id IN (:materialIds)
+                      AND user_id = :userId
+                      AND deleted_at IS NOT NULL
+                    """,
+            nativeQuery = true
+    )
+    int restoreTrashedMaterials(
+            @Param("materialIds") List<Long> materialIds,
             @Param("userId") Long userId
     );
 
