@@ -16,7 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Comparator;
 import java.util.List;
 
-// 채팅방 조회/생성/삭제 및 커서 기반 페이지네이션 로직을 담당하는 서비스
+// 채팅방 조회/생성 및 커서 기반 페이지네이션 로직을 담당하는 서비스
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -25,6 +25,7 @@ public class ChatRoomService {
     private static final int TITLE_MAX_LENGTH = 15;
     private static final String TITLE_ELLIPSIS = "...";
     private static final int FREE_CHATROOM_LIMIT = 10;
+    static final String DEFAULT_TITLE = "새 채팅";
 
     private final ChatRoomRepository chatRoomRepository;
     private final UserRepository userRepository;
@@ -66,7 +67,7 @@ public class ChatRoomService {
     }
 
     @Transactional
-    public ChatRoom createChatRoom(Long userId, String content) {
+    public ChatRoom createChatRoom(Long userId) {
         // 동시에 여러 요청이 들어와도 개수 확인과 생성이 원자적으로 처리되도록 유저 행에 쓰기 락을 건다.
         User user = userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new GeneralException(GlobalErrorCode.NOT_FOUND));
@@ -76,12 +77,13 @@ public class ChatRoomService {
             throw new ChatException(ChatErrorCode.CHATROOM_LIMIT_EXCEEDED);
         }
 
-        ChatRoom chatRoom = ChatRoom.create(user, generateTitle(content));
+        ChatRoom chatRoom = ChatRoom.create(user, DEFAULT_TITLE);
 
         return chatRoomRepository.save(chatRoom);
     }
 
-    private String generateTitle(String content) {
+    // 첫 질문 내용으로부터 채팅방 제목을 생성. ChatAskWriter가 첫 질문 처리 시 재사용.
+    String generateTitle(String content) {
         if (content.codePointCount(0, content.length()) <= TITLE_MAX_LENGTH) {
             return content;
         }
@@ -99,11 +101,5 @@ public class ChatRoomService {
         }
 
         return chatRoom;
-    }
-
-    @Transactional
-    public void deleteChatRoom(Long chatRoomId, Long userId) {
-        ChatRoom chatRoom = getChatRoom(chatRoomId, userId);
-        chatRoom.delete();
     }
 }

@@ -93,6 +93,10 @@ public class User extends BaseSoftDeleteEntity {
         this.profileImageUrl = profileImageUrl;
     }
 
+    public void changeBirthday(LocalDate birthday) {
+        this.birthday = birthday;
+    }
+
     public void changeNotificationEnabled(Boolean notificationsEnabled) {
         this.notificationsEnabled = notificationsEnabled;
     }
