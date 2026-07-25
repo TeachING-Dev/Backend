@@ -37,16 +37,18 @@ public class S3Uploader {
     }
 
     /**
-     * 파일을 {@code {directory}/{uuid}.{ext}} 키로 업로드하고 공개 URL을 반환한다.
+     * 파일을 {@code {directory}/{uuid}.{format}} 키로 업로드하고 공개 URL을 반환한다.
+     * {@code format} 은 클라이언트가 보낸 값이 아니라 서버에서 실제 파일 내용을 디코딩해
+     * 검증한 이미지 포맷(예: "png", "jpeg")이어야 한다.
      */
-    public String upload(MultipartFile file, String directory) {
-        String key = directory + "/" + UUID.randomUUID() + extensionOf(file.getOriginalFilename());
+    public String upload(MultipartFile file, String directory, String format) {
+        String key = directory + "/" + UUID.randomUUID() + "." + format;
 
         try {
             PutObjectRequest request = PutObjectRequest.builder()
                     .bucket(bucket)
                     .key(key)
-                    .contentType(file.getContentType())
+                    .contentType("image/" + format)
                     .build();
 
             s3Client.putObject(request, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
@@ -55,13 +57,5 @@ public class S3Uploader {
         }
 
         return s3Client.utilities().getUrl(builder -> builder.bucket(bucket).key(key)).toExternalForm();
-    }
-
-    private String extensionOf(String originalFilename) {
-        if (originalFilename == null) {
-            return "";
-        }
-        int dotIndex = originalFilename.lastIndexOf('.');
-        return dotIndex >= 0 ? originalFilename.substring(dotIndex) : "";
     }
 }

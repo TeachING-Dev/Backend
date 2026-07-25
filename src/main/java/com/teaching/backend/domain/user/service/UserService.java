@@ -26,9 +26,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
+import java.io.IOException;
 import java.time.DateTimeException;
 import java.time.LocalDate;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -57,6 +63,9 @@ public class UserService {
 
     /** 닉네임: 2~10자의 한글/영문/숫자 */
     private static final Pattern NICKNAME_PATTERN = Pattern.compile("^[가-힣a-zA-Z0-9]{2,10}$");
+
+    /** 업로드 허용 이미지 포맷 (서버에서 실제 바이트를 디코딩해 판별한 값만 통과) */
+    private static final Set<String> ALLOWED_IMAGE_FORMATS = Set.of("png", "jpeg", "gif", "webp");
 
     /** [GET] /users/me */
     public UserInfoResponseDto getMyInfo(Long userId) {
@@ -92,23 +101,49 @@ public class UserService {
             }
         }
 
-        if (request.profileImage() != null && !request.profileImage().isEmpty()) {
-            MultipartFile profileImage = request.profileImage();
-            String contentType = profileImage.getContentType();
-            if (contentType == null || !contentType.startsWith("image/")) {
-                throw new UserException(UserErrorCode.PROFILE_IMAGE_TYPE_INVALID);
-            }
+        // S3 업로드는 되돌릴 수 없으므로, 나머지 필드 검증을 모두 마친 뒤 마지막에 실행한다.
+        // (검증 실패로 트랜잭션이 롤백되어도 orphan 객체가 S3에 남지 않도록)
+        String verifiedImageFormat = request.hasProfileImage()
+                ? validateAndResolveImageFormat(request.profileImage())
+                : null;
 
-            String uploadedUrl = s3Uploader.upload(profileImage, PROFILE_IMAGE_DIRECTORY);
+        LocalDate birthday = request.hasAnyBirthField() ? parseBirthday(request) : null;
+
+        if (verifiedImageFormat != null) {
+            String uploadedUrl = s3Uploader.upload(request.profileImage(), PROFILE_IMAGE_DIRECTORY, verifiedImageFormat);
             user.changeProfileImageUrl(uploadedUrl);
         }
 
-        if (request.hasAnyBirthField()) {
-            user.changeBirthday(parseBirthday(request));
+        if (birthday != null) {
+            user.changeBirthday(birthday);
         }
 
         // 영속 상태 엔티티라 변경 감지(dirty checking)로 트랜잭션 커밋 시 반영된다.
         return UserUpdateResponseDto.from(user);
+    }
+
+    /**
+     * 클라이언트가 보낸 Content-Type 은 신뢰하지 않고, 실제 파일 바이트를 디코딩해
+     * 이미지 포맷을 판별한다. 디코딩이 불가능하거나 허용 목록에 없으면 PROFILE_IMAGE_TYPE_INVALID.
+     */
+    private String validateAndResolveImageFormat(MultipartFile file) {
+        try (ImageInputStream iis = ImageIO.createImageInputStream(file.getInputStream())) {
+            if (iis == null) {
+                throw new UserException(UserErrorCode.PROFILE_IMAGE_TYPE_INVALID);
+            }
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(iis);
+            if (!readers.hasNext()) {
+                throw new UserException(UserErrorCode.PROFILE_IMAGE_TYPE_INVALID);
+            }
+            String formatName = readers.next().getFormatName().toLowerCase();
+            String format = "jpg".equals(formatName) ? "jpeg" : formatName;
+            if (!ALLOWED_IMAGE_FORMATS.contains(format)) {
+                throw new UserException(UserErrorCode.PROFILE_IMAGE_TYPE_INVALID);
+            }
+            return format;
+        } catch (IOException e) {
+            throw new UserException(UserErrorCode.PROFILE_IMAGE_TYPE_INVALID);
+        }
     }
 
     /** 년/월/일 중 일부만 채워졌으면 BIRTHDATE_INCOMPLETE, 실존하지 않는 날짜면 BIRTHDATE_INVALID. */

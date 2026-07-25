@@ -135,8 +135,8 @@ public class GlobalExceptionHandler {
     ) {
         log.warn("Upload size exceeded: {}", e.getMessage());
         return ResponseEntity
-                .status(GlobalErrorCode.BAD_REQUEST.getStatus())
-                .body(ApiResponse.onFailure(GlobalErrorCode.BAD_REQUEST, "업로드 가능한 파일 용량을 초과했습니다."));
+                .status(GlobalErrorCode.PAYLOAD_TOO_LARGE.getStatus())
+                .body(ApiResponse.onFailure(GlobalErrorCode.PAYLOAD_TOO_LARGE));
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
