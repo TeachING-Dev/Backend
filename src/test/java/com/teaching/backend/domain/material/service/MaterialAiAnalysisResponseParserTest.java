@@ -136,6 +136,47 @@ class MaterialAiAnalysisResponseParserTest {
     }
 
     @Test
+    void parsesUrlAnalysisJsonWithDifferentHeadingLevelAndNumberedList() {
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis("""
+                {
+                  "short_summary": "로그인 흐름을 요약합니다.",
+                  "long_analysis": "### 개요\\n1. 로그인 흐름은 인증 요청과 응답을 분리해 처리하는 구조입니다. 세션 유지 전략은 서비스 요구사항에 맞춰 선택해야 합니다. 예외 응답은 사용자에게 필요한 수준으로 제한해야 합니다.",
+                  "highlights": [
+                    {"text": "로그인 흐름은 인증 요청과 응답을 분리해 처리하는 구조입니다.", "type": "핵심"},
+                    {"text": "세션 유지 전략은 서비스 요구사항에 맞춰 선택해야 합니다.", "type": "핵심"},
+                    {"text": "예외 응답은 사용자에게 필요한 수준으로 제한해야 합니다.", "type": "주의"}
+                  ],
+                  "tags": ["로그인", "세션", "예외"],
+                  "recommended_folder": null
+                }
+                """, List.of("Backend"));
+
+        assertThat(result.analysisResult().longAnalysis()).contains("### 개요");
+        assertThat(result.highlights()).hasSize(3);
+        assertThat(result.recommendedFolderName()).isNull();
+    }
+
+    @Test
+    void parsesUrlAnalysisJsonWithInlineHyphenList() {
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis("""
+                {
+                  "short_summary": "로그인 분석 요약입니다.",
+                  "long_analysis": "개요 - 로그인 처리는 인증 성공 후 사용자 정보를 안전하게 관리하는 과정입니다. 토큰 저장 위치는 보안 요구사항에 따라 결정해야 합니다. 실패 응답은 상세 내부 정보를 노출하지 않아야 합니다.",
+                  "highlights": [
+                    {"text": "로그인 처리는 인증 성공 후 사용자 정보를 안전하게 관리하는 과정입니다.", "type": "핵심"},
+                    {"text": "토큰 저장 위치는 보안 요구사항에 따라 결정해야 합니다.", "type": "주의"},
+                    {"text": "실패 응답은 상세 내부 정보를 노출하지 않아야 합니다.", "type": "주의"}
+                  ],
+                  "tags": ["로그인", "토큰", "보안"],
+                  "recommended_folder": null
+                }
+                """, List.of());
+
+        assertThat(result.analysisResult().longAnalysis()).contains("개요 - 로그인");
+        assertThat(result.highlights()).hasSize(3);
+    }
+
+    @Test
     void stringNullRecommendedFolderIsNormalizedToNull() {
         MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis(
                 validUrlAnalysisJson("null"),
@@ -224,8 +265,9 @@ class MaterialAiAnalysisResponseParserTest {
 
     @Test
     void rejectsMarkdownSyntaxMissingInLongAnalysis() {
-        assertUrlAnalysisParseFailed(validUrlAnalysisJson("Backend").replace("## 개요", "개요"));
-        assertUrlAnalysisParseFailed(validUrlAnalysisJson("Backend").replace("**정합성**", "정합성"));
+        assertUrlAnalysisParseFailed(validUrlAnalysisJson("Backend")
+                .replace("## 개요", "개요")
+                .replace("* **정합성**을", "정합성을"));
     }
 
     private void assertParseFailed(String rawContent) {

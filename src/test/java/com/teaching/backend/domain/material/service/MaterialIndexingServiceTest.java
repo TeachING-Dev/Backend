@@ -168,6 +168,44 @@ class MaterialIndexingServiceTest {
     }
 
     @Test
+    void ensureCollectionFailureStopsBeforeChunkSaveAndUpsert() {
+        Material material = material();
+        MaterialTextChunk textChunk = new MaterialTextChunk(0, "chunk text", "청크 1");
+        when(materialTextChunker.chunk("source text")).thenReturn(List.of(textChunk));
+        when(materialEmbeddingService.embedChunks(List.of(textChunk)))
+                .thenReturn(List.of(new EmbeddedMaterialTextChunk(textChunk, new float[]{0.1f})));
+        when(materialChunkRepository.findAllByMaterial_IdOrderByChunkIndexAsc(100L)).thenReturn(List.of());
+        org.mockito.Mockito.doThrow(new RuntimeException("collection"))
+                .when(qdrantClient)
+                .ensureCollection();
+
+        assertThatThrownBy(() -> indexingService.indexMaterialContent(material, "source text"))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_VECTOR_STORE_FAILED);
+        verify(materialChunkRepository, never()).save(any(MaterialChunk.class));
+        verify(qdrantClient, never()).upsertPoint(any(), any(float[].class), any());
+        verify(qdrantClient, never()).deletePoints(any());
+    }
+
+    @Test
+    void embeddingFailureStopsBeforeCollectionAndQdrant() {
+        Material material = material();
+        MaterialTextChunk textChunk = new MaterialTextChunk(0, "chunk text", "청크 1");
+        when(materialTextChunker.chunk("source text")).thenReturn(List.of(textChunk));
+        when(materialEmbeddingService.embedChunks(List.of(textChunk)))
+                .thenThrow(new MaterialException(MaterialErrorCode.MATERIAL_EMBEDDING_FAILED));
+
+        assertThatThrownBy(() -> indexingService.indexMaterialContent(material, "source text"))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_EMBEDDING_FAILED);
+        verify(qdrantClient, never()).ensureCollection();
+        verify(qdrantClient, never()).upsertPoint(any(), any(float[].class), any());
+        verify(materialChunkRepository, never()).save(any(MaterialChunk.class));
+    }
+
+    @Test
     void newMaterialIndexingFailureCleansUpAlreadyUpsertedPoints() {
         Material material = material();
         MaterialTextChunk first = new MaterialTextChunk(0, "first chunk", "chunk 1");
@@ -199,6 +237,36 @@ class MaterialIndexingServiceTest {
         ArgumentCaptor<List<String>> deletedPointIds = ArgumentCaptor.forClass(List.class);
         verify(qdrantClient).deletePoints(deletedPointIds.capture());
         assertThat(deletedPointIds.getValue()).containsExactly(firstPointId);
+    }
+
+    @Test
+    void existingChunkReindexFailureDoesNotDeleteExistingQdrantPoints() {
+        Material material = material();
+        MaterialTextChunk first = new MaterialTextChunk(0, "new first", "chunk 1");
+        MaterialTextChunk second = new MaterialTextChunk(1, "new second", "chunk 2");
+        String firstPointId = MaterialIndexingService.qdrantPointIdOf(100L, 0);
+        String secondPointId = MaterialIndexingService.qdrantPointIdOf(100L, 1);
+        MaterialChunk existingFirst = chunk(material, 0, "old first", firstPointId, 300L);
+        MaterialChunk existingSecond = chunk(material, 1, "old second", secondPointId, 301L);
+        when(materialTextChunker.chunk("source text")).thenReturn(List.of(first, second));
+        when(materialEmbeddingService.embedChunks(List.of(first, second)))
+                .thenReturn(List.of(
+                        new EmbeddedMaterialTextChunk(first, new float[]{0.1f}),
+                        new EmbeddedMaterialTextChunk(second, new float[]{0.2f})
+                ));
+        when(materialChunkRepository.findAllByMaterial_IdOrderByChunkIndexAsc(100L))
+                .thenReturn(List.of(existingFirst, existingSecond));
+        org.mockito.Mockito.doNothing()
+                .doThrow(new RuntimeException("qdrant"))
+                .when(qdrantClient)
+                .upsertPoint(any(), any(float[].class), any());
+
+        assertThatThrownBy(() -> indexingService.indexMaterialContent(material, "source text"))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_VECTOR_STORE_FAILED);
+        verify(qdrantClient, never()).deletePoints(any());
+        verify(materialChunkRepository, never()).save(any(MaterialChunk.class));
     }
 
     @Test

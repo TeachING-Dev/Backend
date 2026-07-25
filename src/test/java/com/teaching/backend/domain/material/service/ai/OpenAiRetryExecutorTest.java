@@ -6,6 +6,7 @@ import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
 import org.junit.jupiter.api.Test;
 
+import java.net.SocketTimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -54,6 +55,21 @@ class OpenAiRetryExecutorTest {
                 .isInstanceOf(MaterialException.class)
                 .extracting("errorCode")
                 .isEqualTo(MaterialErrorCode.AI_ANALYSIS_GENERATION_FAILED);
+        assertThat(calls).hasValue(2);
+    }
+
+    @Test
+    void retriesTimeoutCauseOnceAndReturnsSecondResult() {
+        AtomicInteger calls = new AtomicInteger();
+
+        String result = retryExecutor.execute(() -> {
+            if (calls.incrementAndGet() == 1) {
+                throw new RuntimeException(new SocketTimeoutException("timeout"));
+            }
+            return "ok";
+        });
+
+        assertThat(result).isEqualTo("ok");
         assertThat(calls).hasValue(2);
     }
 

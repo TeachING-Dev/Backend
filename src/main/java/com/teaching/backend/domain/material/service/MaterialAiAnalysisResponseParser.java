@@ -26,8 +26,13 @@ public class MaterialAiAnalysisResponseParser {
 
     private static final Pattern CODE_FENCE_PATTERN =
             Pattern.compile("```(?:json)?\\s*([\\s\\S]*?)\\s*```");
+    private static final Pattern MARKDOWN_HEADING_PATTERN =
+            Pattern.compile("(?m)^\\s{0,3}#{1,6}\\s*\\S+");
     private static final Pattern MARKDOWN_BULLET_PATTERN =
-            Pattern.compile("(?m)^\\s*[-*]\\s+");
+            Pattern.compile("(?m)(^|\\R)\\s*([-*]|\\d+[.)])\\s+");
+    private static final Pattern MARKDOWN_INLINE_LIST_PATTERN =
+            Pattern.compile("\\s[-*]\\s+");
+    private static final int MIN_LONG_ANALYSIS_LENGTH = 20;
     private static final int RAW_RESPONSE_LOG_LIMIT = 500;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -99,9 +104,11 @@ public class MaterialAiAnalysisResponseParser {
     }
 
     private void validateMarkdownAnalysis(String longAnalysis) {
-        if (!longAnalysis.contains("##")
-                || !MARKDOWN_BULLET_PATTERN.matcher(longAnalysis).find()
-                || !longAnalysis.contains("**")) {
+        boolean hasMarkdownSignal = MARKDOWN_HEADING_PATTERN.matcher(longAnalysis).find()
+                || MARKDOWN_BULLET_PATTERN.matcher(longAnalysis).find()
+                || MARKDOWN_INLINE_LIST_PATTERN.matcher(longAnalysis).find()
+                || longAnalysis.contains("**");
+        if (longAnalysis.length() < MIN_LONG_ANALYSIS_LENGTH || !hasMarkdownSignal) {
             throw parseFailed("long_analysis_markdown_syntax_invalid");
         }
     }
