@@ -67,10 +67,6 @@ app:
 
   teacher-image-base-url: ${TEACHER_IMAGE_BASE_URL}
 
-aws:
-  s3:
-    bucket: ${AWS_S3_BUCKET}
-    region: ${AWS_S3_REGION:ap-northeast-2}
 
 cookie:
   secure: true
