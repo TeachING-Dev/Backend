@@ -25,7 +25,7 @@ public class ChatRoomService {
     private static final int TITLE_MAX_LENGTH = 15;
     private static final String TITLE_ELLIPSIS = "...";
     private static final int FREE_CHATROOM_LIMIT = 10;
-    private static final String DEFAULT_TITLE = "새 채팅";
+    static final String DEFAULT_TITLE = "새 채팅";
 
     private final ChatRoomRepository chatRoomRepository;
     private final UserRepository userRepository;

@@ -46,11 +46,9 @@ class ChatAskWriter {
             throw new ChatException(ChatErrorCode.DAILY_QUESTION_LIMIT_EXCEEDED);
         }
 
-        boolean isFirstMessage = chatMessageRepository.countByChatRoomId(chatRoomId) == 0;
-
         ChatMessage userMessage = chatMessageRepository.save(ChatMessage.createUserMessage(chatRoom, content));
 
-        return new Reservation(chatRoomId, userId, userMessage, isFirstMessage);
+        return new Reservation(chatRoomId, userId, userMessage);
     }
 
     // 외부 호출이 실패한 경우 예약해둔 유저 메시지를 삭제해 quota를 반환한다.
@@ -65,7 +63,9 @@ class ChatAskWriter {
         // 외부 호출 도중 방이 삭제되는 경우를 대비해 쓰기 시점에 다시 조회
         ChatRoom chatRoom = chatRoomService.getChatRoom(reservation.chatRoomId(), reservation.userId());
 
-        if (reservation.isFirstMessage()) {
+        // 예약 시점이 아니라 확정 시점에 판단해야, 먼저 예약됐다가 실패한 메시지 때문에
+        // 실제로 살아남은 첫 메시지가 "첫 질문"으로 인정 못 받는 경우를 피할 수 있다.
+        if (ChatRoomService.DEFAULT_TITLE.equals(chatRoom.getTitle())) {
             chatRoom.updateTitle(chatRoomService.generateTitle(reservation.userMessage().getContent()));
         }
 
@@ -104,6 +104,6 @@ class ChatAskWriter {
         return chunk.getPosition() != null ? chunk.getPosition() : ("청크 " + chunk.getChunkIndex());
     }
 
-    record Reservation(Long chatRoomId, Long userId, ChatMessage userMessage, boolean isFirstMessage) {
+    record Reservation(Long chatRoomId, Long userId, ChatMessage userMessage) {
     }
 }
