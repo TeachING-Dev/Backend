@@ -54,42 +54,48 @@ public interface TeachingMapRepository extends JpaRepository<TeachingMap, Long> 
     );
 
     @Query(
-            value = "SELECT * FROM teaching_maps WHERE user_id = :userId AND deleted_at IS NOT NULL ORDER BY deleted_at DESC",
+            value = "SELECT * FROM teaching_maps WHERE user_id = :userId AND deleted_at IS NOT NULL ORDER BY deleted_at DESC, id DESC",
+            countQuery = "SELECT COUNT(*) FROM teaching_maps WHERE user_id = :userId AND deleted_at IS NOT NULL",
             nativeQuery = true
     )
-    List<TeachingMap> findTrashedByUserIdOrderByDeletedAtDesc(@Param("userId") Long userId);
+    Page<TeachingMap> findTrashedByUserIdOrderByDeletedAtDesc(@Param("userId") Long userId, Pageable pageable);
 
     @Query(
-            value = "SELECT * FROM teaching_maps WHERE user_id = :userId AND deleted_at IS NOT NULL ORDER BY deleted_at ASC",
+            value = "SELECT * FROM teaching_maps WHERE user_id = :userId AND deleted_at IS NOT NULL ORDER BY deleted_at ASC, id ASC",
+            countQuery = "SELECT COUNT(*) FROM teaching_maps WHERE user_id = :userId AND deleted_at IS NOT NULL",
             nativeQuery = true
     )
-    List<TeachingMap> findTrashedByUserIdOrderByDeletedAtAsc(@Param("userId") Long userId);
+    Page<TeachingMap> findTrashedByUserIdOrderByDeletedAtAsc(@Param("userId") Long userId, Pageable pageable);
 
+    /** 요청한 티칭맵ID 중 실제로 복구 가능한(휴지통에 있는) ID만 골라낸다. */
     @Query(
-            value = "SELECT COUNT(*) FROM teaching_maps WHERE id = :teachingMapId AND user_id = :userId",
+            value = """
+                    SELECT id FROM teaching_maps
+                    WHERE id IN (:teachingMapIds)
+                      AND user_id = :userId
+                      AND deleted_at IS NOT NULL
+                    """,
             nativeQuery = true
     )
-    long countByIdAndUserIdIncludingDeleted(
-            @Param("teachingMapId") Long teachingMapId,
-            @Param("userId") Long userId
-    );
-
-    @Query(
-            value = "SELECT COUNT(*) FROM teaching_maps WHERE id = :teachingMapId AND user_id = :userId AND deleted_at IS NOT NULL",
-            nativeQuery = true
-    )
-    long countDeletedByIdAndUserId(
-            @Param("teachingMapId") Long teachingMapId,
+    List<Long> findRestorableTrashedIds(
+            @Param("teachingMapIds") List<Long> teachingMapIds,
             @Param("userId") Long userId
     );
 
     @Modifying
     @Query(
-            value = "UPDATE teaching_maps SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = :teachingMapId AND user_id = :userId AND deleted_at IS NOT NULL",
+            value = """
+                    UPDATE teaching_maps
+                    SET deleted_at = NULL,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id IN (:teachingMapIds)
+                      AND user_id = :userId
+                      AND deleted_at IS NOT NULL
+                    """,
             nativeQuery = true
     )
-    int restoreDeletedTeachingMap(
-            @Param("teachingMapId") Long teachingMapId,
+    int restoreTrashedTeachingMaps(
+            @Param("teachingMapIds") List<Long> teachingMapIds,
             @Param("userId") Long userId
     );
 }

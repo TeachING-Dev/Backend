@@ -1,20 +1,24 @@
 package com.teaching.backend.domain.trash.dto.response;
 
-import com.teaching.backend.domain.teachingmap.entity.TeachingMap;
+import org.springframework.data.domain.Page;
 
-import java.time.LocalDateTime;
+import java.util.List;
 
 public record TrashTeachingMapListResponse(
-        Long teachingMapId,
-        String title,
-        LocalDateTime deletedAt
+        List<TrashTeachingMapItemResponse> content,
+        int page,
+        int size,
+        long totalElements,
+        int totalPages
 ) {
 
-    public static TrashTeachingMapListResponse from(TeachingMap teachingMap) {
+    public static TrashTeachingMapListResponse of(Page<TrashTeachingMapItemResponse> page) {
         return new TrashTeachingMapListResponse(
-                teachingMap.getId(),
-                teachingMap.getTitle(),
-                teachingMap.getDeletedAt()
+                page.getContent(),
+                page.getNumber(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages()
         );
     }
 }
