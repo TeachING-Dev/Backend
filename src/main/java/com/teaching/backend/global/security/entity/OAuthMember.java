@@ -14,14 +14,16 @@ public class OAuthMember implements OAuth2User {
 
     private final User user;
     private final Map<String, Object> attributes;
+    private final boolean isNewUser;
 
-    private OAuthMember(User user, Map<String, Object> attributes) {
+    private OAuthMember(User user, Map<String, Object> attributes,boolean isNewUser) {
         this.user = user;
         this.attributes = attributes;
+        this.isNewUser = isNewUser;
     }
 
-    public static OAuthMember from(User user, Map<String, Object> attributes) {
-        return new OAuthMember(user, attributes);
+    public static OAuthMember from(User user, Map<String, Object> attributes,boolean isNewUser) {
+        return new OAuthMember(user, attributes,isNewUser);
     }
 
     @Override

@@ -1,20 +1,24 @@
 package com.teaching.backend.domain.trash.dto.response;
 
-import com.teaching.backend.domain.folder.entity.Folder;
+import org.springframework.data.domain.Page;
 
-import java.time.LocalDateTime;
+import java.util.List;
 
 public record TrashFolderListResponse(
-        Long folderId,
-        String name,
-        LocalDateTime deletedAt
+        List<TrashFolderItemResponse> content,
+        int page,
+        int size,
+        long totalElements,
+        int totalPages
 ) {
 
-    public static TrashFolderListResponse from(Folder folder) {
+    public static TrashFolderListResponse of(Page<TrashFolderItemResponse> page) {
         return new TrashFolderListResponse(
-                folder.getId(),
-                folder.getName(),
-                folder.getDeletedAt()
+                page.getContent(),
+                page.getNumber(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages()
         );
     }
 }

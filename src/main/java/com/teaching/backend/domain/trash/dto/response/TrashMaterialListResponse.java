@@ -1,20 +1,24 @@
 package com.teaching.backend.domain.trash.dto.response;
 
-import com.teaching.backend.domain.material.entity.Material;
+import org.springframework.data.domain.Page;
 
-import java.time.LocalDateTime;
+import java.util.List;
 
 public record TrashMaterialListResponse(
-        Long materialId,
-        String analysisTitle,
-        LocalDateTime deletedAt
+        List<TrashMaterialItemResponse> content,
+        int page,
+        int size,
+        long totalElements,
+        int totalPages
 ) {
 
-    public static TrashMaterialListResponse from(Material material) {
+    public static TrashMaterialListResponse of(Page<TrashMaterialItemResponse> page) {
         return new TrashMaterialListResponse(
-                material.getId(),
-                material.getAnalysisTitle(),
-                material.getDeletedAt()
+                page.getContent(),
+                page.getNumber(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages()
         );
     }
 }
