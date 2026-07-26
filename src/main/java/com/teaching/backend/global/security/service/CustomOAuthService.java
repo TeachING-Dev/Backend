@@ -72,6 +72,7 @@ public class CustomOAuthService extends DefaultOAuth2UserService {
 
                 String email = (String) kakaoAccount.get("email");
                 String nickname = profile != null ? (String) profile.get("nickname") : null;
+                String profileImageUrl = profile != null ? (String) profile.get("profile_image_url") : null;
 
                 if (email == null) {
                     throw new UserException(UserErrorCode.EMAIL_CONSENT_REQUIRED);
@@ -83,7 +84,7 @@ public class CustomOAuthService extends DefaultOAuth2UserService {
                 }
 
 
-                yield new KakaoDTO(socialUid, email, nickname);
+                yield new KakaoDTO(socialUid, email, nickname,profileImageUrl);
             }
             case GOOGLE -> {
                 Object subAttribute = oAuth2User.getAttribute("sub");
@@ -94,7 +95,9 @@ public class CustomOAuthService extends DefaultOAuth2UserService {
 
                 String email = oAuth2User.getAttribute("email");
                 String nickname = oAuth2User.getAttribute("name");
+                String profileImageUrl = oAuth2User.getAttribute("picture");
                 Boolean emailVerified = oAuth2User.getAttribute("email_verified");
+
 
                 if (email == null) {
                     throw new UserException(UserErrorCode.EMAIL_CONSENT_REQUIRED);
@@ -108,7 +111,7 @@ public class CustomOAuthService extends DefaultOAuth2UserService {
                     nickname = "사용자" + socialUid.substring(0, Math.min(6, socialUid.length()));
                 }
 
-                yield new GoogleDTO(socialUid, email, nickname);
+                yield new GoogleDTO(socialUid, email, nickname,profileImageUrl);
             }
 
             default -> throw new AuthException(AuthErrorCode.NOT_SUPPORT_SOCIAL_PROVIDER);
@@ -120,7 +123,7 @@ public class CustomOAuthService extends DefaultOAuth2UserService {
                 .orElseGet(()  -> {
                     isNewUserHolder[0] = true; // 진짜로 새 User가 만들어질 때만 true
                     return userRepository.save(
-                            User.create(dto.getEmail(), dto.getNickname(), null, null, null)
+                            User.create(dto.getEmail(), dto.getNickname(), null, null, dto.getProfileImageUrl())
                     );
                 });
 
