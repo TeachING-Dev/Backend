@@ -6,6 +6,9 @@ import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.exception.MaterialException;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -24,6 +27,22 @@ class MaterialUrlAnalysisPromptBuilderTest {
         when(promptProvider.systemPrompt()).thenReturn("system prompt");
 
         assertThat(promptBuilder.buildSystemMessage()).isEqualTo("system prompt");
+    }
+
+    @Test
+    void systemPromptRequiresHighlightLiteralCopyAndAllowedTypes() throws Exception {
+        String systemPrompt = Files.readString(
+                Path.of("src/main/resources/prompts/material/url-analysis-system-prompt.md"),
+                StandardCharsets.UTF_8
+        );
+
+        assertThat(systemPrompt).contains(
+                "highlights[].text는 long_analysis에 이미 존재하는 연속된 문자열을 그대로 복사한 값이어야 합니다.",
+                "highlights[].text를 새로 요약, 재작성, 번역, 교정, 축약하지 마십시오.",
+                "long_analysis에서 그대로 복사할 수 있는 구간만 highlights에 포함하고, 존재하지 않는 문장을 임의로 만들지 마십시오.",
+                "highlights[].type은 반드시 \"핵심\" 또는 \"주의\" 중 하나만 사용하십시오.",
+                "\"중요\", \"정보\", \"참고\", \"요약\" 등 다른 표현은 사용하지 마십시오."
+        );
     }
 
     @Test

@@ -22,6 +22,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ContentAnalysisMaterialAiStage implements MaterialAiAnalysisStage {
 
+    private static final int MAX_PARSE_ATTEMPTS = 2;
+
     private final OpenAiClient openAiClient;
     private final MaterialUrlAnalysisPromptBuilder materialUrlAnalysisPromptBuilder;
     private final MaterialAiAnalysisResponseParser materialAiAnalysisResponseParser;
@@ -39,11 +41,7 @@ public class ContentAnalysisMaterialAiStage implements MaterialAiAnalysisStage {
         List<String> folderNames = findActiveFolderNames(context.userId());
         String systemPrompt = materialUrlAnalysisPromptBuilder.buildSystemMessage();
         String userMessage = materialUrlAnalysisPromptBuilder.buildUserMessage(context.extractedContent(), folderNames);
-        String rawResponse = openAiRetryExecutor.execute(
-                () -> openAiClient.chatCompleteJson(systemPrompt, userMessage)
-        );
-        MaterialUrlAnalysisParseResult parseResult =
-                materialAiAnalysisResponseParser.parseUrlAnalysis(rawResponse, folderNames);
+        MaterialUrlAnalysisParseResult parseResult = executeAndParse(systemPrompt, userMessage, folderNames);
         MaterialAiAnalysisResult result = parseResult.analysisResult();
 
         return new MaterialAiStageResult(
@@ -52,6 +50,30 @@ public class ContentAnalysisMaterialAiStage implements MaterialAiAnalysisStage {
                 parseResult.highlights(),
                 parseResult.recommendedFolderName()
         );
+    }
+
+    private MaterialUrlAnalysisParseResult executeAndParse(
+            String systemPrompt,
+            String userMessage,
+            List<String> folderNames
+    ) {
+        MaterialException lastParseFailure = null;
+        for (int attempt = 1; attempt <= MAX_PARSE_ATTEMPTS; attempt++) {
+            String rawResponse = openAiRetryExecutor.execute(
+                    () -> openAiClient.chatCompleteJson(systemPrompt, userMessage)
+            );
+            try {
+                return materialAiAnalysisResponseParser.parseUrlAnalysis(rawResponse, folderNames);
+            } catch (MaterialException e) {
+                if (e.getErrorCode() != MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED
+                        || attempt == MAX_PARSE_ATTEMPTS) {
+                    throw e;
+                }
+                lastParseFailure = e;
+            }
+        }
+
+        throw lastParseFailure;
     }
 
     private List<String> findActiveFolderNames(Long userId) {

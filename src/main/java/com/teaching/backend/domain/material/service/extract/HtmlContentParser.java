@@ -1,55 +1,94 @@
 package com.teaching.backend.domain.material.service.extract;
 
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Attribute;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.TextNode;
+import org.jsoup.select.Elements;
+
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.Set;
 
 public class HtmlContentParser {
 
-    private static final Pattern SCRIPT_STYLE_PATTERN = Pattern.compile(
-            "(?is)<(script|style|noscript)[^>]*>.*?</\\1>"
+    private static final List<String> CONTENT_TAGS = List.of("article", "main", "section", "div");
+    private static final List<String> NOISE_SIGNALS = List.of(
+            "advertisement",
+            "ad-",
+            "ads-",
+            "ad_",
+            "ads_",
+            "banner",
+            "sponsor",
+            "comment",
+            "reply",
+            "menu",
+            "hidden",
+            "login",
+            "follow",
+            "share",
+            "sidebar",
+            "recommend",
+            "related",
+            "pagination",
+            "prev",
+            "next",
+            "toc"
     );
-    private static final Pattern NOISE_BLOCK_PATTERN = Pattern.compile(
-            "(?is)<(nav|footer|aside)[^>]*>.*?</\\1>"
+    private static final Set<String> BLOCK_TAGS = Set.of(
+            "article",
+            "main",
+            "section",
+            "div",
+            "p",
+            "li",
+            "ul",
+            "ol",
+            "h1",
+            "h2",
+            "h3",
+            "h4",
+            "h5",
+            "h6",
+            "blockquote",
+            "pre"
     );
-    private static final Pattern NOISE_CLASS_PATTERN = Pattern.compile(
-            "(?is)<([a-z0-9]+)\\b(?=[^>]*(class|id)\\s*=\\s*(['\"])[^'\"]*(advertisement|ad-|ads-|ad_|ads_|banner|sponsor|comment|reply|menu|hidden|login|follow|share|sidebar|recommend|related|pagination|prev|next|toc)[^'\"]*\\3)[^>]*>.*?</\\1>"
-    );
-    private static final Pattern COMMENT_PATTERN = Pattern.compile("(?is)<!--.*?-->");
-    private static final Pattern TAG_PATTERN = Pattern.compile("(?is)<[^>]+>");
 
     public ParsedHtmlContent parse(String originalUrl, String html, List<String> contentClassSignals) {
-        String cleanedHtml = removeNoise(html);
+        Document document = Jsoup.parse(html == null ? "" : html, originalUrl);
+        removeNoise(document);
         String title = firstNonBlank(
-                metaContent(cleanedHtml, "property", "og:title"),
-                firstTagText(cleanedHtml, "article", "h1"),
-                firstTagText(cleanedHtml, "main", "h1"),
-                tagText(cleanedHtml, "h1"),
-                tagText(cleanedHtml, "title")
+                metaContent(document, "property", "og:title"),
+                firstTagText(document, "article", "h1"),
+                firstTagText(document, "main", "h1"),
+                tagText(document, "h1"),
+                tagText(document, "title")
         ).orElse(null);
         String thumbnailUrl = firstNonBlank(
-                metaContent(cleanedHtml, "property", "og:image"),
-                metaContent(cleanedHtml, "name", "twitter:image")
+                metaContent(document, "property", "og:image"),
+                metaContent(document, "name", "twitter:image")
         ).orElse(null);
         String author = firstNonBlank(
-                metaContent(cleanedHtml, "name", "author"),
-                metaContent(cleanedHtml, "property", "article:author")
+                metaContent(document, "name", "author"),
+                metaContent(document, "property", "article:author")
         ).orElse(null);
         LocalDateTime publishedAt = firstNonBlank(
-                metaContent(cleanedHtml, "property", "article:published_time"),
-                metaContent(cleanedHtml, "name", "date"),
-                metaContent(cleanedHtml, "itemprop", "datePublished"),
-                firstAttribute(cleanedHtml, "time", "datetime")
+                metaContent(document, "property", "article:published_time"),
+                metaContent(document, "name", "date"),
+                metaContent(document, "itemprop", "datePublished"),
+                firstAttribute(document, "time", "datetime")
         ).flatMap(this::parseDateTime).orElse(null);
 
-        String contentHtml = findContentHtml(cleanedHtml, contentClassSignals)
-                .orElse(cleanedHtml);
-        String content = htmlToText(contentHtml);
+        Element contentElement = findContentElement(document, contentClassSignals)
+                .orElse(document.body() == null ? document : document.body());
+        String content = elementToText(contentElement);
 
         return new ParsedHtmlContent(
                 originalUrl,
@@ -61,99 +100,84 @@ public class HtmlContentParser {
         );
     }
 
-    private Optional<String> findContentHtml(String html, List<String> contentClassSignals) {
-        List<String> signalCandidates = new ArrayList<>();
+    private Optional<Element> findContentElement(Document document, List<String> contentClassSignals) {
+        List<Element> signalCandidates = new ArrayList<>();
         for (String signal : contentClassSignals) {
-            for (String tag : List.of("article", "main", "section", "div")) {
-                signalCandidates.addAll(tagsWithClassContaining(html, tag, signal));
+            for (String tag : CONTENT_TAGS) {
+                signalCandidates.addAll(tagsWithClassContaining(document, tag, signal));
             }
         }
 
-        Optional<String> signalContent = longestTextCandidate(signalCandidates);
+        Optional<Element> signalContent = longestTextCandidate(signalCandidates);
         if (signalContent.isPresent()) {
             return signalContent;
         }
 
-        List<String> candidates = new ArrayList<>();
-        tagHtml(html, "article").ifPresent(candidates::add);
-        tagHtml(html, "main").ifPresent(candidates::add);
+        List<Element> candidates = new ArrayList<>();
+        firstTag(document, "article").ifPresent(candidates::add);
+        firstTag(document, "main").ifPresent(candidates::add);
 
         return longestTextCandidate(candidates);
     }
 
-    private Optional<String> longestTextCandidate(List<String> candidates) {
+    private Optional<Element> longestTextCandidate(List<Element> candidates) {
         return candidates.stream()
+                .filter(candidate -> normalizeBlank(elementToText(candidate)).isPresent())
+                .max((left, right) -> Integer.compare(elementToText(left).length(), elementToText(right).length()));
+    }
+
+    private void removeNoise(Document document) {
+        document.select("script, style, noscript, nav, footer, aside").remove();
+        document.select("[class], [id]").stream()
+                .filter(this::hasNoiseSignal)
+                .forEach(Element::remove);
+    }
+
+    private boolean hasNoiseSignal(Element element) {
+        String value = (element.className() + " " + element.id()).toLowerCase(Locale.ROOT);
+        return NOISE_SIGNALS.stream().anyMatch(value::contains);
+    }
+
+    private Optional<String> metaContent(Document document, String attributeName, String attributeValue) {
+        return document.select("meta").stream()
+                .filter(meta -> attributeValue.equalsIgnoreCase(meta.attr(attributeName)))
+                .map(meta -> meta.attr("content"))
                 .map(this::normalizeBlank)
                 .flatMap(Optional::stream)
-                .max((left, right) -> Integer.compare(htmlToText(left).length(), htmlToText(right).length()));
+                .findFirst();
     }
 
-    private String removeNoise(String html) {
-        String result = COMMENT_PATTERN.matcher(html).replaceAll(" ");
-        result = SCRIPT_STYLE_PATTERN.matcher(result).replaceAll(" ");
-        result = NOISE_BLOCK_PATTERN.matcher(result).replaceAll(" ");
-        return NOISE_CLASS_PATTERN.matcher(result).replaceAll(" ");
+    private Optional<String> firstAttribute(Document document, String tag, String attributeName) {
+        return document.select(tag).stream()
+                .map(element -> element.attr(attributeName))
+                .map(this::normalizeBlank)
+                .flatMap(Optional::stream)
+                .findFirst();
     }
 
-    private Optional<String> metaContent(String html, String attributeName, String attributeValue) {
-        Pattern pattern = Pattern.compile(
-                "(?is)<meta\\b(?=[^>]*\\b" + Pattern.quote(attributeName) + "\\s*=\\s*(['\"])" +
-                        Pattern.quote(attributeValue) + "\\1)(?=[^>]*\\bcontent\\s*=\\s*(['\"])(.*?)\\2)[^>]*>"
-        );
-        Matcher matcher = pattern.matcher(html);
-        if (matcher.find()) {
-            return normalizeBlank(decodeHtml(matcher.group(3)));
-        }
-
-        return Optional.empty();
-    }
-
-    private Optional<String> firstAttribute(String html, String tag, String attributeName) {
-        Pattern pattern = Pattern.compile(
-                "(?is)<" + tag + "\\b(?=[^>]*\\b" + Pattern.quote(attributeName) +
-                        "\\s*=\\s*(['\"])(.*?)\\1)[^>]*>"
-        );
-        Matcher matcher = pattern.matcher(html);
-        if (matcher.find()) {
-            return normalizeBlank(decodeHtml(matcher.group(2)));
-        }
-
-        return Optional.empty();
-    }
-
-    private Optional<String> firstTagText(String html, String parentTag, String childTag) {
-        return tagHtml(html, parentTag)
-                .flatMap(parentHtml -> tagText(parentHtml, childTag));
-    }
-
-    private Optional<String> tagText(String html, String tag) {
-        return tagHtml(html, tag)
-                .map(this::htmlToText)
+    private Optional<String> firstTagText(Document document, String parentTag, String childTag) {
+        return firstTag(document, parentTag)
+                .flatMap(parent -> firstTag(parent, childTag))
+                .map(this::elementToText)
                 .flatMap(this::normalizeBlank);
     }
 
-    private Optional<String> tagHtml(String html, String tag) {
-        Pattern pattern = Pattern.compile("(?is)<" + tag + "\\b[^>]*>(.*?)</" + tag + ">");
-        Matcher matcher = pattern.matcher(html);
-        if (matcher.find()) {
-            return normalizeBlank(matcher.group(1));
-        }
-
-        return Optional.empty();
+    private Optional<String> tagText(Document document, String tag) {
+        return firstTag(document, tag)
+                .map(this::elementToText)
+                .flatMap(this::normalizeBlank);
     }
 
-    private List<String> tagsWithClassContaining(String html, String tag, String classSignal) {
-        Pattern pattern = Pattern.compile(
-                "(?is)<" + tag + "\\b(?=[^>]*\\bclass\\s*=\\s*(['\"])[^'\"]*" +
-                        Pattern.quote(classSignal) + "[^'\"]*\\1)[^>]*>(.*?)</" + tag + ">"
-        );
-        Matcher matcher = pattern.matcher(html);
-        List<String> sections = new ArrayList<>();
-        while (matcher.find()) {
-            normalizeBlank(matcher.group(2)).ifPresent(sections::add);
-        }
+    private Optional<Element> firstTag(Element element, String tag) {
+        return Optional.ofNullable(element.selectFirst(tag));
+    }
 
-        return sections;
+    private List<Element> tagsWithClassContaining(Document document, String tag, String classSignal) {
+        String normalizedSignal = classSignal.toLowerCase(Locale.ROOT);
+        Elements elements = document.select(tag + "[class]");
+        return elements.stream()
+                .filter(element -> element.className().toLowerCase(Locale.ROOT).contains(normalizedSignal))
+                .toList();
     }
 
     @SafeVarargs
@@ -179,13 +203,33 @@ public class HtmlContentParser {
         }
     }
 
-    private String htmlToText(String html) {
-        String withParagraphBreaks = html
-                .replaceAll("(?is)</(p|div|section|article|main|h1|h2|h3|li|br)>", "\n")
-                .replaceAll("(?is)<br\\s*/?>", "\n");
-        String withoutTags = TAG_PATTERN.matcher(withParagraphBreaks).replaceAll(" ");
-        String decoded = decodeHtml(withoutTags);
-        return normalizeText(decoded);
+    private String elementToText(Element element) {
+        StringBuilder builder = new StringBuilder();
+        appendText(element, builder);
+        return normalizeText(builder.toString());
+    }
+
+    private void appendText(Node node, StringBuilder builder) {
+        if (node instanceof TextNode textNode) {
+            builder.append(textNode.text()).append(' ');
+            return;
+        }
+
+        if (node instanceof Element element && element.tagName().equalsIgnoreCase("br")) {
+            builder.append('\n');
+            return;
+        }
+
+        boolean block = node instanceof Element element && BLOCK_TAGS.contains(element.tagName().toLowerCase(Locale.ROOT));
+        if (block) {
+            builder.append('\n');
+        }
+        for (Node child : node.childNodes()) {
+            appendText(child, builder);
+        }
+        if (block) {
+            builder.append('\n');
+        }
     }
 
     private String normalizeText(String text) {
@@ -234,23 +278,27 @@ public class HtmlContentParser {
         return normalized.isBlank() ? Optional.empty() : Optional.of(normalized);
     }
 
-    private String decodeHtml(String value) {
-        return value
-                .replace("&nbsp;", " ")
-                .replace("&amp;", "&")
-                .replace("&lt;", "<")
-                .replace("&gt;", ">")
-                .replace("&quot;", "\"")
-                .replace("&#39;", "'")
-                .replace("&apos;", "'");
-    }
-
     public boolean looksLikeArticle(String html) {
-        String lowerHtml = html.toLowerCase(Locale.ROOT);
-        return lowerHtml.contains("<article")
-                || lowerHtml.contains("og:type\" content=\"article")
-                || lowerHtml.contains("og:type' content='article")
-                || lowerHtml.contains("datepublished")
-                || lowerHtml.contains("article:published_time");
+        Document document = Jsoup.parse(html == null ? "" : html);
+        if (document.selectFirst("article") != null) {
+            return true;
+        }
+        if (metaContent(document, "property", "article:published_time").isPresent()) {
+            return true;
+        }
+        if (document.select("meta").stream()
+                .anyMatch(meta -> "og:type".equalsIgnoreCase(meta.attr("property"))
+                        && "article".equalsIgnoreCase(meta.attr("content")))) {
+            return true;
+        }
+        for (Element element : document.getAllElements()) {
+            for (Attribute attribute : element.attributes()) {
+                if (attribute.getKey().equalsIgnoreCase("itemprop")
+                        && attribute.getValue().equalsIgnoreCase("datePublished")) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 }

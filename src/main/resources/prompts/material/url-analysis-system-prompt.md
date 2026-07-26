@@ -32,8 +32,15 @@ Constraints (반드시 준수):
 - Markdown Syntax: long_analysis는 반드시 ##(제목), *(리스트), **(강조)** 문법을 사용하여 가독성을 극대화하십시오.
 - Highlight Extraction: long_analysis 작성 후, 그 본문에서 사용자가 반드시 숙지해야 할 중요한 문장 3~5개를 선정하여 highlights 배열에 담으십시오.
 - Highlight Consistency: highlights[].text는 long_analysis 내 문장과 토씨 하나 틀리지 않고 100% 일치해야 합니다.
+- Highlight Literal Copy: highlights[].text는 long_analysis에 이미 존재하는 연속된 문자열을 그대로 복사한 값이어야 합니다.
+- Highlight No Rewrite: highlights[].text를 새로 요약, 재작성, 번역, 교정, 축약하지 마십시오.
+- Highlight Exact Match: 조사, 어미, 문장부호, 공백까지 long_analysis의 원문과 동일하게 유지하십시오.
+- Highlight Invalid Example: long_analysis에 "작은 패킷은 ACK를 기다리는 동안 전송이 지연될 수 있습니다."가 있을 때, "Nagle 알고리즘으로 인해 작은 패킷의 전송이 지연될 수 있습니다."처럼 의미만 비슷한 문장은 금지합니다.
+- Highlight Valid Example: 위 long_analysis에서는 "작은 패킷은 ACK를 기다리는 동안 전송이 지연될 수 있습니다."를 그대로 복사해야 합니다.
+- Highlight Availability: long_analysis에서 그대로 복사할 수 있는 구간만 highlights에 포함하고, 존재하지 않는 문장을 임의로 만들지 마십시오.
 - Highlight Type:
   - highlights[].type은 반드시 "핵심" 또는 "주의" 중 하나만 사용하십시오.
+  - "중요", "정보", "참고", "요약" 등 다른 표현은 사용하지 마십시오.
   - 중심 개념이나 반드시 이해해야 하는 내용은 "핵심"으로 작성하십시오.
   - 오해하기 쉬운 내용, 제한 조건 또는 특별히 유의해야 하는 내용은 "주의"로 작성하십시오.
 - Tag Generation:

@@ -16,6 +16,7 @@ import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -268,6 +269,8 @@ class ExternalHtmlDocumentClientTest {
     @Test
     void connectsToValidatedResolvedAddressWithoutResolvingHostAgain() throws Exception {
         AtomicReference<String> hostHeader = new AtomicReference<>();
+        AtomicInteger resolveCount = new AtomicInteger();
+        AtomicReference<String> resolvedHost = new AtomicReference<>();
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/", exchange -> {
             hostHeader.set(exchange.getRequestHeaders().getFirst("Host"));
@@ -283,13 +286,21 @@ class ExternalHtmlDocumentClientTest {
                 HttpClient.create(),
                 Duration.ofSeconds(2),
                 false,
-                host -> List.of(InetAddress.getByName("127.0.0.1"))
+                host -> {
+                    resolvedHost.set(host);
+                    if (resolveCount.incrementAndGet() > 1) {
+                        throw new IllegalStateException("Host was resolved more than once");
+                    }
+                    return List.of(InetAddress.getByName("127.0.0.1"));
+                }
         );
 
         HtmlDocument document = client.fetch("http://public-looking.example:" + port + "/article");
 
         assertThat(document.body()).contains("pinned address content");
         assertThat(hostHeader.get()).isEqualTo("public-looking.example:" + port);
+        assertThat(resolvedHost.get()).isEqualTo("public-looking.example");
+        assertThat(resolveCount.get()).isEqualTo(1);
     }
 
     private String startServer(

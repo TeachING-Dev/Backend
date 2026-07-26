@@ -125,11 +125,13 @@ public class MaterialAiAnalysisResponseParser {
         return highlights.stream()
                 .map(highlight -> {
                     String text = requiredTrimmed(highlight == null ? null : highlight.text());
-                    if (!seenTexts.add(text) || !longAnalysis.contains(text)) {
+                    int highlightStart = longAnalysis.indexOf(text);
+                    if (!seenTexts.add(text) || highlightStart < 0) {
                         throw parseFailed("highlight_text_invalid");
                     }
                     MaterialAiHighlightType type = MaterialAiHighlightType.fromLabel(highlight.type());
-                    return new MaterialAiHighlightResult(text, type);
+                    String exactText = longAnalysis.substring(highlightStart, highlightStart + text.length());
+                    return new MaterialAiHighlightResult(exactText, type);
                 })
                 .toList();
     }

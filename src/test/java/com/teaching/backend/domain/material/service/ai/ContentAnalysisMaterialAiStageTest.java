@@ -34,6 +34,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -103,21 +104,49 @@ class ContentAnalysisMaterialAiStageTest {
     }
 
     @Test
-    void parsingFailureIsNotRetriedInsideStage() {
+    void parsingFailureRetriesOnceAndThenSucceeds() {
+        MaterialAiStageContext context = context();
+        MaterialAiAnalysisResult parsed = new MaterialAiAnalysisResult("summary", "detail", List.of("tag"), null, null);
+        when(folderRepository.findAllByUser_Id(org.mockito.ArgumentMatchers.eq(1L), any(Sort.class)))
+                .thenReturn(List.of(folder("Backend")));
+        when(materialUrlAnalysisPromptBuilder.buildSystemMessage()).thenReturn("system");
+        when(materialUrlAnalysisPromptBuilder.buildUserMessage(context.extractedContent(), List.of("Backend"))).thenReturn("user");
+        when(openAiClient.chatCompleteJson("system", "user"))
+                .thenReturn("invalid raw")
+                .thenReturn("valid raw");
+        when(materialAiAnalysisResponseParser.parseUrlAnalysis("invalid raw", List.of("Backend")))
+                .thenThrow(new MaterialException(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED));
+        when(materialAiAnalysisResponseParser.parseUrlAnalysis("valid raw", List.of("Backend")))
+                .thenReturn(new MaterialUrlAnalysisParseResult(parsed, List.of(), null));
+
+        MaterialAiStageResult result = stage.execute(context);
+
+        assertThat(result.analysisResult()).isEqualTo(parsed);
+        verify(openAiClient, times(2)).chatCompleteJson("system", "user");
+        verify(materialAiAnalysisResponseParser).parseUrlAnalysis("invalid raw", List.of("Backend"));
+        verify(materialAiAnalysisResponseParser).parseUrlAnalysis("valid raw", List.of("Backend"));
+    }
+
+    @Test
+    void parsingFailureAfterRetryIsPropagated() {
         MaterialAiStageContext context = context();
         when(folderRepository.findAllByUser_Id(org.mockito.ArgumentMatchers.eq(1L), any(Sort.class)))
                 .thenReturn(List.of(folder("Backend")));
         when(materialUrlAnalysisPromptBuilder.buildSystemMessage()).thenReturn("system");
         when(materialUrlAnalysisPromptBuilder.buildUserMessage(context.extractedContent(), List.of("Backend"))).thenReturn("user");
-        when(openAiClient.chatCompleteJson("system", "user")).thenReturn("raw");
-        when(materialAiAnalysisResponseParser.parseUrlAnalysis("raw", List.of("Backend")))
+        when(openAiClient.chatCompleteJson("system", "user"))
+                .thenReturn("invalid raw")
+                .thenReturn("still invalid raw");
+        when(materialAiAnalysisResponseParser.parseUrlAnalysis("invalid raw", List.of("Backend")))
+                .thenThrow(new MaterialException(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED));
+        when(materialAiAnalysisResponseParser.parseUrlAnalysis("still invalid raw", List.of("Backend")))
                 .thenThrow(new MaterialException(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED));
 
         assertThatThrownBy(() -> stage.execute(context))
                 .isInstanceOf(MaterialException.class)
                 .extracting("errorCode")
                 .isEqualTo(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED);
-        verify(openAiClient).chatCompleteJson("system", "user");
+        verify(openAiClient, times(2)).chatCompleteJson("system", "user");
     }
 
     @Test

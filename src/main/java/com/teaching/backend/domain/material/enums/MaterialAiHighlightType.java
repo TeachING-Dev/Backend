@@ -19,10 +19,15 @@ public enum MaterialAiHighlightType {
             throw new MaterialException(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED);
         }
 
+        String normalized = label.trim();
         for (MaterialAiHighlightType type : values()) {
-            if (type.label.equals(label.trim())) {
+            if (type.label.equals(normalized)) {
                 return type;
             }
+        }
+
+        if ("중요".equals(normalized)) {
+            return CORE;
         }
         throw new MaterialException(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED);
     }

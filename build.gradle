@@ -51,6 +51,7 @@ dependencies {
     // starter-webflux 대신 필요한 두 모듈만 추가 — webmvc가 이미 있어 WebApplicationType은 계속 SERVLET으로 결정됨.
     implementation 'org.springframework:spring-webflux'
     implementation 'io.projectreactor.netty:reactor-netty-http'
+    implementation 'org.jsoup:jsoup:1.18.3'
 
     // AWS S3 (프로필 이미지 업로드) - 배포에 이미 쓰는 AWS 계정/리전 그대로 사용
     implementation 'software.amazon.awssdk:s3:2.29.31'

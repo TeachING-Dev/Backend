@@ -60,14 +60,13 @@ public class MaterialUrlAnalysisService {
             return analyzeNewMaterial(userId, folderId, originalUrl, platformType);
         }
 
-        return materialUrlAnalysisConcurrencyGuard.executeWithLock(userId, originalUrl, () -> {
-            Optional<Material> completedMaterial = findLatestCompletedMaterial(userId, originalUrl);
-            if (completedMaterial.isPresent()) {
-                return alreadyAnalyzedResponse(completedMaterial.get());
-            }
-
-            return analyzeNewMaterial(userId, folderId, originalUrl, platformType);
-        });
+        return materialUrlAnalysisConcurrencyGuard.executeSerialized(
+                userId,
+                originalUrl,
+                () -> findLatestCompletedMaterial(userId, originalUrl)
+                        .map(this::alreadyAnalyzedResponse),
+                () -> analyzeNewMaterial(userId, folderId, originalUrl, platformType)
+        );
     }
 
     private MaterialAnalyzeResponse analyzeNewMaterial(

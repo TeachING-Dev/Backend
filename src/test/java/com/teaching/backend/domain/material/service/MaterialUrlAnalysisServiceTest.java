@@ -185,7 +185,7 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(result.platformType()).isEqualTo("VELOG");
         assertThat(result.status()).isEqualTo("COMPLETED");
         assertThat(result.chunkCount()).isEqualTo(2);
-        verify(materialUrlAnalysisConcurrencyGuard, never()).executeWithLock(any(), anyString(), any());
+        verify(materialUrlAnalysisConcurrencyGuard, never()).executeSerialized(any(), anyString(), any(), any());
         verify(materialContentExtractorRegistry).extract(PlatformType.VELOG, URL);
         verify(materialAiAnalysisOrchestrator).analyze(any(MaterialAnalysisPreparationResult.class));
         verify(materialRepository, never()).save(any(Material.class));
@@ -224,7 +224,7 @@ class MaterialUrlAnalysisServiceTest {
 
         materialUrlAnalysisService.analyze(USER_ID, new MaterialAnalyzeRequest(URL, FOLDER_ID, false));
 
-        verify(materialUrlAnalysisConcurrencyGuard).executeWithLock(eq(USER_ID), eq(URL), any());
+        verify(materialUrlAnalysisConcurrencyGuard).executeSerialized(eq(USER_ID), eq(URL), any(), any());
         verify(materialRepository).findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL);
         verify(materialAiAnalysisOrchestrator).analyze(any(MaterialAnalysisPreparationResult.class));
     }
@@ -286,7 +286,7 @@ class MaterialUrlAnalysisServiceTest {
         );
 
         assertThat(retry.resultType()).isEqualTo(MaterialAnalyzeResultType.ANALYSIS_COMPLETED);
-        verify(materialUrlAnalysisConcurrencyGuard, times(2)).executeWithLock(eq(USER_ID), eq(URL), any());
+        verify(materialUrlAnalysisConcurrencyGuard, times(2)).executeSerialized(eq(USER_ID), eq(URL), any(), any());
         verify(materialAiAnalysisOrchestrator, times(1)).analyze(any(MaterialAnalysisPreparationResult.class));
     }
 
@@ -513,8 +513,14 @@ class MaterialUrlAnalysisServiceTest {
         when(materialUrlValidator.isValidHttpUrl(URL)).thenReturn(true);
         when(folderService.getOwnedFolder(USER_ID, FOLDER_ID)).thenReturn(folder(USER_ID, FOLDER_ID));
         when(materialPlatformResolver.resolve(null, URL)).thenReturn(PlatformType.VELOG);
-        lenient().when(materialUrlAnalysisConcurrencyGuard.executeWithLock(eq(USER_ID), eq(URL), any()))
-                .thenAnswer(invocation -> invocation.getArgument(2, Supplier.class).get());
+        lenient().when(materialUrlAnalysisConcurrencyGuard.executeSerialized(eq(USER_ID), eq(URL), any(), any()))
+                .thenAnswer(invocation -> {
+                    Optional<?> completed = (Optional<?>) invocation.getArgument(2, Supplier.class).get();
+                    if (completed.isPresent()) {
+                        return completed.get();
+                    }
+                    return invocation.getArgument(3, Supplier.class).get();
+                });
     }
 
     private void givenSuccessfulExtraction() {

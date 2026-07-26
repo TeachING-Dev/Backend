@@ -2,6 +2,7 @@ package com.teaching.backend.domain.material.service.extract;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -85,7 +86,7 @@ class HtmlContentParserTest {
 
         assertThat(result.title()).isEqualTo("Velog Post");
         assertThat(result.author()).isEqualTo("velog-writer");
-        assertThat(result.publishedAt()).isEqualTo("2026-07-25T10:00");
+        assertThat(result.publishedAt()).isEqualTo(LocalDateTime.of(2026, 7, 25, 10, 0));
         assertThat(result.content()).contains("First real article paragraph.", "Second real article paragraph.");
         assertThat(result.content()).doesNotContain("site header menu", "previous post", "write comment", "footer links");
     }
@@ -151,6 +152,95 @@ class HtmlContentParserTest {
     }
 
     @Test
+    void extractsNestedDivContentWithoutStoppingAtInnerClosingTag() {
+        ParsedHtmlContent result = parser.parse(
+                "https://example.com",
+                """
+                        <html><body>
+                          <main>Generic main</main>
+                          <div class="entry-content">
+                            outer-start
+                            <div>inner</div>
+                            outer-end
+                          </div>
+                        </body></html>
+                        """,
+                List.of("entry-content")
+        );
+
+        assertThat(result.content()).contains("outer-start", "inner", "outer-end");
+        assertThat(result.content()).doesNotContain("Generic main");
+    }
+
+    @Test
+    void extractsMultipleNestedLevelsAndSiblingBlocksInOrder() {
+        ParsedHtmlContent result = parser.parse(
+                "https://example.com",
+                """
+                        <html><body>
+                          <div class="post content">
+                            <section>
+                              <div>
+                                <p>first block</p>
+                                <div><p>second nested block</p></div>
+                              </div>
+                            </section>
+                            <p>third sibling block</p>
+                          </div>
+                        </body></html>
+                        """,
+                List.of("content")
+        );
+
+        assertThat(result.content()).contains("first block", "second nested block", "third sibling block");
+        assertThat(result.content()).containsPattern("first block\\s+second nested block\\s+third sibling block");
+    }
+
+    @Test
+    void handlesClassAttributeOrderAndQuoteStyleWithDomParsing() {
+        ParsedHtmlContent result = parser.parse(
+                "https://example.com",
+                """
+                        <html>
+                          <head>
+                            <meta content='Attribute Order Title' property='og:title'>
+                            <meta content='writer' name='author'>
+                          </head>
+                          <body>
+                            <main>Generic main</main>
+                            <div data-id="1" class='theme entry-content article'>
+                              <p>single quote class content</p>
+                            </div>
+                          </body>
+                        </html>
+                        """,
+                List.of("entry-content")
+        );
+
+        assertThat(result.title()).isEqualTo("Attribute Order Title");
+        assertThat(result.author()).isEqualTo("writer");
+        assertThat(result.content()).contains("single quote class content");
+        assertThat(result.content()).doesNotContain("Generic main");
+    }
+
+    @Test
+    void parsesLongRepeatedHtmlWithoutRegexBacktrackingPath() {
+        String repeated = "<div><span>noise</span></div>".repeat(1_000);
+        ParsedHtmlContent result = parser.parse(
+                "https://example.com",
+                """
+                        <html><body>
+                          %s
+                          <article><p>Article content after long repeated html</p></article>
+                        </body></html>
+                        """.formatted(repeated),
+                List.of()
+        );
+
+        assertThat(result.content()).contains("Article content after long repeated html");
+    }
+
+    @Test
     void fallsBackToDocumentTitleAndTimeDatetimeMetadata() {
         ParsedHtmlContent result = parser.parse(
                 "https://example.com",
@@ -169,7 +259,7 @@ class HtmlContentParserTest {
         );
 
         assertThat(result.title()).isEqualTo("Document Fallback Title");
-        assertThat(result.publishedAt()).isEqualTo("2026-07-26T12:30");
+        assertThat(result.publishedAt()).isEqualTo(LocalDateTime.of(2026, 7, 26, 12, 30));
         assertThat(result.content()).contains("Article content with metadata fallback");
     }
 

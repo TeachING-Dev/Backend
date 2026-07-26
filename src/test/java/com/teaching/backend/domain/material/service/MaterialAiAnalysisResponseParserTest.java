@@ -1,6 +1,7 @@
 package com.teaching.backend.domain.material.service;
 
 import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisResult;
+import com.teaching.backend.domain.material.dto.ai.MaterialAiHighlightResult;
 import com.teaching.backend.domain.material.dto.ai.MaterialUrlAnalysisParseResult;
 import com.teaching.backend.domain.material.enums.MaterialAiHighlightType;
 import com.teaching.backend.domain.material.exception.MaterialErrorCode;
@@ -115,6 +116,82 @@ class MaterialAiAnalysisResponseParserTest {
     }
 
     @Test
+    void parsesHighlightTextAsLiteralSubstringOfLongAnalysis() {
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis("""
+                {
+                  "short_summary": "summary",
+                  "long_analysis": "## Overview\\n- **TCP** keeps reliable delivery. Small packets can be delayed while waiting for ACK. Real-time systems should tune network options carefully.",
+                  "highlights": [
+                    {"text": "**TCP** keeps reliable delivery.", "type": "핵심"},
+                    {"text": "Small packets can be delayed while waiting for ACK.", "type": "주의"},
+                    {"text": "Real-time systems should tune network options carefully.", "type": "핵심"}
+                  ],
+                  "tags": ["TCP", "HTTP", "TLS"],
+                  "recommended_folder": null
+                }
+                """, List.of("Backend"));
+
+        String longAnalysis = result.analysisResult().longAnalysis();
+        assertThat(result.highlights())
+                .extracting(MaterialAiHighlightResult::text)
+                .allSatisfy(highlight -> assertThat(longAnalysis).contains((String) highlight));
+    }
+
+    @Test
+    void rejectsSemanticHighlightThatIsNotLiteralSubstring() {
+        assertUrlAnalysisParseFailed("""
+                {
+                  "short_summary": "summary",
+                  "long_analysis": "## Overview\\n- **Nagle** reduces frequent transmission of small packets. Small packets can be delayed while waiting for ACK. Real-time systems should tune network options carefully.",
+                  "highlights": [
+                    {"text": "Nagle can delay small packet transmission.", "type": "핵심"},
+                    {"text": "Small packets can be delayed while waiting for ACK.", "type": "주의"},
+                    {"text": "Real-time systems should tune network options carefully.", "type": "핵심"}
+                  ],
+                  "tags": ["TCP", "HTTP", "TLS"],
+                  "recommended_folder": null
+                }
+                """);
+    }
+
+    @Test
+    void normalizesImportantHighlightTypeAliasToCore() {
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis("""
+                {
+                  "short_summary": "summary",
+                  "long_analysis": "## Overview\\n- **TCP** keeps reliable delivery. Small packets can be delayed while waiting for ACK. Real-time systems should tune network options carefully.",
+                  "highlights": [
+                    {"text": "**TCP** keeps reliable delivery.", "type": "중요"},
+                    {"text": "Small packets can be delayed while waiting for ACK.", "type": "주의"},
+                    {"text": "Real-time systems should tune network options carefully.", "type": "핵심"}
+                  ],
+                  "tags": ["TCP", "HTTP", "TLS"],
+                  "recommended_folder": null
+                }
+                """, List.of("Backend"));
+
+        assertThat(result.highlights().get(0).type()).isEqualTo(MaterialAiHighlightType.CORE);
+        assertThat(result.analysisResult().highlights().get(0).type()).isEqualTo("핵심");
+    }
+
+    @Test
+    void rejectsUnrelatedHighlightType() {
+        assertUrlAnalysisParseFailed("""
+                {
+                  "short_summary": "summary",
+                  "long_analysis": "## Overview\\n- **TCP** keeps reliable delivery. Small packets can be delayed while waiting for ACK. Real-time systems should tune network options carefully.",
+                  "highlights": [
+                    {"text": "**TCP** keeps reliable delivery.", "type": "정보"},
+                    {"text": "Small packets can be delayed while waiting for ACK.", "type": "주의"},
+                    {"text": "Real-time systems should tune network options carefully.", "type": "핵심"}
+                  ],
+                  "tags": ["TCP", "HTTP", "TLS"],
+                  "recommended_folder": null
+                }
+                """);
+    }
+
+    @Test
     void parsesUrlAnalysisJsonWithHyphenMarkdownBullets() {
         MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis("""
                 {
@@ -206,7 +283,7 @@ class MaterialAiAnalysisResponseParserTest {
 
     @Test
     void rejectsInvalidHighlightTypeInUrlAnalysis() {
-        assertUrlAnalysisParseFailed(validUrlAnalysisJson("Backend").replace("\"핵심\"", "\"중요\""));
+        assertUrlAnalysisParseFailed(validUrlAnalysisJson("Backend").replace("\"핵심\"", "\"정보\""));
     }
 
     @Test
