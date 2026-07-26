@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.NoSuchElementException;
 
 @Service
 @RequiredArgsConstructor
@@ -52,9 +53,14 @@ public class MaterialAiAnalysisPersistenceService {
                 .filter(name -> name.length() <= MAX_TAG_NAME_LENGTH)
                 .toList())
                 .forEach(name -> {
-                    Tag tag = tagRepository.findByName(name)
-                            .orElseGet(() -> tagRepository.save(Tag.create(name)));
+                    Tag tag = getOrCreateTag(name);
                     materialTagRepository.save(MaterialTag.create(material, tag));
                 });
+    }
+
+    private Tag getOrCreateTag(String name) {
+        tagRepository.insertIfAbsent(name);
+        return tagRepository.findByName(name)
+                .orElseThrow(() -> new NoSuchElementException("Tag was not found after insert: " + name));
     }
 }

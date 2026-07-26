@@ -7,6 +7,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
+import reactor.netty.http.client.HttpClient;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -159,6 +160,28 @@ class ExternalHtmlDocumentClientTest {
     }
 
     @Test
+    void blocksMetadataIpLiteralInProductionMode() {
+        ExternalHtmlDocumentClient client = new ExternalHtmlDocumentClient(
+                WebClient.builder().build(),
+                Duration.ofSeconds(1),
+                true
+        );
+
+        assertExtractionFailed(() -> client.fetch("http://169.254.169.254/latest/meta-data"));
+    }
+
+    @Test
+    void blocksIpv6LoopbackLiteralInProductionMode() {
+        ExternalHtmlDocumentClient client = new ExternalHtmlDocumentClient(
+                WebClient.builder().build(),
+                Duration.ofSeconds(1),
+                true
+        );
+
+        assertExtractionFailed(() -> client.fetch("http://[::1]:8080"));
+    }
+
+    @Test
     void preservesRootCauseWhenWebClientFails() throws Exception {
         IllegalStateException rootCause = new IllegalStateException("boom");
         WebClient failingWebClient = WebClient.builder()
@@ -240,6 +263,33 @@ class ExternalHtmlDocumentClientTest {
         ));
 
         client.validateFetchTarget("http://public-looking.example");
+    }
+
+    @Test
+    void connectsToValidatedResolvedAddressWithoutResolvingHostAgain() throws Exception {
+        AtomicReference<String> hostHeader = new AtomicReference<>();
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            hostHeader.set(exchange.getRequestHeaders().getFirst("Host"));
+            byte[] response = "<html><body>pinned address content</body></html>".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "text/html");
+            exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.start();
+        int port = server.getAddress().getPort();
+        ExternalHtmlDocumentClient client = new ExternalHtmlDocumentClient(
+                HttpClient.create(),
+                Duration.ofSeconds(2),
+                false,
+                host -> List.of(InetAddress.getByName("127.0.0.1"))
+        );
+
+        HtmlDocument document = client.fetch("http://public-looking.example:" + port + "/article");
+
+        assertThat(document.body()).contains("pinned address content");
+        assertThat(hostHeader.get()).isEqualTo("public-looking.example:" + port);
     }
 
     private String startServer(

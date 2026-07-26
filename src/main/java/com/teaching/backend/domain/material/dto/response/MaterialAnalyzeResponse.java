@@ -27,7 +27,7 @@ public record MaterialAnalyzeResponse(
         return new MaterialAnalyzeResponse(
                 MaterialAnalyzeResultType.ALREADY_ANALYZED,
                 material.getId(),
-                material.getId(),
+                null,
                 materialAnalysisId,
                 material.getTitle(),
                 material.getOriginalUrl(),

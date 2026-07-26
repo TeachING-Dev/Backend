@@ -19,11 +19,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -55,18 +58,61 @@ class MaterialAiAnalysisPersistenceServiceTest {
         );
         when(materialAnalysisRepository.save(any(MaterialAnalysis.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(tagRepository.findByName("spring")).thenReturn(Optional.of(existingTag));
-        when(tagRepository.findByName("jpa")).thenReturn(Optional.empty());
-        when(tagRepository.save(any(Tag.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(tagRepository.findByName("jpa")).thenReturn(Optional.of(Tag.create("jpa")));
 
         MaterialAnalysis analysis = persistenceService.saveAnalysisResult(material, result);
 
         assertThat(analysis.getSummary()).isEqualTo("summary");
+        verify(tagRepository).insertIfAbsent("spring");
+        verify(tagRepository).insertIfAbsent("jpa");
         verify(tagRepository).findByName("spring");
         verify(tagRepository).findByName("jpa");
-        verify(tagRepository).save(any(Tag.class));
         ArgumentCaptor<MaterialTag> materialTagCaptor = ArgumentCaptor.forClass(MaterialTag.class);
-        verify(materialTagRepository, org.mockito.Mockito.times(2)).save(materialTagCaptor.capture());
+        verify(materialTagRepository, times(2)).save(materialTagCaptor.capture());
         assertThat(materialTagCaptor.getAllValues()).hasSize(2);
+    }
+
+    @Test
+    void savesMaterialAnalysisAndCreatesNewTagWithAtomicInsert() {
+        Material material = material();
+        Tag newTag = Tag.create("spring");
+        MaterialAiAnalysisResult result = new MaterialAiAnalysisResult(
+                "summary",
+                "detail",
+                List.of("spring"),
+                null,
+                null
+        );
+        when(materialAnalysisRepository.save(any(MaterialAnalysis.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(tagRepository.findByName("spring")).thenReturn(Optional.of(newTag));
+
+        persistenceService.saveAnalysisResult(material, result);
+
+        verify(tagRepository).insertIfAbsent("spring");
+        verify(tagRepository).findByName("spring");
+        verify(materialTagRepository).save(any(MaterialTag.class));
+    }
+
+    @Test
+    void throwsWhenTagCannotBeReadAfterAtomicInsert() {
+        Material material = material();
+        MaterialAiAnalysisResult result = new MaterialAiAnalysisResult(
+                "summary",
+                "detail",
+                List.of("spring"),
+                null,
+                null
+        );
+        when(materialAnalysisRepository.save(any(MaterialAnalysis.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(tagRepository.findByName("spring")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> persistenceService.saveAnalysisResult(material, result))
+                .isInstanceOf(NoSuchElementException.class)
+                .hasMessageContaining("spring");
+
+        verify(tagRepository).insertIfAbsent("spring");
+        verify(tagRepository).findByName("spring");
+        verify(materialTagRepository, never()).save(any());
     }
 
     @Test
@@ -85,6 +131,7 @@ class MaterialAiAnalysisPersistenceServiceTest {
         persistenceService.saveAnalysisResult(material, result);
 
         verify(tagRepository, never()).findByName(any());
+        verify(tagRepository, never()).insertIfAbsent(any());
         verify(materialTagRepository, never()).save(any());
     }
 

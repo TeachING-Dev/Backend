@@ -9,7 +9,9 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Component
@@ -18,7 +20,7 @@ public class MaterialUrlAnalysisPromptBuilder {
 
     private static final String NO_INFORMATION = "정보 없음";
     private static final String NO_FOLDER_MESSAGE = "현재 사용자의 폴더 목록이 없습니다.";
-    private static final Pattern UNRESOLVED_PLACEHOLDER = Pattern.compile("\\{\\{[A-Z_]+}}");
+    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\{\\{([^{}]+)}}");
 
     private final MaterialUrlAnalysisPromptProvider promptProvider;
 
@@ -30,20 +32,36 @@ public class MaterialUrlAnalysisPromptBuilder {
             ExtractedMaterialContent content,
             List<String> folderNames
     ) {
-        String userMessage = promptProvider.userTemplate();
-        userMessage = userMessage.replace("{{ORIGINAL_URL}}", valueOrNoInformation(content.originalUrl()));
-        userMessage = userMessage.replace("{{TITLE}}", valueOrNoInformation(content.title()));
-        userMessage = userMessage.replace("{{PLATFORM_TYPE}}", content.platformType() == null ? NO_INFORMATION : content.platformType().name());
-        userMessage = userMessage.replace("{{AUTHOR}}", valueOrNoInformation(content.author()));
-        userMessage = userMessage.replace("{{PUBLISHED_AT}}", valueOrNoInformation(content.publishedAt()));
-        userMessage = userMessage.replace("{{FOLDER_LIST}}", formatFolderList(folderNames));
+        Map<String, String> replacements = Map.of(
+                "ORIGINAL_URL", valueOrNoInformation(content.originalUrl()),
+                "TITLE", valueOrNoInformation(content.title()),
+                "PLATFORM_TYPE", content.platformType() == null ? NO_INFORMATION : content.platformType().name(),
+                "AUTHOR", valueOrNoInformation(content.author()),
+                "PUBLISHED_AT", valueOrNoInformation(content.publishedAt()),
+                "FOLDER_LIST", formatFolderList(folderNames),
+                "EXTRACTED_CONTENT", valueOrNoInformation(content.content())
+        );
 
-        String withoutContentPlaceholder = userMessage.replace("{{EXTRACTED_CONTENT}}", "");
-        if (UNRESOLVED_PLACEHOLDER.matcher(withoutContentPlaceholder).find()) {
-            throw new MaterialException(MaterialErrorCode.AI_ANALYSIS_GENERATION_FAILED);
+        return replacePlaceholders(promptProvider.userTemplate(), replacements);
+    }
+
+    private String replacePlaceholders(
+            String template,
+            Map<String, String> replacements
+    ) {
+        Matcher matcher = PLACEHOLDER_PATTERN.matcher(template);
+        StringBuffer result = new StringBuffer();
+
+        while (matcher.find()) {
+            String key = matcher.group(1);
+            String replacement = replacements.get(key);
+            if (replacement == null) {
+                throw new MaterialException(MaterialErrorCode.AI_ANALYSIS_GENERATION_FAILED);
+            }
+            matcher.appendReplacement(result, Matcher.quoteReplacement(replacement));
         }
-        userMessage = userMessage.replace("{{EXTRACTED_CONTENT}}", valueOrNoInformation(content.content()));
-        return userMessage;
+        matcher.appendTail(result);
+        return result.toString();
     }
 
     private String formatFolderList(List<String> folderNames) {

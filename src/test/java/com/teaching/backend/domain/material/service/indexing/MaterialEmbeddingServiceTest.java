@@ -47,11 +47,15 @@ class MaterialEmbeddingServiceTest {
 
     @Test
     void convertsExternalClientFailure() {
-        when(openAiClient.embed("first")).thenThrow(new RuntimeException("network"));
+        RuntimeException cause = new RuntimeException("network");
+        when(openAiClient.embed("first")).thenThrow(cause);
 
         assertThatThrownBy(() -> embeddingService.embedChunks(List.of(new MaterialTextChunk(0, "first", "청크 1"))))
                 .isInstanceOf(MaterialException.class)
-                .extracting("errorCode")
-                .isEqualTo(MaterialErrorCode.MATERIAL_EMBEDDING_FAILED);
+                .satisfies(exception -> {
+                    MaterialException materialException = (MaterialException) exception;
+                    assertThat(materialException.getErrorCode()).isEqualTo(MaterialErrorCode.MATERIAL_EMBEDDING_FAILED);
+                    assertThat(materialException.getCause()).isSameAs(cause);
+                });
     }
 }

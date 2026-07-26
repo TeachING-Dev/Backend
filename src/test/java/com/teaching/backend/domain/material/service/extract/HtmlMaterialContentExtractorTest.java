@@ -35,6 +35,32 @@ class HtmlMaterialContentExtractorTest {
     }
 
     @Test
+    void velogExtractorExcludesPageUiAroundArticleContent() {
+        ExternalHtmlDocumentClient client = client("""
+                <html>
+                  <head><meta property="og:title" content="Velog Title"></head>
+                  <body>
+                    <header>login navigation</header>
+                    <main>
+                      <article class="markdown-body">
+                        <p>Clean Velog article content for downstream analysis.</p>
+                      </article>
+                      <section class="related">previous post next post</section>
+                      <section class="comments">write comment</section>
+                    </main>
+                    <footer>footer links</footer>
+                  </body>
+                </html>
+                """);
+        VelogMaterialContentExtractor extractor = new VelogMaterialContentExtractor(client);
+
+        ExtractedMaterialContent result = extractor.extract(URL);
+
+        assertThat(result.content()).contains("Clean Velog article content");
+        assertThat(result.content()).doesNotContain("login navigation", "previous post", "write comment", "footer links");
+    }
+
+    @Test
     void blogExtractorUsesArticleAndExcludesNoise() {
         ExternalHtmlDocumentClient client = client("""
                 <html><body>

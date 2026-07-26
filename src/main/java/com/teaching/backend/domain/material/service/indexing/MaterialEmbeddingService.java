@@ -30,14 +30,10 @@ public class MaterialEmbeddingService {
             try {
                 embeddedChunks.add(new EmbeddedMaterialTextChunk(chunk, openAiClient.embed(chunk.text())));
             } catch (RuntimeException e) {
-                throw new MaterialException(MaterialErrorCode.MATERIAL_EMBEDDING_FAILED);
+                throw new MaterialException(MaterialErrorCode.MATERIAL_EMBEDDING_FAILED, e);
             }
         }
 
-        if (embeddedChunks.size() != chunks.stream().filter(chunk ->
-                chunk != null && chunk.text() != null && !chunk.text().isBlank()).count()) {
-            throw new MaterialException(MaterialErrorCode.MATERIAL_EMBEDDING_FAILED);
-        }
         return embeddedChunks;
     }
 }

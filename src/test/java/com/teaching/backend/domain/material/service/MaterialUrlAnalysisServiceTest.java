@@ -103,6 +103,7 @@ class MaterialUrlAnalysisServiceTest {
 
         assertThat(result.resultType()).isEqualTo(MaterialAnalyzeResultType.ALREADY_ANALYZED);
         assertThat(result.existingMaterialId()).isEqualTo(101L);
+        assertThat(result.materialId()).isNull();
         assertThat(result.title()).isEqualTo("Completed");
         assertThat(result.originalUrl()).isEqualTo(URL);
         assertThat(result.platformType()).isEqualTo("VELOG");
@@ -128,6 +129,8 @@ class MaterialUrlAnalysisServiceTest {
         );
 
         assertThat(result.resultType()).isEqualTo(MaterialAnalyzeResultType.ALREADY_ANALYZED);
+        assertThat(result.existingMaterialId()).isEqualTo(101L);
+        assertThat(result.materialId()).isNull();
         assertThat(result.materialAnalysisId()).isNull();
         assertThat(result.chunkCount()).isZero();
         verify(materialContentExtractorRegistry, never()).extract(any(), anyString());
@@ -150,6 +153,7 @@ class MaterialUrlAnalysisServiceTest {
         );
 
         assertThat(result.existingMaterialId()).isEqualTo(102L);
+        assertThat(result.materialId()).isNull();
         assertThat(result.title()).isEqualTo("Newer");
         verify(materialContentExtractorRegistry, never()).extract(any(), anyString());
         verify(materialAiAnalysisOrchestrator, never()).analyze(any());

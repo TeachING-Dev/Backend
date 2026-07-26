@@ -90,6 +90,27 @@ class MaterialUrlAnalysisPromptBuilderTest {
     }
 
     @Test
+    void doesNotInterpretPlaceholderLikeTextInsideReplacementValues() {
+        when(promptProvider.userTemplate()).thenReturn(template());
+        ExtractedMaterialContent content = new ExtractedMaterialContent(
+                "https://example.com/post?$1=\\value",
+                PlatformType.BLOG,
+                "test {{EXTRACTED_CONTENT}}",
+                "본문 {{AUTHOR}} $1 \\ 그대로 유지",
+                null,
+                "writer {{TITLE}} $1 \\",
+                LocalDateTime.of(2026, 7, 25, 10, 0)
+        );
+
+        String message = promptBuilder.buildUserMessage(content, List.of("Backend"));
+
+        assertThat(message).contains("https://example.com/post?$1=\\value");
+        assertThat(message).contains("test {{EXTRACTED_CONTENT}}");
+        assertThat(message).contains("writer {{TITLE}} $1 \\");
+        assertThat(message).contains("본문 {{AUTHOR}} $1 \\ 그대로 유지");
+    }
+
+    @Test
     void unresolvedTemplatePlaceholderFails() {
         when(promptProvider.userTemplate()).thenReturn(template() + "\n{{UNKNOWN}}");
         ExtractedMaterialContent content = new ExtractedMaterialContent(

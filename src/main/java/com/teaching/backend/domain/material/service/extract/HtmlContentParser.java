@@ -2,6 +2,7 @@ package com.teaching.backend.domain.material.service.extract;
 
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -11,13 +12,13 @@ import java.util.regex.Pattern;
 public class HtmlContentParser {
 
     private static final Pattern SCRIPT_STYLE_PATTERN = Pattern.compile(
-            "(?is)<(script|style)[^>]*>.*?</\\1>"
+            "(?is)<(script|style|noscript)[^>]*>.*?</\\1>"
     );
     private static final Pattern NOISE_BLOCK_PATTERN = Pattern.compile(
-            "(?is)<(nav|header|footer|aside)[^>]*>.*?</\\1>"
+            "(?is)<(nav|footer|aside)[^>]*>.*?</\\1>"
     );
     private static final Pattern NOISE_CLASS_PATTERN = Pattern.compile(
-            "(?is)<([a-z0-9]+)\\b(?=[^>]*(class|id)\\s*=\\s*(['\"])[^'\"]*(ad|ads|advertisement|comment|reply|menu|hidden|login)[^'\"]*\\3)[^>]*>.*?</\\1>"
+            "(?is)<([a-z0-9]+)\\b(?=[^>]*(class|id)\\s*=\\s*(['\"])[^'\"]*(advertisement|ad-|ads-|ad_|ads_|banner|sponsor|comment|reply|menu|hidden|login|follow|share|sidebar|recommend|related|pagination|prev|next|toc)[^'\"]*\\3)[^>]*>.*?</\\1>"
     );
     private static final Pattern COMMENT_PATTERN = Pattern.compile("(?is)<!--.*?-->");
     private static final Pattern TAG_PATTERN = Pattern.compile("(?is)<[^>]+>");
@@ -42,7 +43,8 @@ public class HtmlContentParser {
         LocalDateTime publishedAt = firstNonBlank(
                 metaContent(cleanedHtml, "property", "article:published_time"),
                 metaContent(cleanedHtml, "name", "date"),
-                metaContent(cleanedHtml, "itemprop", "datePublished")
+                metaContent(cleanedHtml, "itemprop", "datePublished"),
+                firstAttribute(cleanedHtml, "time", "datetime")
         ).flatMap(this::parseDateTime).orElse(null);
 
         String contentHtml = findContentHtml(cleanedHtml, contentClassSignals)
@@ -60,17 +62,30 @@ public class HtmlContentParser {
     }
 
     private Optional<String> findContentHtml(String html, List<String> contentClassSignals) {
+        List<String> signalCandidates = new ArrayList<>();
         for (String signal : contentClassSignals) {
-            Optional<String> section = tagWithClassContaining(html, "div", signal);
-            if (section.isPresent()) {
-                return section;
+            for (String tag : List.of("article", "main", "section", "div")) {
+                signalCandidates.addAll(tagsWithClassContaining(html, tag, signal));
             }
         }
 
-        return firstNonBlank(
-                tagHtml(html, "article"),
-                tagHtml(html, "main")
-        );
+        Optional<String> signalContent = longestTextCandidate(signalCandidates);
+        if (signalContent.isPresent()) {
+            return signalContent;
+        }
+
+        List<String> candidates = new ArrayList<>();
+        tagHtml(html, "article").ifPresent(candidates::add);
+        tagHtml(html, "main").ifPresent(candidates::add);
+
+        return longestTextCandidate(candidates);
+    }
+
+    private Optional<String> longestTextCandidate(List<String> candidates) {
+        return candidates.stream()
+                .map(this::normalizeBlank)
+                .flatMap(Optional::stream)
+                .max((left, right) -> Integer.compare(htmlToText(left).length(), htmlToText(right).length()));
     }
 
     private String removeNoise(String html) {
@@ -88,6 +103,19 @@ public class HtmlContentParser {
         Matcher matcher = pattern.matcher(html);
         if (matcher.find()) {
             return normalizeBlank(decodeHtml(matcher.group(3)));
+        }
+
+        return Optional.empty();
+    }
+
+    private Optional<String> firstAttribute(String html, String tag, String attributeName) {
+        Pattern pattern = Pattern.compile(
+                "(?is)<" + tag + "\\b(?=[^>]*\\b" + Pattern.quote(attributeName) +
+                        "\\s*=\\s*(['\"])(.*?)\\1)[^>]*>"
+        );
+        Matcher matcher = pattern.matcher(html);
+        if (matcher.find()) {
+            return normalizeBlank(decodeHtml(matcher.group(2)));
         }
 
         return Optional.empty();
@@ -114,17 +142,18 @@ public class HtmlContentParser {
         return Optional.empty();
     }
 
-    private Optional<String> tagWithClassContaining(String html, String tag, String classSignal) {
+    private List<String> tagsWithClassContaining(String html, String tag, String classSignal) {
         Pattern pattern = Pattern.compile(
                 "(?is)<" + tag + "\\b(?=[^>]*\\bclass\\s*=\\s*(['\"])[^'\"]*" +
                         Pattern.quote(classSignal) + "[^'\"]*\\1)[^>]*>(.*?)</" + tag + ">"
         );
         Matcher matcher = pattern.matcher(html);
-        if (matcher.find()) {
-            return normalizeBlank(matcher.group(2));
+        List<String> sections = new ArrayList<>();
+        while (matcher.find()) {
+            normalizeBlank(matcher.group(2)).ifPresent(sections::add);
         }
 
-        return Optional.empty();
+        return sections;
     }
 
     @SafeVarargs
@@ -165,7 +194,35 @@ public class HtmlContentParser {
                 .replaceAll(" *\\n+ *", "\n")
                 .replaceAll("\\n{3,}", "\n\n")
                 .trim();
-        return normalizedLines.replaceAll("(?m)^ +| +$", "");
+        return removeUiOnlyLines(normalizedLines.replaceAll("(?m)^ +| +$", ""));
+    }
+
+    private String removeUiOnlyLines(String text) {
+        String[] lines = text.split("\\n", -1);
+        List<String> keptLines = new ArrayList<>();
+        for (String line : lines) {
+            if (!isUiOnlyLine(line.trim())) {
+                keptLines.add(line);
+            }
+        }
+        return String.join("\n", keptLines)
+                .replaceAll("\\n{3,}", "\n\n")
+                .trim();
+    }
+
+    private boolean isUiOnlyLine(String line) {
+        if (line.isBlank() || line.length() > 30) {
+            return false;
+        }
+
+        return line.equals("\uB85C\uADF8\uC778")
+                || line.equals("\uD314\uB85C\uC6B0")
+                || line.equals("\uACF5\uC720")
+                || line.equals("\uB313\uAE00 \uC791\uC131")
+                || line.equals("\uC774\uC804 \uD3EC\uC2A4\uD2B8")
+                || line.equals("\uB2E4\uC74C \uD3EC\uC2A4\uD2B8")
+                || line.matches("\uB313\uAE00\\s*\\d*")
+                || line.matches("\\d+\uAC1C\uC758 \uB313\uAE00");
     }
 
     private Optional<String> normalizeBlank(String value) {

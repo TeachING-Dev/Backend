@@ -3,6 +3,11 @@ package com.teaching.backend.domain.material.service.extract;
 import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.exception.MaterialException;
 import io.netty.channel.ChannelOption;
+import io.netty.resolver.AbstractAddressResolver;
+import io.netty.resolver.AddressResolver;
+import io.netty.resolver.AddressResolverGroup;
+import io.netty.util.concurrent.EventExecutor;
+import io.netty.util.concurrent.Promise;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,9 +21,11 @@ import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
 
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -30,6 +37,7 @@ public class ExternalHtmlDocumentClient {
     private static final int ERROR_BODY_LOG_LIMIT = 500;
 
     private final WebClient webClient;
+    private final HttpClient httpClient;
     private final Duration responseTimeout;
     private final boolean blockPrivateNetwork;
     private final HostAddressResolver hostAddressResolver;
@@ -42,16 +50,11 @@ public class ExternalHtmlDocumentClient {
     ) {
         this.hostAddressResolver = hostAddressResolver;
         this.responseTimeout = Duration.ofMillis(responseTimeoutMs);
-        HttpClient httpClient = HttpClient.create()
+        this.httpClient = HttpClient.create()
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeoutMs)
                 .responseTimeout(responseTimeout);
 
-        this.webClient = WebClient.builder()
-                .exchangeStrategies(ExchangeStrategies.builder()
-                        .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(MAX_RESPONSE_BYTES))
-                        .build())
-                .clientConnector(new ReactorClientHttpConnector(httpClient))
-                .build();
+        this.webClient = null;
         this.blockPrivateNetwork = true;
     }
 
@@ -70,17 +73,33 @@ public class ExternalHtmlDocumentClient {
             HostAddressResolver hostAddressResolver
     ) {
         this.webClient = webClient;
+        this.httpClient = null;
+        this.responseTimeout = responseTimeout;
+        this.blockPrivateNetwork = blockPrivateNetwork;
+        this.hostAddressResolver = hostAddressResolver;
+    }
+
+    ExternalHtmlDocumentClient(
+            HttpClient httpClient,
+            Duration responseTimeout,
+            boolean blockPrivateNetwork,
+            HostAddressResolver hostAddressResolver
+    ) {
+        this.webClient = null;
+        this.httpClient = httpClient;
         this.responseTimeout = responseTimeout;
         this.blockPrivateNetwork = blockPrivateNetwork;
         this.hostAddressResolver = hostAddressResolver;
     }
 
     public HtmlDocument fetch(String originalUrl) {
-        URI uri = validateFetchTarget(originalUrl);
-        String host = uri.getHost();
+        FetchTarget target = validateFetchTargetWithAddresses(originalUrl);
+        URI uri = target.uri();
+        String host = target.host();
+        WebClient requestWebClient = webClientFor(target);
 
         try {
-            HtmlDocument document = webClient.get()
+            HtmlDocument document = requestWebClient.get()
                     .uri(uri)
                     .exchangeToMono(response -> {
                         HttpStatusCode statusCode = response.statusCode();
@@ -146,6 +165,10 @@ public class ExternalHtmlDocumentClient {
     }
 
     URI validateFetchTarget(String originalUrl) {
+        return validateFetchTargetWithAddresses(originalUrl).uri();
+    }
+
+    private FetchTarget validateFetchTargetWithAddresses(String originalUrl) {
         URI uri;
         try {
             uri = URI.create(originalUrl);
@@ -163,11 +186,15 @@ public class ExternalHtmlDocumentClient {
             throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
         }
 
-        if (blockPrivateNetwork) {
-            validateResolvedAddresses(host);
+        List<InetAddress> addresses = List.of();
+        if (blockPrivateNetwork || httpClient != null) {
+            addresses = resolveAddresses(host);
+            if (blockPrivateNetwork) {
+                validateResolvedAddresses(addresses);
+            }
         }
 
-        return uri;
+        return new FetchTarget(uri, host, addresses);
     }
 
     private boolean isHtml(MediaType contentType) {
@@ -180,7 +207,7 @@ public class ExternalHtmlDocumentClient {
     }
 
     private boolean isBlockedHost(String host) {
-        String normalizedHost = host.toLowerCase(Locale.ROOT);
+        String normalizedHost = normalizeHost(host);
         if (normalizedHost.equals("localhost")
                 || normalizedHost.endsWith(".localhost")
                 || normalizedHost.endsWith(".local")
@@ -198,14 +225,15 @@ public class ExternalHtmlDocumentClient {
         return isPrivateIpv4(normalizedHost);
     }
 
-    private void validateResolvedAddresses(String host) {
-        List<InetAddress> addresses;
+    private List<InetAddress> resolveAddresses(String host) {
         try {
-            addresses = hostAddressResolver.resolve(host);
+            return List.copyOf(hostAddressResolver.resolve(host));
         } catch (UnknownHostException e) {
             throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED, e);
         }
+    }
 
+    private void validateResolvedAddresses(List<InetAddress> addresses) {
         if (addresses.isEmpty() || addresses.stream().anyMatch(this::isBlockedAddress)) {
             throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
         }
@@ -242,6 +270,37 @@ public class ExternalHtmlDocumentClient {
                 || (numbers[0] == 172 && numbers[1] >= 16 && numbers[1] <= 31)
                 || (numbers[0] == 192 && numbers[1] == 168)
                 || (numbers[0] == 169 && numbers[1] == 254);
+    }
+
+    private WebClient webClientFor(FetchTarget target) {
+        if (webClient != null) {
+            return webClient;
+        }
+
+        HttpClient requestHttpClient = httpClient;
+        if (!target.addresses().isEmpty()) {
+            requestHttpClient = requestHttpClient.resolver(
+                    new PinnedHostAddressResolverGroup(target.host(), target.addresses())
+            );
+        }
+
+        return WebClient.builder()
+                .exchangeStrategies(ExchangeStrategies.builder()
+                        .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(MAX_RESPONSE_BYTES))
+                        .build())
+                .clientConnector(new ReactorClientHttpConnector(requestHttpClient))
+                .build();
+    }
+
+    private String normalizeHost(String host) {
+        String normalizedHost = host.toLowerCase(Locale.ROOT);
+        if (normalizedHost.startsWith("[") && normalizedHost.endsWith("]")) {
+            normalizedHost = normalizedHost.substring(1, normalizedHost.length() - 1);
+        }
+        if (normalizedHost.endsWith(".")) {
+            normalizedHost = normalizedHost.substring(0, normalizedHost.length() - 1);
+        }
+        return normalizedHost;
     }
 
     private Mono<HtmlDocument> extractionFailed(
@@ -301,5 +360,72 @@ public class ExternalHtmlDocumentClient {
             return normalized;
         }
         return normalized.substring(0, ERROR_BODY_LOG_LIMIT) + "...";
+    }
+
+    private record FetchTarget(
+            URI uri,
+            String host,
+            List<InetAddress> addresses
+    ) {
+    }
+
+    private static final class PinnedHostAddressResolverGroup extends AddressResolverGroup<InetSocketAddress> {
+
+        private final String host;
+        private final List<InetAddress> addresses;
+
+        private PinnedHostAddressResolverGroup(String host, List<InetAddress> addresses) {
+            this.host = host.toLowerCase(Locale.ROOT);
+            this.addresses = List.copyOf(addresses);
+        }
+
+        @Override
+        protected AddressResolver<InetSocketAddress> newResolver(EventExecutor executor) {
+            return new PinnedHostAddressResolver(executor, host, addresses);
+        }
+    }
+
+    private static final class PinnedHostAddressResolver extends AbstractAddressResolver<InetSocketAddress> {
+
+        private final String host;
+        private final List<InetAddress> addresses;
+
+        private PinnedHostAddressResolver(EventExecutor executor, String host, List<InetAddress> addresses) {
+            super(executor, InetSocketAddress.class);
+            this.host = host;
+            this.addresses = addresses;
+        }
+
+        @Override
+        protected boolean doIsResolved(InetSocketAddress address) {
+            return address.getAddress() != null;
+        }
+
+        @Override
+        protected void doResolve(InetSocketAddress unresolvedAddress, Promise<InetSocketAddress> promise) {
+            if (!isExpectedHost(unresolvedAddress)) {
+                promise.setFailure(new UnknownHostException(unresolvedAddress.getHostString()));
+                return;
+            }
+            promise.setSuccess(new InetSocketAddress(addresses.get(0), unresolvedAddress.getPort()));
+        }
+
+        @Override
+        protected void doResolveAll(InetSocketAddress unresolvedAddress, Promise<List<InetSocketAddress>> promise) {
+            if (!isExpectedHost(unresolvedAddress)) {
+                promise.setFailure(new UnknownHostException(unresolvedAddress.getHostString()));
+                return;
+            }
+
+            List<InetSocketAddress> resolvedAddresses = new ArrayList<>();
+            for (InetAddress address : addresses) {
+                resolvedAddresses.add(new InetSocketAddress(address, unresolvedAddress.getPort()));
+            }
+            promise.setSuccess(resolvedAddresses);
+        }
+
+        private boolean isExpectedHost(InetSocketAddress unresolvedAddress) {
+            return unresolvedAddress.getHostString().toLowerCase(Locale.ROOT).equals(host);
+        }
     }
 }
