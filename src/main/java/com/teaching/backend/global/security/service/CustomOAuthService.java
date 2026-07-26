@@ -131,6 +131,7 @@ public class CustomOAuthService extends DefaultOAuth2UserService {
             Account account = Account.create(user, provider, dto.getProviderId());
             accountRepository.save(account);
         } catch (DataIntegrityViolationException e) {
+            isNewUserHolder[0] = false;
             return accountRepository.findByProviderAndProviderAccountId(provider, dto.getProviderId())
                     .map(Account::getUser)
                     .orElseThrow(() -> e);
