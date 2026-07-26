@@ -36,11 +36,14 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.times;
@@ -76,6 +79,9 @@ class MaterialUrlAnalysisServiceTest {
 
     @Mock
     private MaterialAiAnalysisOrchestrator materialAiAnalysisOrchestrator;
+
+    @Mock
+    private MaterialUrlAnalysisConcurrencyGuard materialUrlAnalysisConcurrencyGuard;
 
     @InjectMocks
     private MaterialUrlAnalysisService materialUrlAnalysisService;
@@ -163,8 +169,6 @@ class MaterialUrlAnalysisServiceTest {
     void forceAnalyzeTrueReturnsAnalysisRequiredWithoutReusingExistingMaterial() {
         Material completed = material(101L, "Completed", URL, PlatformType.VELOG, AiStatus.COMPLETED, createdAt(1));
         givenValidRequest();
-        when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
-                .thenReturn(List.of(completed));
         givenSuccessfulExtraction();
         givenSuccessfulPipeline();
 
@@ -181,6 +185,7 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(result.platformType()).isEqualTo("VELOG");
         assertThat(result.status()).isEqualTo("COMPLETED");
         assertThat(result.chunkCount()).isEqualTo(2);
+        verify(materialUrlAnalysisConcurrencyGuard, never()).executeWithLock(any(), anyString(), any());
         verify(materialContentExtractorRegistry).extract(PlatformType.VELOG, URL);
         verify(materialAiAnalysisOrchestrator).analyze(any(MaterialAnalysisPreparationResult.class));
         verify(materialRepository, never()).save(any(Material.class));
@@ -207,6 +212,82 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(result.status()).isEqualTo("COMPLETED");
         verify(materialContentExtractorRegistry).extract(PlatformType.VELOG, URL);
         verify(materialAiAnalysisOrchestrator).analyze(any(MaterialAnalysisPreparationResult.class));
+    }
+
+    @Test
+    void forceAnalyzeFalseRunsDuplicateLookupAndPipelineInsideConcurrencyGuard() {
+        givenValidRequest();
+        when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
+                .thenReturn(List.of());
+        givenSuccessfulExtraction();
+        givenSuccessfulPipeline();
+
+        materialUrlAnalysisService.analyze(USER_ID, new MaterialAnalyzeRequest(URL, FOLDER_ID, false));
+
+        verify(materialUrlAnalysisConcurrencyGuard).executeWithLock(eq(USER_ID), eq(URL), any());
+        verify(materialRepository).findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL);
+        verify(materialAiAnalysisOrchestrator).analyze(any(MaterialAnalysisPreparationResult.class));
+    }
+
+    @Test
+    void sequentialSameUrlForceAnalyzeFalseReusesCompletedAfterFirstPipeline() {
+        Material completed = material(200L, "Title", URL, PlatformType.VELOG, AiStatus.COMPLETED, createdAt(2));
+        givenValidRequest();
+        when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
+                .thenReturn(List.of())
+                .thenReturn(List.of(completed));
+        givenSuccessfulExtraction();
+        givenSuccessfulPipeline();
+        when(materialAnalysisRepository.findByMaterialId(200L)).thenReturn(Optional.of(materialAnalysis(300L, completed)));
+        when(materialChunkRepository.findAllByMaterial_IdOrderByChunkIndexAsc(200L))
+                .thenReturn(List.of(materialChunk(completed, 0), materialChunk(completed, 1)));
+
+        MaterialAnalyzeResponse first = materialUrlAnalysisService.analyze(
+                USER_ID,
+                new MaterialAnalyzeRequest(URL, FOLDER_ID, false)
+        );
+        MaterialAnalyzeResponse second = materialUrlAnalysisService.analyze(
+                USER_ID,
+                new MaterialAnalyzeRequest(URL, FOLDER_ID, false)
+        );
+
+        assertThat(first.resultType()).isEqualTo(MaterialAnalyzeResultType.ANALYSIS_COMPLETED);
+        assertThat(second.resultType()).isEqualTo(MaterialAnalyzeResultType.ALREADY_ANALYZED);
+        assertThat(second.existingMaterialId()).isEqualTo(200L);
+        assertThat(second.materialId()).isNull();
+        assertThat(second.materialAnalysisId()).isEqualTo(300L);
+        assertThat(second.chunkCount()).isEqualTo(2);
+        verify(materialAiAnalysisOrchestrator, times(1)).analyze(any(MaterialAnalysisPreparationResult.class));
+        verify(materialContentExtractorRegistry, times(1)).extract(PlatformType.VELOG, URL);
+    }
+
+    @Test
+    void releasesConcurrencyGuardOnFailedAnalysisAndAllowsRetry() {
+        givenValidRequest();
+        when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
+                .thenReturn(List.of())
+                .thenReturn(List.of());
+        when(materialContentExtractorRegistry.extract(PlatformType.VELOG, URL))
+                .thenThrow(new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED))
+                .thenReturn(extractedContent());
+        givenSuccessfulPipeline();
+
+        assertThatThrownBy(() -> materialUrlAnalysisService.analyze(
+                USER_ID,
+                new MaterialAnalyzeRequest(URL, FOLDER_ID, false)
+        ))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
+
+        MaterialAnalyzeResponse retry = materialUrlAnalysisService.analyze(
+                USER_ID,
+                new MaterialAnalyzeRequest(URL, FOLDER_ID, false)
+        );
+
+        assertThat(retry.resultType()).isEqualTo(MaterialAnalyzeResultType.ANALYSIS_COMPLETED);
+        verify(materialUrlAnalysisConcurrencyGuard, times(2)).executeWithLock(eq(USER_ID), eq(URL), any());
+        verify(materialAiAnalysisOrchestrator, times(1)).analyze(any(MaterialAnalysisPreparationResult.class));
     }
 
     @Test
@@ -432,6 +513,8 @@ class MaterialUrlAnalysisServiceTest {
         when(materialUrlValidator.isValidHttpUrl(URL)).thenReturn(true);
         when(folderService.getOwnedFolder(USER_ID, FOLDER_ID)).thenReturn(folder(USER_ID, FOLDER_ID));
         when(materialPlatformResolver.resolve(null, URL)).thenReturn(PlatformType.VELOG);
+        lenient().when(materialUrlAnalysisConcurrencyGuard.executeWithLock(eq(USER_ID), eq(URL), any()))
+                .thenAnswer(invocation -> invocation.getArgument(2, Supplier.class).get());
     }
 
     private void givenSuccessfulExtraction() {

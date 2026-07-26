@@ -35,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -124,11 +125,45 @@ class MaterialIndexingServiceTest {
 
         indexingService.indexMaterialContent(material, "source text");
 
+        ArgumentCaptor<String> upsertedPointId = ArgumentCaptor.forClass(String.class);
+        verify(qdrantClient).upsertPoint(upsertedPointId.capture(), any(float[].class), any());
+        String newPointId = upsertedPointId.getValue();
+        assertThatCode(() -> UUID.fromString(newPointId)).doesNotThrowAnyException();
+        assertThat(newPointId).isNotEqualTo(firstPointId);
         assertThat(first.getChunkText()).isEqualTo("new text");
-        assertThat(first.getQdrantPointId()).isEqualTo(firstPointId);
+        assertThat(first.getQdrantPointId()).isEqualTo(newPointId);
         verify(materialChunkRepository, never()).save(any(MaterialChunk.class));
-        verify(qdrantClient).deletePoints(List.of(excessPointId));
+        ArgumentCaptor<List<String>> deletedPointIds = ArgumentCaptor.forClass(List.class);
+        verify(qdrantClient).deletePoints(deletedPointIds.capture());
+        assertThat(deletedPointIds.getValue()).containsExactlyInAnyOrder(firstPointId, excessPointId);
         verify(materialChunkRepository).deleteAll(List.of(excess));
+    }
+
+    @Test
+    void repeatedSameContentReindexUsesFreshStagedPointIds() {
+        Material material = material();
+        MaterialTextChunk textChunk = new MaterialTextChunk(0, "same text", "chunk 1");
+        String initialPointId = MaterialIndexingService.qdrantPointIdOf(100L, 0);
+        MaterialChunk existingChunk = chunk(material, 0, "same text", initialPointId, 300L);
+        when(materialTextChunker.chunk("source text")).thenReturn(List.of(textChunk));
+        when(materialEmbeddingService.embedChunks(List.of(textChunk)))
+                .thenReturn(List.of(new EmbeddedMaterialTextChunk(textChunk, new float[]{0.1f})));
+        when(materialChunkRepository.findAllByMaterial_IdOrderByChunkIndexAsc(100L))
+                .thenReturn(List.of(existingChunk));
+
+        indexingService.indexMaterialContent(material, "source text");
+        indexingService.indexMaterialContent(material, "source text");
+
+        ArgumentCaptor<String> upsertedPointIds = ArgumentCaptor.forClass(String.class);
+        verify(qdrantClient, times(2)).upsertPoint(upsertedPointIds.capture(), any(float[].class), any());
+        String firstReindexPointId = upsertedPointIds.getAllValues().get(0);
+        String secondReindexPointId = upsertedPointIds.getAllValues().get(1);
+        assertThatCode(() -> UUID.fromString(firstReindexPointId)).doesNotThrowAnyException();
+        assertThatCode(() -> UUID.fromString(secondReindexPointId)).doesNotThrowAnyException();
+        assertThat(firstReindexPointId).isNotEqualTo(initialPointId);
+        assertThat(secondReindexPointId).isNotEqualTo(initialPointId);
+        assertThat(secondReindexPointId).isNotEqualTo(firstReindexPointId);
+        assertThat(existingChunk.getQdrantPointId()).isEqualTo(secondReindexPointId);
     }
 
     @Test
@@ -240,7 +275,7 @@ class MaterialIndexingServiceTest {
     }
 
     @Test
-    void existingChunkReindexFailureDoesNotDeleteExistingQdrantPoints() {
+    void existingChunkReindexFailureKeepsOldChunksAndDeletesOnlyStagedPoints() {
         Material material = material();
         MaterialTextChunk first = new MaterialTextChunk(0, "new first", "chunk 1");
         MaterialTextChunk second = new MaterialTextChunk(1, "new second", "chunk 2");
@@ -265,7 +300,16 @@ class MaterialIndexingServiceTest {
                 .isInstanceOf(MaterialException.class)
                 .extracting("errorCode")
                 .isEqualTo(MaterialErrorCode.MATERIAL_VECTOR_STORE_FAILED);
-        verify(qdrantClient, never()).deletePoints(any());
+        assertThat(existingFirst.getChunkText()).isEqualTo("old first");
+        assertThat(existingSecond.getChunkText()).isEqualTo("old second");
+        assertThat(existingFirst.getQdrantPointId()).isEqualTo(firstPointId);
+        assertThat(existingSecond.getQdrantPointId()).isEqualTo(secondPointId);
+        ArgumentCaptor<List<String>> deletedPointIds = ArgumentCaptor.forClass(List.class);
+        verify(qdrantClient).deletePoints(deletedPointIds.capture());
+        assertThat(deletedPointIds.getValue())
+                .doesNotContain(firstPointId, secondPointId)
+                .hasSize(1);
+        assertThatCode(() -> UUID.fromString(deletedPointIds.getValue().get(0))).doesNotThrowAnyException();
         verify(materialChunkRepository, never()).save(any(MaterialChunk.class));
     }
 

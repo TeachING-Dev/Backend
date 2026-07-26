@@ -43,6 +43,7 @@ public class MaterialUrlAnalysisService {
     private final MaterialPlatformResolver materialPlatformResolver;
     private final MaterialContentExtractorRegistry materialContentExtractorRegistry;
     private final MaterialAiAnalysisOrchestrator materialAiAnalysisOrchestrator;
+    private final MaterialUrlAnalysisConcurrencyGuard materialUrlAnalysisConcurrencyGuard;
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public MaterialAnalyzeResponse analyze(
@@ -55,11 +56,26 @@ public class MaterialUrlAnalysisService {
         folderService.getOwnedFolder(userId, folderId);
         PlatformType platformType = materialPlatformResolver.resolve(null, originalUrl);
 
-        Optional<Material> completedMaterial = findLatestCompletedMaterial(userId, originalUrl);
-        if (completedMaterial.isPresent() && !request.isForceAnalyze()) {
-            return alreadyAnalyzedResponse(completedMaterial.get());
+        if (request.isForceAnalyze()) {
+            return analyzeNewMaterial(userId, folderId, originalUrl, platformType);
         }
 
+        return materialUrlAnalysisConcurrencyGuard.executeWithLock(userId, originalUrl, () -> {
+            Optional<Material> completedMaterial = findLatestCompletedMaterial(userId, originalUrl);
+            if (completedMaterial.isPresent()) {
+                return alreadyAnalyzedResponse(completedMaterial.get());
+            }
+
+            return analyzeNewMaterial(userId, folderId, originalUrl, platformType);
+        });
+    }
+
+    private MaterialAnalyzeResponse analyzeNewMaterial(
+            Long userId,
+            Long folderId,
+            String originalUrl,
+            PlatformType platformType
+    ) {
         MaterialAnalysisPreparationResult preparationResult = prepareAnalysis(
                 userId,
                 folderId,

@@ -19,6 +19,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -65,35 +67,50 @@ public class MaterialIndexingService {
 
         log.info("Material indexing started. materialId={}, chunkCount={}", material.getId(), chunks.size());
         List<EmbeddedMaterialTextChunk> embeddedChunks = materialEmbeddingService.embedChunks(chunks);
-        if (embeddedChunks.size() != chunks.size()) {
-            throw new MaterialException(MaterialErrorCode.MATERIAL_EMBEDDING_FAILED);
-        }
 
         List<MaterialChunk> existingChunks = materialChunkRepository.findAllByMaterial_IdOrderByChunkIndexAsc(material.getId());
         Map<Integer, MaterialChunk> existingChunkByIndex = existingChunks.stream()
                 .collect(Collectors.toMap(MaterialChunk::getChunkIndex, Function.identity(), (current, ignored) -> current));
+        boolean reindexingExistingMaterial = !existingChunks.isEmpty();
+        UUID reindexGenerationId = reindexingExistingMaterial
+                ? freshReindexGenerationId(material.getId(), chunks, existingChunkByIndex)
+                : null;
 
         ensureCollection();
-        List<String> upsertedPointIds = new ArrayList<>();
+        List<String> stagedPointIds = new ArrayList<>();
+        List<String> oldPointIdsToDeleteAfterCommit = new ArrayList<>();
+        List<PendingChunkUpdate> pendingUpdates = new ArrayList<>();
         try {
             for (EmbeddedMaterialTextChunk embeddedChunk : embeddedChunks) {
                 MaterialTextChunk textChunk = embeddedChunk.chunk();
-                String pointId = qdrantPointIdOf(material.getId(), textChunk.chunkIndex());
+                String pointId = qdrantPointIdOf(material.getId(), textChunk.chunkIndex(), reindexGenerationId);
                 MaterialChunk chunk = existingChunkByIndex.get(textChunk.chunkIndex());
                 if (chunk == null) {
                     chunk = materialChunkRepository.save(
                             MaterialChunk.create(material, textChunk.chunkIndex(), textChunk.text(), pointId, textChunk.position())
                     );
                 } else {
-                    chunk.updateContent(textChunk.text(), pointId, textChunk.position());
+                    pendingUpdates.add(new PendingChunkUpdate(chunk, textChunk.text(), pointId, textChunk.position()));
+                    if (!chunk.getQdrantPointId().equals(pointId)) {
+                        oldPointIdsToDeleteAfterCommit.add(chunk.getQdrantPointId());
+                    }
                 }
 
-                upsertPoint(material, chunk, embeddedChunk.vector());
-                upsertedPointIds.add(chunk.getQdrantPointId());
+                upsertPoint(
+                        material,
+                        chunk.getId(),
+                        textChunk.chunkIndex(),
+                        textChunk.text(),
+                        pointId,
+                        embeddedChunk.vector()
+                );
+                stagedPointIds.add(pointId);
             }
-            deleteExcessChunks(existingChunks, chunks.size());
+            pendingUpdates.forEach(PendingChunkUpdate::apply);
+            oldPointIdsToDeleteAfterCommit.addAll(deleteExcessChunks(existingChunks, chunks.size()));
+            registerPointCleanup(stagedPointIds, oldPointIdsToDeleteAfterCommit);
         } catch (RuntimeException e) {
-            compensateNewMaterialPoints(existingChunks, upsertedPointIds);
+            cleanupStagedPoints(stagedPointIds);
             log.warn("Material indexing failed. materialId={}, reason={}", material.getId(), e.getClass().getSimpleName());
             throw e;
         }
@@ -110,15 +127,22 @@ public class MaterialIndexingService {
         }
     }
 
-    private void upsertPoint(Material material, MaterialChunk chunk, float[] vector) {
+    private void upsertPoint(
+            Material material,
+            Long materialChunkId,
+            int chunkIndex,
+            String chunkText,
+            String pointId,
+            float[] vector
+    ) {
         try {
-            qdrantClient.upsertPoint(chunk.getQdrantPointId(), vector, Map.of(
-                    "materialChunkId", chunk.getId(),
+            qdrantClient.upsertPoint(pointId, vector, Map.of(
+                    "materialChunkId", materialChunkId,
                     "materialId", material.getId(),
                     "userId", material.getUser().getId(),
                     "folderId", material.getFolderId(),
-                    "chunkIndex", chunk.getChunkIndex(),
-                    "text", chunk.getChunkText(),
+                    "chunkIndex", chunkIndex,
+                    "text", chunkText,
                     "materialTitle", material.getTitle(),
                     "originalUrl", material.getOriginalUrl()
             ));
@@ -127,42 +151,140 @@ public class MaterialIndexingService {
         }
     }
 
-    private void deleteExcessChunks(List<MaterialChunk> existingChunks, int newChunkCount) {
+    private List<String> deleteExcessChunks(List<MaterialChunk> existingChunks, int newChunkCount) {
         List<MaterialChunk> excessChunks = existingChunks.stream()
                 .filter(chunk -> chunk.getChunkIndex() >= newChunkCount)
                 .toList();
         if (excessChunks.isEmpty()) {
-            return;
+            return List.of();
         }
 
-        try {
-            qdrantClient.deletePoints(excessChunks.stream()
-                    .map(MaterialChunk::getQdrantPointId)
-                    .toList());
-        } catch (RuntimeException e) {
-            throw new MaterialException(MaterialErrorCode.MATERIAL_VECTOR_STORE_FAILED);
-        }
         materialChunkRepository.deleteAll(excessChunks);
+        return excessChunks.stream()
+                .map(MaterialChunk::getQdrantPointId)
+                .toList();
     }
 
-    private void compensateNewMaterialPoints(List<MaterialChunk> existingChunks, List<String> upsertedPointIds) {
-        if (!existingChunks.isEmpty() || upsertedPointIds.isEmpty()) {
+    private void registerPointCleanup(List<String> stagedPointIds, List<String> oldPointIdsToDeleteAfterCommit) {
+        List<String> distinctStagedPointIds = distinct(stagedPointIds);
+        List<String> distinctOldPointIds = distinct(oldPointIdsToDeleteAfterCommit).stream()
+                .filter(pointId -> !distinctStagedPointIds.contains(pointId))
+                .toList();
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    deleteOldPoints(distinctOldPointIds);
+                }
+
+                @Override
+                public void afterCompletion(int status) {
+                    if (status != STATUS_COMMITTED) {
+                        cleanupStagedPoints(distinctStagedPointIds);
+                    }
+                }
+            });
+            return;
+        }
+
+        deleteOldPoints(distinctOldPointIds);
+    }
+
+    private void cleanupStagedPoints(List<String> pointIds) {
+        List<String> distinctPointIds = distinct(pointIds);
+        if (distinctPointIds.isEmpty()) {
             return;
         }
 
         try {
-            qdrantClient.deletePoints(upsertedPointIds);
+            qdrantClient.deletePoints(distinctPointIds);
         } catch (RuntimeException cleanupFailure) {
             log.warn(
                     "Failed to clean up Qdrant points after indexing failure. pointCount={}, reason={}",
-                    upsertedPointIds.size(),
+                    distinctPointIds.size(),
                     cleanupFailure.getClass().getSimpleName()
             );
         }
     }
 
+    private void deleteOldPoints(List<String> pointIds) {
+        List<String> distinctPointIds = distinct(pointIds);
+        if (distinctPointIds.isEmpty()) {
+            return;
+        }
+
+        try {
+            qdrantClient.deletePoints(distinctPointIds);
+        } catch (RuntimeException cleanupFailure) {
+            log.warn(
+                    "Failed to delete old Qdrant points after indexing commit. pointCount={}, reason={}",
+                    distinctPointIds.size(),
+                    cleanupFailure.getClass().getSimpleName()
+            );
+        }
+    }
+
+    private List<String> distinct(List<String> pointIds) {
+        return pointIds.stream()
+                .distinct()
+                .toList();
+    }
+
     static String qdrantPointIdOf(Long materialId, int chunkIndex) {
         String source = "material:%d:chunk:%d".formatted(materialId, chunkIndex);
         return UUID.nameUUIDFromBytes(source.getBytes(StandardCharsets.UTF_8)).toString();
+    }
+
+    private UUID freshReindexGenerationId(
+            Long materialId,
+            List<MaterialTextChunk> chunks,
+            Map<Integer, MaterialChunk> existingChunkByIndex
+    ) {
+        UUID generationId;
+        do {
+            generationId = UUID.randomUUID();
+        } while (hasExistingPointCollision(materialId, chunks, existingChunkByIndex, generationId));
+        return generationId;
+    }
+
+    private boolean hasExistingPointCollision(
+            Long materialId,
+            List<MaterialTextChunk> chunks,
+            Map<Integer, MaterialChunk> existingChunkByIndex,
+            UUID generationId
+    ) {
+        for (MaterialTextChunk chunk : chunks) {
+            MaterialChunk existingChunk = existingChunkByIndex.get(chunk.chunkIndex());
+            if (existingChunk == null) {
+                continue;
+            }
+            String stagedPointId = qdrantPointIdOf(materialId, chunk.chunkIndex(), generationId);
+            if (stagedPointId.equals(existingChunk.getQdrantPointId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String qdrantPointIdOf(Long materialId, int chunkIndex, UUID generationId) {
+        if (generationId == null) {
+            return qdrantPointIdOf(materialId, chunkIndex);
+        }
+
+        String source = "material:%d:chunk:%d:generation:%s".formatted(materialId, chunkIndex, generationId);
+        return UUID.nameUUIDFromBytes(source.getBytes(StandardCharsets.UTF_8)).toString();
+    }
+
+    private record PendingChunkUpdate(
+            MaterialChunk chunk,
+            String chunkText,
+            String pointId,
+            String position
+    ) {
+
+        private void apply() {
+            chunk.updateContent(chunkText, pointId, position);
+        }
     }
 }
