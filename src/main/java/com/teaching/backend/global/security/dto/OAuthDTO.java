@@ -6,6 +6,7 @@ public interface OAuthDTO {
         String getProviderId();
         String getEmail();
         String getNickname();
+        String getProfileImageUrl();
 
 
 }

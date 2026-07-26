@@ -10,6 +10,7 @@ public class KakaoDTO implements OAuthDTO {
     private final String providerId;
     private final String email;
     private final String nickname;
+    private final String profileImageUrl;
 
     @Override
     public String getProvider() {
