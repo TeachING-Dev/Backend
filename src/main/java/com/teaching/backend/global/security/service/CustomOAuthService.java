@@ -47,11 +47,12 @@ public class CustomOAuthService extends DefaultOAuth2UserService {
 
         OAuthDTO dto = extractDTO(provider, oAuth2User);
 
+        boolean[] isNewUserHolder = {false}; // orElseGet 안에서 값 세팅용
         User user = accountRepository.findByProviderAndProviderAccountId(provider, dto.getProviderId())
                 .map(Account::getUser)
-                .orElseGet(() -> registerNewUser(provider, dto));
+                .orElseGet(() -> registerNewUser(provider, dto,isNewUserHolder));
 
-        return OAuthMember.from(user, oAuth2User.getAttributes());
+        return OAuthMember.from(user, oAuth2User.getAttributes(),isNewUserHolder[0]);
     }
 
     private OAuthDTO extractDTO(Provider provider, OAuth2User oAuth2User) {
@@ -114,11 +115,14 @@ public class CustomOAuthService extends DefaultOAuth2UserService {
         };
     }
 
-    private User registerNewUser(Provider provider, OAuthDTO dto) {
+    private User registerNewUser(Provider provider, OAuthDTO dto,boolean[] isNewUserHolder) {
         User user = userRepository.findByEmail(dto.getEmail())
-                .orElseGet(() -> userRepository.save(
-                        User.create(dto.getEmail(), dto.getNickname(), null, null, null)
-                ));
+                .orElseGet(()  -> {
+                    isNewUserHolder[0] = true; // 진짜로 새 User가 만들어질 때만 true
+                    return userRepository.save(
+                            User.create(dto.getEmail(), dto.getNickname(), null, null, null)
+                    );
+                });
 
         try {
             Account account = Account.create(user, provider, dto.getProviderId());

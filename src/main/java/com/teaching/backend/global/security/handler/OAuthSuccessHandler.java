@@ -79,6 +79,7 @@ public class OAuthSuccessHandler implements AuthenticationSuccessHandler {
         // (accessToken도 쿠키로, 리다이렉트는 순수 redirectUri로만)
         String targetUrl = UriComponentsBuilder.fromUriString(redirectUri)
                 .queryParam("accessToken", accessToken)
+                .queryParam("isNewUser", oAuthMember.isNewUser())
                 .build()
                 .toUriString();
 
