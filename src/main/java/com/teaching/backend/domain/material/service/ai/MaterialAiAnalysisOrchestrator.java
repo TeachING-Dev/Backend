@@ -1,6 +1,7 @@
 package com.teaching.backend.domain.material.service.ai;
 
 import com.teaching.backend.domain.folder.entity.Folder;
+import com.teaching.backend.domain.folder.repository.FolderRepository;
 import com.teaching.backend.domain.folder.service.FolderService;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiHighlightResult;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisPipelineResult;
@@ -31,6 +32,7 @@ public class MaterialAiAnalysisOrchestrator {
     private static final int MAX_TITLE_LENGTH = 200;
 
     private final UserRepository userRepository;
+    private final FolderRepository folderRepository;
     private final FolderService folderService;
     private final MaterialRepository materialRepository;
     private final MaterialAiAnalysisStageRegistry materialAiAnalysisStageRegistry;
@@ -80,7 +82,15 @@ public class MaterialAiAnalysisOrchestrator {
                 material,
                 preparationResult.extractedContent().content()
         );
+        if (previousResult.isPresent()) {
+            materialAiAnalysisPersistenceService.saveHighlights(
+                    material,
+                    previousResult.get().longAnalysis(),
+                    highlights
+            );
+        }
         material.markAnalysisCompleted();
+        Folder recommendedFolder = resolveRecommendedFolder(preparationResult.userId(), recommendedFolderName);
 
         return new MaterialAiAnalysisPipelineResult(
                 material.getId(),
@@ -91,8 +101,18 @@ public class MaterialAiAnalysisOrchestrator {
                 savedAnalysis == null ? null : savedAnalysis.getId(),
                 chunkCount,
                 highlights,
-                recommendedFolderName
+                recommendedFolder == null ? null : recommendedFolder.getId(),
+                recommendedFolder == null ? null : recommendedFolder.getName()
         );
+    }
+
+    private Folder resolveRecommendedFolder(Long userId, String recommendedFolderName) {
+        if (recommendedFolderName == null || recommendedFolderName.isBlank()) {
+            return null;
+        }
+
+        return folderRepository.findByUser_IdAndName(userId, recommendedFolderName.trim())
+                .orElse(null);
     }
 
     private String resolveTitle(MaterialAnalysisPreparationResult preparationResult) {

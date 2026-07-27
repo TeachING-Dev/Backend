@@ -38,6 +38,11 @@ public interface FolderRepository extends JpaRepository<Folder, Long> {
             Long userId
     );
 
+    Optional<Folder> findByUser_IdAndName(
+            Long userId,
+            String name
+    );
+
     @Query(
             value = "SELECT * FROM folders WHERE user_id = :userId AND deleted_at IS NOT NULL ORDER BY deleted_at DESC, id DESC",
             countQuery = "SELECT COUNT(*) FROM folders WHERE user_id = :userId AND deleted_at IS NOT NULL",

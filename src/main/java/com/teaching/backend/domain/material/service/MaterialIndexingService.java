@@ -3,11 +3,9 @@ package com.teaching.backend.domain.material.service;
 import com.teaching.backend.domain.material.dto.indexing.EmbeddedMaterialTextChunk;
 import com.teaching.backend.domain.material.dto.indexing.MaterialTextChunk;
 import com.teaching.backend.domain.material.entity.Material;
-import com.teaching.backend.domain.material.entity.MaterialAnalysis;
 import com.teaching.backend.domain.material.entity.MaterialChunk;
 import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.exception.MaterialException;
-import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
 import com.teaching.backend.domain.material.repository.MaterialChunkRepository;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
 import com.teaching.backend.domain.material.service.indexing.MaterialEmbeddingService;
@@ -37,7 +35,6 @@ import java.util.stream.Collectors;
 public class MaterialIndexingService {
 
     private final MaterialRepository materialRepository;
-    private final MaterialAnalysisRepository materialAnalysisRepository;
     private final MaterialChunkRepository materialChunkRepository;
     private final MaterialTextChunker materialTextChunker;
     private final MaterialEmbeddingService materialEmbeddingService;
@@ -52,15 +49,44 @@ public class MaterialIndexingService {
             throw new GeneralException(GlobalErrorCode.FORBIDDEN);
         }
 
-        MaterialAnalysis analysis = materialAnalysisRepository.findByMaterialId(materialId)
-                .orElseThrow(() -> new GeneralException(GlobalErrorCode.NOT_FOUND));
+        List<MaterialChunk> existingChunks = materialChunkRepository.findAllByMaterial_IdOrderByChunkIndexAsc(materialId);
+        if (existingChunks.isEmpty()) {
+            throw new MaterialException(MaterialErrorCode.MATERIAL_INDEXING_TEXT_EMPTY);
+        }
 
-        return indexMaterialContent(material, analysis.getDetailAnalysis());
+        return indexMaterialChunks(material, existingChunks.stream()
+                .map(chunk -> new MaterialTextChunk(
+                        chunk.getChunkIndex(),
+                        chunk.getChunkText(),
+                        chunk.getPosition()
+                ))
+                .toList());
     }
 
     @Transactional
     public int indexMaterialContent(Material material, String text) {
         List<MaterialTextChunk> chunks = materialTextChunker.chunk(text);
+        return indexMaterialChunks(material, chunks);
+    }
+
+    @Transactional
+    public void syncFolderPayload(Material material) {
+        List<String> pointIds = materialChunkRepository.findAllByMaterial_IdOrderByChunkIndexAsc(material.getId())
+                .stream()
+                .map(MaterialChunk::getQdrantPointId)
+                .toList();
+        if (pointIds.isEmpty()) {
+            return;
+        }
+
+        try {
+            qdrantClient.setPayload(pointIds, Map.of("folderId", material.getFolderId()));
+        } catch (RuntimeException e) {
+            throw new MaterialException(MaterialErrorCode.MATERIAL_VECTOR_STORE_FAILED);
+        }
+    }
+
+    private int indexMaterialChunks(Material material, List<MaterialTextChunk> chunks) {
         if (chunks.isEmpty()) {
             throw new MaterialException(MaterialErrorCode.MATERIAL_INDEXING_TEXT_EMPTY);
         }

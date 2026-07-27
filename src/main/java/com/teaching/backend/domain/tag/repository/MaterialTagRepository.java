@@ -32,4 +32,6 @@ public interface MaterialTagRepository
     List<MaterialTag> findAllWithTagByMaterialIds(
             @Param("materialIds") List<Long> materialIds
     );
+
+    List<MaterialTag> findAllByMaterial_Id(Long materialId);
 }

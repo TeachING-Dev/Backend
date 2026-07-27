@@ -1,6 +1,7 @@
 package com.teaching.backend.domain.material.service.ai;
 
 import com.teaching.backend.domain.folder.entity.Folder;
+import com.teaching.backend.domain.folder.repository.FolderRepository;
 import com.teaching.backend.domain.folder.service.FolderService;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiHighlightResult;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisPipelineResult;
@@ -50,6 +51,9 @@ class MaterialAiAnalysisOrchestratorTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private FolderRepository folderRepository;
 
     @Mock
     private FolderService folderService;
@@ -109,6 +113,7 @@ class MaterialAiAnalysisOrchestratorTest {
         when(persistenceService.saveAnalysisResult(any(Material.class), any(MaterialAiAnalysisResult.class)))
                 .thenReturn(analysis);
         when(materialIndexingService.indexMaterialContent(any(Material.class), any(String.class))).thenReturn(3);
+        when(folderRepository.findByUser_IdAndName(USER_ID, "Folder")).thenReturn(Optional.of(folder));
 
         MaterialAiAnalysisPipelineResult result = orchestrator.analyze(preparationResult());
 
@@ -117,12 +122,18 @@ class MaterialAiAnalysisOrchestratorTest {
         assertThat(result.chunkCount()).isEqualTo(3);
         assertThat(result.extractedContent().content()).isEqualTo("source content for chunk later");
         assertThat(result.highlights()).containsExactly(highlight);
+        assertThat(result.recommendedFolderId()).isEqualTo(FOLDER_ID);
         assertThat(result.recommendedFolderName()).isEqualTo("Folder");
         ArgumentCaptor<Material> materialCaptor = ArgumentCaptor.forClass(Material.class);
         verify(materialRepository).save(materialCaptor.capture());
         verify(materialIndexingService).indexMaterialContent(
                 materialCaptor.getValue(),
                 "source content for chunk later"
+        );
+        verify(persistenceService).saveHighlights(
+                materialCaptor.getValue(),
+                "detail",
+                List.of(highlight)
         );
         assertThat(materialCaptor.getValue().getAiStatus()).isEqualTo(AiStatus.COMPLETED);
     }

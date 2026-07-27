@@ -1,9 +1,18 @@
 package com.teaching.backend.domain.material.service.ai;
 
+import com.teaching.backend.domain.material.dto.ai.MaterialAiHighlightResult;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisResult;
+import com.teaching.backend.domain.material.entity.MaterialChunk;
+import com.teaching.backend.domain.material.entity.MaterialHighlight;
+import com.teaching.backend.domain.material.enums.HighlightType;
+import com.teaching.backend.domain.material.enums.MaterialAiHighlightType;
+import com.teaching.backend.domain.material.exception.MaterialErrorCode;
+import com.teaching.backend.domain.material.exception.MaterialException;
 import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.entity.MaterialAnalysis;
 import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
+import com.teaching.backend.domain.material.repository.MaterialChunkRepository;
+import com.teaching.backend.domain.material.repository.MaterialHighlightRepository;
 import com.teaching.backend.domain.tag.entity.MaterialTag;
 import com.teaching.backend.domain.tag.entity.Tag;
 import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
@@ -23,6 +32,8 @@ public class MaterialAiAnalysisPersistenceService {
     private static final int MAX_TAG_NAME_LENGTH = 50;
 
     private final MaterialAnalysisRepository materialAnalysisRepository;
+    private final MaterialChunkRepository materialChunkRepository;
+    private final MaterialHighlightRepository materialHighlightRepository;
     private final TagRepository tagRepository;
     private final MaterialTagRepository materialTagRepository;
 
@@ -40,6 +51,42 @@ public class MaterialAiAnalysisPersistenceService {
         );
         saveTags(material, result.tags());
         return analysis;
+    }
+
+    public void saveHighlights(
+            Material material,
+            String longAnalysis,
+            List<MaterialAiHighlightResult> highlights
+    ) {
+        if (highlights == null || highlights.isEmpty()) {
+            return;
+        }
+        if (longAnalysis == null || longAnalysis.isBlank()) {
+            throw new MaterialException(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED);
+        }
+
+        MaterialChunk anchorChunk = materialChunkRepository.findAllByMaterial_IdOrderByChunkIndexAsc(material.getId())
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new MaterialException(MaterialErrorCode.MATERIAL_INDEXING_FAILED));
+
+        for (MaterialAiHighlightResult highlight : highlights) {
+            String text = highlight == null ? null : highlight.text();
+            if (text == null || text.isBlank()) {
+                throw new MaterialException(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED);
+            }
+            int start = longAnalysis.indexOf(text);
+            if (start < 0) {
+                throw new MaterialException(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED);
+            }
+            materialHighlightRepository.save(MaterialHighlight.create(
+                    anchorChunk,
+                    text,
+                    toHighlightType(highlight.type()),
+                    start,
+                    start + text.length()
+            ));
+        }
     }
 
     private void saveTags(Material material, List<String> tagNames) {
@@ -62,5 +109,12 @@ public class MaterialAiAnalysisPersistenceService {
         tagRepository.insertIfAbsent(name);
         return tagRepository.findByName(name)
                 .orElseThrow(() -> new NoSuchElementException("Tag was not found after insert: " + name));
+    }
+
+    private HighlightType toHighlightType(MaterialAiHighlightType type) {
+        if (type == MaterialAiHighlightType.CAUTION) {
+            return HighlightType.CAUTION;
+        }
+        return HighlightType.MAIN;
     }
 }

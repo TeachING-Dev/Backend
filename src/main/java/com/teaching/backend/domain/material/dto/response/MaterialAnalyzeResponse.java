@@ -14,7 +14,9 @@ public record MaterialAnalyzeResponse(
         String originalUrl,
         String platformType,
         String status,
-        Integer chunkCount
+        Integer chunkCount,
+        Long recommendedFolderId,
+        String recommendedFolderName
 ) {
 
     public static MaterialAnalyzeResponse alreadyAnalyzed(
@@ -33,7 +35,9 @@ public record MaterialAnalyzeResponse(
                 material.getOriginalUrl(),
                 platformType == null ? null : platformType.name(),
                 material.getAiStatus() == null ? null : material.getAiStatus().name(),
-                chunkCount
+                chunkCount,
+                null,
+                null
         );
     }
 
@@ -49,6 +53,8 @@ public record MaterialAnalyzeResponse(
                 null,
                 originalUrl,
                 platformType == null ? null : platformType.name(),
+                null,
+                null,
                 null,
                 null
         );
@@ -66,7 +72,9 @@ public record MaterialAnalyzeResponse(
                 result.originalUrl(),
                 platformType == null ? null : platformType.name(),
                 "COMPLETED",
-                result.chunkCount()
+                result.chunkCount(),
+                result.recommendedFolderId(),
+                result.recommendedFolderName()
         );
     }
 }

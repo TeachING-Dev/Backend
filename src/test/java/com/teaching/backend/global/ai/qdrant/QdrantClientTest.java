@@ -89,6 +89,24 @@ class QdrantClientTest {
         assertThat(requestCount).hasValue(1);
     }
 
+    @Test
+    void setPayloadUpdatesFolderMetadataWithoutVector() throws IOException {
+        List<String> requestBodies = new ArrayList<>();
+        List<String> requestMethods = new ArrayList<>();
+        startServer(exchange -> {
+            requestMethods.add(exchange.getRequestMethod());
+            requestBodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            respond(exchange, 200, "");
+        });
+
+        qdrantClient(1536).setPayload(List.of(UUID.randomUUID().toString()), Map.of("folderId", 20L));
+
+        assertThat(requestBodies).hasSize(1);
+        assertThat(requestMethods).containsExactly("POST");
+        assertThat(requestBodies.get(0)).contains("\"folderId\":20");
+        assertThat(requestBodies.get(0)).doesNotContain("vector");
+    }
+
     private QdrantClient qdrantClient(int vectorSize) {
         return new QdrantClient(baseUrl(), "test-key", "material_chunks", vectorSize, 1000, 3000);
     }
@@ -101,6 +119,7 @@ class QdrantClientTest {
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/collections/material_chunks", handler::handle);
         server.createContext("/collections/material_chunks/points", handler::handle);
+        server.createContext("/collections/material_chunks/points/payload", handler::handle);
         server.start();
     }
 

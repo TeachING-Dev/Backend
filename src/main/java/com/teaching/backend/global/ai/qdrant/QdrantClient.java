@@ -6,6 +6,7 @@ import com.teaching.backend.global.ai.qdrant.dto.DeletePointsRequest;
 import com.teaching.backend.global.ai.qdrant.dto.QdrantSearchHit;
 import com.teaching.backend.global.ai.qdrant.dto.QdrantSearchResponse;
 import com.teaching.backend.global.ai.qdrant.dto.SearchRequest;
+import com.teaching.backend.global.ai.qdrant.dto.SetPayloadRequest;
 import com.teaching.backend.global.ai.qdrant.dto.UpsertPointsRequest;
 import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
@@ -137,6 +138,21 @@ public class QdrantClient {
                 .onStatus(HttpStatusCode::isError,
                         response -> mapError(response, "deletePoints", path))
                 .bodyToMono(Void.class), "deletePoints", path);
+    }
+
+    public void setPayload(List<String> pointIds, Map<String, Object> payload) {
+        if (pointIds.isEmpty() || payload.isEmpty()) {
+            return;
+        }
+        String path = "/collections/" + collectionName + "/points/payload?wait=true";
+
+        call(webClient.post()
+                .uri("/collections/{name}/points/payload?wait=true", collectionName)
+                .bodyValue(new SetPayloadRequest(payload, pointIds))
+                .retrieve()
+                .onStatus(HttpStatusCode::isError,
+                        response -> mapError(response, "setPayload", path))
+                .bodyToMono(Void.class), "setPayload", path);
     }
 
     // userId로 필터링해서 요청자 소유 자료의 청크만 검색되도록 강제

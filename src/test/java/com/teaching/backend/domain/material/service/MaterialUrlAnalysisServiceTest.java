@@ -543,6 +543,7 @@ class MaterialUrlAnalysisServiceTest {
                 300L,
                 2,
                 List.of(),
+                null,
                 null
         );
     }

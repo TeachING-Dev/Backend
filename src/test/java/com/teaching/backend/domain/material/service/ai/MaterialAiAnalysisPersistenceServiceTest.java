@@ -1,11 +1,18 @@
 package com.teaching.backend.domain.material.service.ai;
 
 import com.teaching.backend.domain.folder.entity.Folder;
+import com.teaching.backend.domain.material.dto.ai.MaterialAiHighlightResult;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisResult;
 import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.entity.MaterialAnalysis;
+import com.teaching.backend.domain.material.entity.MaterialChunk;
+import com.teaching.backend.domain.material.entity.MaterialHighlight;
+import com.teaching.backend.domain.material.enums.HighlightType;
+import com.teaching.backend.domain.material.enums.MaterialAiHighlightType;
 import com.teaching.backend.domain.material.enums.PlatformType;
 import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
+import com.teaching.backend.domain.material.repository.MaterialChunkRepository;
+import com.teaching.backend.domain.material.repository.MaterialHighlightRepository;
 import com.teaching.backend.domain.tag.entity.MaterialTag;
 import com.teaching.backend.domain.tag.entity.Tag;
 import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
@@ -17,6 +24,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -35,6 +43,12 @@ class MaterialAiAnalysisPersistenceServiceTest {
 
     @Mock
     private MaterialAnalysisRepository materialAnalysisRepository;
+
+    @Mock
+    private MaterialChunkRepository materialChunkRepository;
+
+    @Mock
+    private MaterialHighlightRepository materialHighlightRepository;
 
     @Mock
     private TagRepository tagRepository;
@@ -133,6 +147,27 @@ class MaterialAiAnalysisPersistenceServiceTest {
         verify(tagRepository, never()).findByName(any());
         verify(tagRepository, never()).insertIfAbsent(any());
         verify(materialTagRepository, never()).save(any());
+    }
+
+    @Test
+    void savesValidatedHighlightsWithOffsetsAndNormalizedType() {
+        Material material = material();
+        ReflectionTestUtils.setField(material, "id", 100L);
+        MaterialChunk chunk = MaterialChunk.create(material, 0, "cleaned source", "point-id", "chunk 1");
+        String longAnalysis = "## Summary\n* **Main** point\nImportant sentence. Be careful.";
+        MaterialAiHighlightResult core = new MaterialAiHighlightResult("Important sentence.", MaterialAiHighlightType.CORE);
+        MaterialAiHighlightResult caution = new MaterialAiHighlightResult("Be careful.", MaterialAiHighlightType.CAUTION);
+        when(materialChunkRepository.findAllByMaterial_IdOrderByChunkIndexAsc(100L)).thenReturn(List.of(chunk));
+        when(materialHighlightRepository.save(any(MaterialHighlight.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        persistenceService.saveHighlights(material, longAnalysis, List.of(core, caution));
+
+        ArgumentCaptor<MaterialHighlight> captor = ArgumentCaptor.forClass(MaterialHighlight.class);
+        verify(materialHighlightRepository, times(2)).save(captor.capture());
+        assertThat(captor.getAllValues().get(0).getHighlightText()).isEqualTo("Important sentence.");
+        assertThat(captor.getAllValues().get(0).getHighlightType()).isEqualTo(HighlightType.MAIN);
+        assertThat(captor.getAllValues().get(0).getStartPosition()).isEqualTo(longAnalysis.indexOf("Important sentence."));
+        assertThat(captor.getAllValues().get(1).getHighlightType()).isEqualTo(HighlightType.CAUTION);
     }
 
     private Material material() {

@@ -314,26 +314,41 @@ class MaterialIndexingServiceTest {
     }
 
     @Test
-    void manualIndexApiKeepsOwnershipAndUsesAnalysisText() {
+    void manualIndexApiKeepsOwnershipAndUsesExistingCleanedContentChunks() {
         Material material = material();
-        MaterialAnalysis analysis = MaterialAnalysis.create(material, "summary", "detail text", "v1");
+        String pointId = MaterialIndexingService.qdrantPointIdOf(100L, 0);
+        MaterialChunk existingChunk = chunk(material, 0, "cleaned original chunk", pointId, 300L);
         MaterialTextChunk textChunk = new MaterialTextChunk(0, "detail text", "청크 1");
+        MaterialTextChunk expectedChunk = new MaterialTextChunk(0, "cleaned original chunk", existingChunk.getPosition());
         when(materialRepository.findById(100L)).thenReturn(Optional.of(material));
-        when(materialAnalysisRepository.findByMaterialId(100L)).thenReturn(Optional.of(analysis));
-        when(materialTextChunker.chunk("detail text")).thenReturn(List.of(textChunk));
-        when(materialEmbeddingService.embedChunks(List.of(textChunk)))
-                .thenReturn(List.of(new EmbeddedMaterialTextChunk(textChunk, new float[]{0.1f})));
-        when(materialChunkRepository.findAllByMaterial_IdOrderByChunkIndexAsc(100L)).thenReturn(List.of());
-        when(materialChunkRepository.save(any(MaterialChunk.class))).thenAnswer(invocation -> {
-            MaterialChunk chunk = invocation.getArgument(0);
-            ReflectionTestUtils.setField(chunk, "id", 300L);
-            return chunk;
-        });
-
+        when(materialChunkRepository.findAllByMaterial_IdOrderByChunkIndexAsc(100L)).thenReturn(List.of(existingChunk));
+        when(materialEmbeddingService.embedChunks(List.of(expectedChunk)))
+                .thenReturn(List.of(new EmbeddedMaterialTextChunk(expectedChunk, new float[]{0.1f})));
         int chunkCount = indexingService.indexMaterial(100L, 1L);
 
         assertThat(chunkCount).isEqualTo(1);
-        verify(materialTextChunker).chunk("detail text");
+        verify(materialTextChunker, never()).chunk(any());
+        verify(materialAnalysisRepository, never()).findByMaterialId(any());
+        verify(qdrantClient).upsertPoint(any(), any(float[].class), any());
+    }
+
+    @Test
+    void syncFolderPayloadUpdatesAllChunkPointsWithoutEmbedding() {
+        Material material = material();
+        String firstPointId = MaterialIndexingService.qdrantPointIdOf(100L, 0);
+        String secondPointId = MaterialIndexingService.qdrantPointIdOf(100L, 1);
+        MaterialChunk first = chunk(material, 0, "first cleaned chunk", firstPointId, 300L);
+        MaterialChunk second = chunk(material, 1, "second cleaned chunk", secondPointId, 301L);
+        when(materialChunkRepository.findAllByMaterial_IdOrderByChunkIndexAsc(100L)).thenReturn(List.of(first, second));
+
+        indexingService.syncFolderPayload(material);
+
+        verify(qdrantClient).setPayload(
+                List.of(firstPointId, secondPointId),
+                Map.of("folderId", 10L)
+        );
+        verify(materialEmbeddingService, never()).embedChunks(any());
+        verify(qdrantClient, never()).upsertPoint(any(), any(float[].class), any());
     }
 
     private Material material() {
