@@ -199,8 +199,7 @@ public class MaterialService {
         entityManager.flush();
 
         if (!finalFolder.getId().equals(currentFolderId)) {
-            materialIndexingService.syncFolderPayload(material);
-            registerFolderPayloadRollbackCompensation(material.getId(), currentFolderId, finalFolder.getId());
+            registerFolderPayloadSyncAfterCommit(material, currentFolderId, finalFolder.getId());
         }
 
         return new MaterialFinalizeResponse(material.getId(), finalFolder.getId(), finalTagIds);
@@ -350,42 +349,34 @@ public class MaterialService {
         return tagsById;
     }
 
-    private void registerFolderPayloadRollbackCompensation(
-            Long materialId,
+    private void registerFolderPayloadSyncAfterCommit(
+            Material material,
             Long oldFolderId,
             Long newFolderId
     ) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            log.error(
+                    "Failed to register Qdrant folder payload sync because transaction synchronization is not active. materialId={}, oldFolderId={}, newFolderId={}",
+                    material.getId(),
+                    oldFolderId,
+                    newFolderId
+            );
             return;
         }
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
-            public void afterCompletion(int status) {
-                if (status != STATUS_ROLLED_BACK) {
-                    return;
-                }
-
+            public void afterCommit() {
                 try {
-                    Material material = materialRepository.findById(materialId)
-                            .orElse(null);
-                    if (material == null) {
-                        log.error(
-                                "Failed to compensate Qdrant folder payload because material was not found. materialId={}, oldFolderId={}, newFolderId={}",
-                                materialId,
-                                oldFolderId,
-                                newFolderId
-                        );
-                        return;
-                    }
-                    materialIndexingService.syncFolderPayload(material, oldFolderId);
-                } catch (RuntimeException compensationFailure) {
+                    materialIndexingService.syncFolderPayload(material, newFolderId);
+                } catch (RuntimeException syncFailure) {
                     log.error(
-                            "Failed to compensate Qdrant folder payload after finalize rollback. materialId={}, oldFolderId={}, newFolderId={}, reason={}",
-                            materialId,
+                            "Failed to sync Qdrant folder payload after finalize commit. materialId={}, oldFolderId={}, newFolderId={}, reason={}",
+                            material.getId(),
                             oldFolderId,
                             newFolderId,
-                            compensationFailure.getClass().getSimpleName()
+                            syncFailure.getClass().getSimpleName(),
+                            syncFailure
                     );
                 }
             }
