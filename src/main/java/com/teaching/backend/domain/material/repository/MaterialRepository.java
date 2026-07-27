@@ -1,6 +1,7 @@
 package com.teaching.backend.domain.material.repository;
 
 import com.teaching.backend.domain.material.entity.Material;
+import com.teaching.backend.domain.material.entity.MaterialHighlight;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -136,6 +137,8 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
     );
 
     List<Material> findAllByFolderId(Long folderId);
-
+    Optional<Material> findByIdAndUser_Id(Long id, Long userId);
 
 }
+
+

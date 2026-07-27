@@ -5,8 +5,8 @@ import lombok.Getter;
 @Getter
 public enum AiGuideContentType {
 
-    SUMMARY("요약"),
-    CAUTION("주의");
+    CAUTION("주의"),
+    MAIN("핵심");
 
     private final String description;
 

@@ -8,9 +8,10 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 
-    public interface TeachingMapStepRepository extends JpaRepository<TeachingMapStep, Long> {
+public interface TeachingMapStepRepository extends JpaRepository<TeachingMapStep, Long> {
 
         @Query("""
         SELECT DISTINCT s.material.platformType
@@ -27,6 +28,8 @@ import java.util.List;
         List<TeachingMapPlatformProjection> findDistinctPlatformTypesByTeachingMapIdIn(
                 @Param("teachingMapIds") List<Long> teachingMapIds
         );
+
+        Optional<TeachingMapStep> findByIdAndTeachingMapId(Long id, Long teachingMapId);
     }
 
 
