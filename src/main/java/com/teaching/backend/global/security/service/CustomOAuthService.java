@@ -52,6 +52,8 @@ public class CustomOAuthService extends DefaultOAuth2UserService {
                 .map(Account::getUser)
                 .orElseGet(() -> registerNewUser(provider, dto,isNewUserHolder));
 
+        fillBlankProfileIfNeeded(user, dto);
+
         return OAuthMember.from(user, oAuth2User.getAttributes(),isNewUserHolder[0]);
     }
 
@@ -127,15 +129,6 @@ public class CustomOAuthService extends DefaultOAuth2UserService {
                     );
                 });
 
-        // 기존 유저인데 닉네임/이미지가 비어있으면 보완
-        if (!isNewUserHolder[0]) {
-            if (user.getNickname() == null || user.getNickname().isBlank()) {
-                user.changeNickname(dto.getNickname());
-            }
-            if (user.getProfileImageUrl() == null || user.getProfileImageUrl().isBlank()) {
-                user.changeProfileImageUrl(dto.getProfileImageUrl());
-            }
-        }
 
         try {
             Account account = Account.create(user, provider, dto.getProviderId());
@@ -148,5 +141,20 @@ public class CustomOAuthService extends DefaultOAuth2UserService {
         }
 
         return user;
+    }
+
+    /**
+     * 닉네임/프로필 이미지가 비어있는 경우에만 소셜 정보로 채운다.
+     * 이미 값이 있으면(=사용자가 직접 설정했으면) 절대 덮어쓰지 않는다.
+     * loadUser()의 두 로그인 경로(기존 Account 있는 경우 / registerNewUser 거치는 경우)
+     * 모두에서 공통으로 호출된다.
+     */
+    private void fillBlankProfileIfNeeded(User user, OAuthDTO dto) {
+        if (user.getNickname() == null || user.getNickname().isBlank()) {
+            user.changeNickname(dto.getNickname());
+        }
+        if (user.getProfileImageUrl() == null || user.getProfileImageUrl().isBlank()) {
+            user.changeProfileImageUrl(dto.getProfileImageUrl());
+        }
     }
 }
