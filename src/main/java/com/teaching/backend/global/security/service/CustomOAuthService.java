@@ -127,6 +127,16 @@ public class CustomOAuthService extends DefaultOAuth2UserService {
                     );
                 });
 
+        // 기존 유저인데 닉네임/이미지가 비어있으면 보완
+        if (!isNewUserHolder[0]) {
+            if (user.getNickname() == null || user.getNickname().isBlank()) {
+                user.changeNickname(dto.getNickname());
+            }
+            if (user.getProfileImageUrl() == null || user.getProfileImageUrl().isBlank()) {
+                user.changeProfileImageUrl(dto.getProfileImageUrl());
+            }
+        }
+
         try {
             Account account = Account.create(user, provider, dto.getProviderId());
             accountRepository.save(account);

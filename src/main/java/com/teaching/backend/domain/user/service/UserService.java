@@ -213,6 +213,11 @@ public class UserService {
 
         User user = getActiveUser(userId);
         withdrawalHistoryRepository.save(WithdrawalHistory.of(userId, reason, request.reasonDetail()));
+
+        // 탈퇴 후 소셜 연동 정보 역시 삭제
+        List<Account> accounts = accountRepository.findAllByUser(user);
+        accountRepository.deleteAll(accounts);
+
         user.delete();
         authService.revokeRefreshToken(userId);
     }
