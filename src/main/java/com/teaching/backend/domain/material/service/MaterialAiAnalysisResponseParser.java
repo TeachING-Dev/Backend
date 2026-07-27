@@ -122,18 +122,48 @@ public class MaterialAiAnalysisResponseParser {
         }
 
         Set<String> seenTexts = new LinkedHashSet<>();
-        return highlights.stream()
-                .map(highlight -> {
-                    String text = requiredTrimmed(highlight == null ? null : highlight.text());
-                    int highlightStart = longAnalysis.indexOf(text);
-                    if (!seenTexts.add(text) || highlightStart < 0) {
-                        throw parseFailed("highlight_text_invalid");
-                    }
-                    MaterialAiHighlightType type = MaterialAiHighlightType.fromLabel(highlight.type());
-                    String exactText = longAnalysis.substring(highlightStart, highlightStart + text.length());
-                    return new MaterialAiHighlightResult(exactText, type);
-                })
+        List<MaterialAiHighlightResult> validHighlights = highlights.stream()
+                .map(highlight -> normalizeHighlight(highlight, longAnalysis, seenTexts))
+                .filter(highlight -> highlight != null)
                 .toList();
+
+        if (validHighlights.isEmpty()) {
+            throw parseFailed("highlight_text_invalid");
+        }
+        if (validHighlights.size() < highlights.size()) {
+            log.warn(
+                    "AI analysis response contained invalid highlights. requestedCount={}, validCount={}",
+                    highlights.size(),
+                    validHighlights.size()
+            );
+        }
+        return validHighlights;
+    }
+
+    private MaterialAiHighlightResult normalizeHighlight(
+            MaterialAiAnalysisResult.Highlight highlight,
+            String longAnalysis,
+            Set<String> seenTexts
+    ) {
+        if (highlight == null || highlight.text() == null || highlight.text().isBlank()) {
+            return null;
+        }
+
+        String text = highlight.text().trim();
+        int highlightStart = longAnalysis.indexOf(text);
+        if (!seenTexts.add(text) || highlightStart < 0) {
+            return null;
+        }
+
+        MaterialAiHighlightType type;
+        try {
+            type = MaterialAiHighlightType.fromLabel(highlight.type());
+        } catch (MaterialException e) {
+            return null;
+        }
+
+        String exactText = longAnalysis.substring(highlightStart, highlightStart + text.length());
+        return new MaterialAiHighlightResult(exactText, type);
     }
 
     private List<String> validateTags(List<String> tags) {

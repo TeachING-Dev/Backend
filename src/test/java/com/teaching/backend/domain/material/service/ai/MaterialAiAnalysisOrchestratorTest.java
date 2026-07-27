@@ -113,7 +113,7 @@ class MaterialAiAnalysisOrchestratorTest {
         when(persistenceService.saveAnalysisResult(any(Material.class), any(MaterialAiAnalysisResult.class)))
                 .thenReturn(analysis);
         when(materialIndexingService.indexMaterialContent(any(Material.class), any(String.class))).thenReturn(3);
-        when(folderRepository.findByUser_IdAndName(USER_ID, "Folder")).thenReturn(Optional.of(folder));
+        when(folderRepository.findByUser_IdAndNameAndDeletedAtIsNull(USER_ID, "Folder")).thenReturn(Optional.of(folder));
 
         MaterialAiAnalysisPipelineResult result = orchestrator.analyze(preparationResult());
 
@@ -131,11 +131,108 @@ class MaterialAiAnalysisOrchestratorTest {
                 "source content for chunk later"
         );
         verify(persistenceService).saveHighlights(
-                materialCaptor.getValue(),
-                "detail",
+                analysis,
                 List.of(highlight)
         );
         assertThat(materialCaptor.getValue().getAiStatus()).isEqualTo(AiStatus.COMPLETED);
+    }
+
+    @Test
+    void recommendedFolderIsNullWhenNoActiveFolderNameMatches() {
+        User user = user();
+        Folder folder = folder(user);
+        MaterialAiAnalysisResult aiResult = new MaterialAiAnalysisResult("summary", "detail", List.of("tag"), null, null);
+        MaterialAnalysis analysis = MaterialAnalysis.create(
+                Material.create(user, folder, "Title", "https://example.com", PlatformType.BLOG),
+                "summary",
+                "detail",
+                "v1"
+        );
+        ReflectionTestUtils.setField(analysis, "id", 200L);
+        MaterialAiAnalysisStage stage = new MaterialAiAnalysisStage() {
+            @Override
+            public MaterialAiStageType type() {
+                return MaterialAiStageType.CONTENT_ANALYSIS;
+            }
+
+            @Override
+            public MaterialAiStageResult execute(MaterialAiStageContext context) {
+                return new MaterialAiStageResult(
+                        MaterialAiStageType.CONTENT_ANALYSIS,
+                        aiResult,
+                        List.of(),
+                        "Deleted Folder"
+                );
+            }
+        };
+        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+        when(folderService.getOwnedFolder(USER_ID, FOLDER_ID)).thenReturn(folder);
+        when(materialRepository.save(any(Material.class))).thenAnswer(invocation -> {
+            Material material = invocation.getArgument(0);
+            ReflectionTestUtils.setField(material, "id", 100L);
+            return material;
+        });
+        when(stageRegistry.stagesInOrder()).thenReturn(List.of(stage));
+        when(persistenceService.saveAnalysisResult(any(Material.class), any(MaterialAiAnalysisResult.class)))
+                .thenReturn(analysis);
+        when(materialIndexingService.indexMaterialContent(any(Material.class), any(String.class))).thenReturn(1);
+        when(folderRepository.findByUser_IdAndNameAndDeletedAtIsNull(USER_ID, "Deleted Folder"))
+                .thenReturn(Optional.empty());
+
+        MaterialAiAnalysisPipelineResult result = orchestrator.analyze(preparationResult());
+
+        assertThat(result.recommendedFolderId()).isNull();
+        assertThat(result.recommendedFolderName()).isNull();
+        verify(folderRepository).findByUser_IdAndNameAndDeletedAtIsNull(USER_ID, "Deleted Folder");
+    }
+
+    @Test
+    void recommendedFolderUsesActiveFolderWhenDeletedFolderWithSameNameExists() {
+        User user = user();
+        Folder initialFolder = folder(user);
+        Folder activeRecommendedFolder = folder(user);
+        ReflectionTestUtils.setField(activeRecommendedFolder, "id", 20L);
+        MaterialAiAnalysisResult aiResult = new MaterialAiAnalysisResult("summary", "detail", List.of("tag"), null, null);
+        MaterialAnalysis analysis = MaterialAnalysis.create(
+                Material.create(user, initialFolder, "Title", "https://example.com", PlatformType.BLOG),
+                "summary",
+                "detail",
+                "v1"
+        );
+        MaterialAiAnalysisStage stage = new MaterialAiAnalysisStage() {
+            @Override
+            public MaterialAiStageType type() {
+                return MaterialAiStageType.CONTENT_ANALYSIS;
+            }
+
+            @Override
+            public MaterialAiStageResult execute(MaterialAiStageContext context) {
+                return new MaterialAiStageResult(
+                        MaterialAiStageType.CONTENT_ANALYSIS,
+                        aiResult,
+                        List.of(),
+                        "Folder"
+                );
+            }
+        };
+        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+        when(folderService.getOwnedFolder(USER_ID, FOLDER_ID)).thenReturn(initialFolder);
+        when(materialRepository.save(any(Material.class))).thenAnswer(invocation -> {
+            Material material = invocation.getArgument(0);
+            ReflectionTestUtils.setField(material, "id", 100L);
+            return material;
+        });
+        when(stageRegistry.stagesInOrder()).thenReturn(List.of(stage));
+        when(persistenceService.saveAnalysisResult(any(Material.class), any(MaterialAiAnalysisResult.class)))
+                .thenReturn(analysis);
+        when(materialIndexingService.indexMaterialContent(any(Material.class), any(String.class))).thenReturn(1);
+        when(folderRepository.findByUser_IdAndNameAndDeletedAtIsNull(USER_ID, "Folder"))
+                .thenReturn(Optional.of(activeRecommendedFolder));
+
+        MaterialAiAnalysisPipelineResult result = orchestrator.analyze(preparationResult());
+
+        assertThat(result.recommendedFolderId()).isEqualTo(20L);
+        assertThat(result.recommendedFolderName()).isEqualTo("Folder");
     }
 
     @Test

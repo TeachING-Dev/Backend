@@ -71,6 +71,11 @@ public class MaterialIndexingService {
 
     @Transactional
     public void syncFolderPayload(Material material) {
+        syncFolderPayload(material, material.getFolderId());
+    }
+
+    @Transactional
+    public void syncFolderPayload(Material material, Long folderId) {
         List<String> pointIds = materialChunkRepository.findAllByMaterial_IdOrderByChunkIndexAsc(material.getId())
                 .stream()
                 .map(MaterialChunk::getQdrantPointId)
@@ -80,7 +85,7 @@ public class MaterialIndexingService {
         }
 
         try {
-            qdrantClient.setPayload(pointIds, Map.of("folderId", material.getFolderId()));
+            qdrantClient.setPayload(pointIds, Map.of("folderId", folderId));
         } catch (RuntimeException e) {
             throw new MaterialException(MaterialErrorCode.MATERIAL_VECTOR_STORE_FAILED);
         }

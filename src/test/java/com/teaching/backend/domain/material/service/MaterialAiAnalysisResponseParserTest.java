@@ -138,8 +138,8 @@ class MaterialAiAnalysisResponseParserTest {
     }
 
     @Test
-    void rejectsSemanticHighlightThatIsNotLiteralSubstring() {
-        assertUrlAnalysisParseFailed("""
+    void excludesSemanticHighlightThatIsNotLiteralSubstring() {
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis("""
                 {
                   "short_summary": "summary",
                   "long_analysis": "## Overview\\n- **Nagle** reduces frequent transmission of small packets. Small packets can be delayed while waiting for ACK. Real-time systems should tune network options carefully.",
@@ -151,7 +151,14 @@ class MaterialAiAnalysisResponseParserTest {
                   "tags": ["TCP", "HTTP", "TLS"],
                   "recommended_folder": null
                 }
-                """);
+                """, List.of("Backend"));
+
+        assertThat(result.highlights())
+                .extracting(MaterialAiHighlightResult::text)
+                .containsExactly(
+                        "Small packets can be delayed while waiting for ACK.",
+                        "Real-time systems should tune network options carefully."
+                );
     }
 
     @Test
@@ -175,8 +182,8 @@ class MaterialAiAnalysisResponseParserTest {
     }
 
     @Test
-    void rejectsUnrelatedHighlightType() {
-        assertUrlAnalysisParseFailed("""
+    void excludesUnrelatedHighlightTypeWhenOtherHighlightsAreValid() {
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis("""
                 {
                   "short_summary": "summary",
                   "long_analysis": "## Overview\\n- **TCP** keeps reliable delivery. Small packets can be delayed while waiting for ACK. Real-time systems should tune network options carefully.",
@@ -184,6 +191,30 @@ class MaterialAiAnalysisResponseParserTest {
                     {"text": "**TCP** keeps reliable delivery.", "type": "정보"},
                     {"text": "Small packets can be delayed while waiting for ACK.", "type": "주의"},
                     {"text": "Real-time systems should tune network options carefully.", "type": "핵심"}
+                  ],
+                  "tags": ["TCP", "HTTP", "TLS"],
+                  "recommended_folder": null
+                }
+                """, List.of("Backend"));
+
+        assertThat(result.highlights())
+                .extracting(MaterialAiHighlightResult::text)
+                .containsExactly(
+                        "Small packets can be delayed while waiting for ACK.",
+                        "Real-time systems should tune network options carefully."
+                );
+    }
+
+    @Test
+    void rejectsWhenNoValidHighlightRemains() {
+        assertUrlAnalysisParseFailed("""
+                {
+                  "short_summary": "summary",
+                  "long_analysis": "## Overview\\n- **TCP** keeps reliable delivery. Small packets can be delayed while waiting for ACK. Real-time systems should tune network options carefully.",
+                  "highlights": [
+                    {"text": "missing one", "type": "?듭떖"},
+                    {"text": "missing two", "type": "二쇱쓽"},
+                    {"text": "missing three", "type": "?듭떖"}
                   ],
                   "tags": ["TCP", "HTTP", "TLS"],
                   "recommended_folder": null
@@ -282,16 +313,29 @@ class MaterialAiAnalysisResponseParserTest {
     }
 
     @Test
-    void rejectsInvalidHighlightTypeInUrlAnalysis() {
-        assertUrlAnalysisParseFailed(validUrlAnalysisJson("Backend").replace("\"핵심\"", "\"정보\""));
+    void excludesInvalidHighlightTypeInUrlAnalysisWhenOtherHighlightsAreValid() {
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis(
+                validUrlAnalysisJson("Backend").replaceFirst("\"핵심\"", "\"정보\""),
+                List.of("Backend")
+        );
+
+        assertThat(result.highlights()).hasSize(2);
+        assertThat(result.highlights())
+                .extracting(MaterialAiHighlightResult::text)
+                .doesNotContain("스프링 트랜잭션은 데이터 정합성을 지키는 핵심 장치입니다.");
     }
 
     @Test
-    void rejectsHighlightNotContainedInLongAnalysis() {
-        assertUrlAnalysisParseFailed(validUrlAnalysisJson("Backend").replace(
+    void excludesHighlightNotContainedInLongAnalysisWhenOtherHighlightsAreValid() {
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis(validUrlAnalysisJson("Backend").replace(
                 "\"스프링 트랜잭션은 데이터 정합성을 지키는 핵심 장치입니다.\"",
                 "\"본문에 없는 문장입니다.\""
-        ));
+        ), List.of("Backend"));
+
+        assertThat(result.highlights()).hasSize(2);
+        assertThat(result.highlights())
+                .extracting(MaterialAiHighlightResult::text)
+                .doesNotContain("본문에 없는 문장입니다.");
     }
 
     @Test
@@ -312,15 +356,29 @@ class MaterialAiAnalysisResponseParserTest {
 
     @Test
     void rejectsTooManyHighlights() {
-        assertUrlAnalysisParseFailed(validUrlAnalysisJson("Backend").replace(
-                """
-                    {"text": "롤백 정책은 예외 타입에 따라 다르게 동작할 수 있습니다.", "type": "주의"}
-                """.strip(),
-                """
-                    {"text": "롤백 정책은 예외 타입에 따라 다르게 동작할 수 있습니다.", "type": "주의"},
+        assertUrlAnalysisParseFailed("""
+                {
+                  "short_summary": "핵심 요약",
+                  "long_analysis": "%s",
+                  "highlights": [
                     {"text": "스프링 트랜잭션은 데이터 정합성을 지키는 핵심 장치입니다.", "type": "핵심"},
-                    {"text": "전파 옵션은 호출 흐름에 따라 커밋 경계를 바꿀 수 있습니다.", "type": "주의"}
-                """.strip()
+                    {"text": "전파 옵션은 호출 흐름에 따라 커밋 경계를 바꿀 수 있습니다.", "type": "주의"},
+                    {"text": "롤백 정책은 예외 타입에 따라 다르게 동작할 수 있습니다.", "type": "주의"},
+                    {"text": "데이터 정합성은 트랜잭션 경계 안에서 유지되어야 합니다.", "type": "핵심"},
+                    {"text": "외부 저장소는 별도 보상 정책이 필요할 수 있습니다.", "type": "주의"},
+                    {"text": "분석 결과는 검증된 뒤 저장되어야 합니다.", "type": "핵심"}
+                  ],
+                  "tags": ["스프링", "JPA", "트랜잭션"],
+                  "recommended_folder": null
+                }
+                """.formatted(
+                "## 개요\\n* **정합성**을 지키려면 트랜잭션 경계를 이해해야 합니다. "
+                        + "스프링 트랜잭션은 데이터 정합성을 지키는 핵심 장치입니다. "
+                        + "전파 옵션은 호출 흐름에 따라 커밋 경계를 바꿀 수 있습니다. "
+                        + "롤백 정책은 예외 타입에 따라 다르게 동작할 수 있습니다. "
+                        + "데이터 정합성은 트랜잭션 경계 안에서 유지되어야 합니다. "
+                        + "외부 저장소는 별도 보상 정책이 필요할 수 있습니다. "
+                        + "분석 결과는 검증된 뒤 저장되어야 합니다."
         ));
     }
 

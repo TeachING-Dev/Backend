@@ -1,0 +1,40 @@
+-- Manual schema alignment for MaterialHighlight analysis-based anchoring.
+-- Apply after verifying existing data. This project does not use Flyway/Liquibase.
+--
+-- 1. Inspect current columns and foreign keys:
+-- SHOW COLUMNS FROM material_highlights;
+-- SELECT
+--     CONSTRAINT_NAME,
+--     COLUMN_NAME,
+--     REFERENCED_TABLE_NAME,
+--     REFERENCED_COLUMN_NAME
+-- FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+-- WHERE TABLE_SCHEMA = DATABASE()
+--   AND TABLE_NAME = 'material_highlights'
+--   AND REFERENCED_TABLE_NAME IS NOT NULL;
+--
+-- 2. Backfill invalid material_analysis_id values before adding/keeping FK.
+--    Run this only if legacy rows still have material_chunk_id and invalid material_analysis_id.
+-- UPDATE material_highlights mh
+-- JOIN material_chunks mc ON mh.material_chunk_id = mc.id
+-- JOIN material_analysis ma ON ma.material_id = mc.material_id
+-- SET mh.material_analysis_id = ma.id
+-- WHERE mh.material_analysis_id IS NULL
+--    OR mh.material_analysis_id = 0
+--    OR NOT EXISTS (
+--        SELECT 1
+--        FROM material_analysis valid_ma
+--        WHERE valid_ma.id = mh.material_analysis_id
+--    );
+--
+-- 3. Drop the legacy chunk FK and column.
+--    Replace <legacy_material_chunk_fk_name> with the actual name from step 1.
+-- ALTER TABLE material_highlights
+--     DROP FOREIGN KEY <legacy_material_chunk_fk_name>;
+--
+-- ALTER TABLE material_highlights
+--     DROP COLUMN material_chunk_id;
+--
+-- Expected final state:
+-- - material_analysis_id BIGINT NOT NULL with FK to material_analysis(id)
+-- - no material_chunk_id column

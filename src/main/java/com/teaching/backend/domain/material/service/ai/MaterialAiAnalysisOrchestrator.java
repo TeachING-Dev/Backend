@@ -84,8 +84,7 @@ public class MaterialAiAnalysisOrchestrator {
         );
         if (previousResult.isPresent()) {
             materialAiAnalysisPersistenceService.saveHighlights(
-                    material,
-                    previousResult.get().longAnalysis(),
+                    savedAnalysis,
                     highlights
             );
         }
@@ -111,7 +110,7 @@ public class MaterialAiAnalysisOrchestrator {
             return null;
         }
 
-        return folderRepository.findByUser_IdAndName(userId, recommendedFolderName.trim())
+        return folderRepository.findByUser_IdAndNameAndDeletedAtIsNull(userId, recommendedFolderName.trim())
                 .orElse(null);
     }
 

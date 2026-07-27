@@ -31,6 +31,8 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -226,6 +228,95 @@ class MaterialServiceTest {
         verify(materialTagRepository, never()).saveAll(any());
         verify(entityManager).flush();
         verify(materialIndexingService).syncFolderPayload(material);
+    }
+
+    @Test
+    void finalizeMaterialCompensatesQdrantFolderPayloadWhenTransactionRollsBackAfterSync() {
+        Material material = material(101L, USER_ID, "Material", PlatformType.WEB, AiStatus.COMPLETED, createdAt(1));
+        Folder finalFolder = folder(USER_ID, 20L);
+        MaterialTag first = materialTagWithTagId(material, 1001L, "a");
+        when(materialRepository.findByIdAndUser_Id(101L, USER_ID)).thenReturn(Optional.of(material));
+        when(materialRepository.findById(101L)).thenReturn(Optional.of(material));
+        when(folderRepository.findByIdAndUser_Id(20L, USER_ID)).thenReturn(Optional.of(finalFolder));
+        when(materialTagRepository.findAllWithTagByMaterialIds(List.of(101L))).thenReturn(List.of(first));
+        when(tagRepository.findAllById(List.of(1001L))).thenReturn(List.of(first.getTag()));
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            materialService.finalizeMaterial(
+                    USER_ID,
+                    101L,
+                    new MaterialFinalizeRequest(20L, List.of(1001L))
+            );
+
+            List<TransactionSynchronization> synchronizations = TransactionSynchronizationManager.getSynchronizations();
+            assertThat(synchronizations).hasSize(1);
+            synchronizations.forEach(synchronization ->
+                    synchronization.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK)
+            );
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+
+        verify(materialIndexingService).syncFolderPayload(material);
+        verify(materialIndexingService).syncFolderPayload(material, FOLDER_ID);
+    }
+
+    @Test
+    void finalizeMaterialDoesNotCompensateQdrantFolderPayloadWhenTransactionCommits() {
+        Material material = material(101L, USER_ID, "Material", PlatformType.WEB, AiStatus.COMPLETED, createdAt(1));
+        Folder finalFolder = folder(USER_ID, 20L);
+        MaterialTag first = materialTagWithTagId(material, 1001L, "a");
+        when(materialRepository.findByIdAndUser_Id(101L, USER_ID)).thenReturn(Optional.of(material));
+        when(folderRepository.findByIdAndUser_Id(20L, USER_ID)).thenReturn(Optional.of(finalFolder));
+        when(materialTagRepository.findAllWithTagByMaterialIds(List.of(101L))).thenReturn(List.of(first));
+        when(tagRepository.findAllById(List.of(1001L))).thenReturn(List.of(first.getTag()));
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            materialService.finalizeMaterial(
+                    USER_ID,
+                    101L,
+                    new MaterialFinalizeRequest(20L, List.of(1001L))
+            );
+
+            List<TransactionSynchronization> synchronizations = TransactionSynchronizationManager.getSynchronizations();
+            assertThat(synchronizations).hasSize(1);
+            synchronizations.forEach(synchronization ->
+                    synchronization.afterCompletion(TransactionSynchronization.STATUS_COMMITTED)
+            );
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+
+        verify(materialIndexingService).syncFolderPayload(material);
+        verify(materialIndexingService, never()).syncFolderPayload(material, FOLDER_ID);
+    }
+
+    @Test
+    void finalizeMaterialDoesNotRegisterQdrantCompensationWhenFolderDoesNotChange() {
+        Material material = material(101L, USER_ID, "Material", PlatformType.WEB, AiStatus.COMPLETED, createdAt(1));
+        Folder sameFolder = material.getFolder();
+        MaterialTag first = materialTagWithTagId(material, 1001L, "a");
+        when(materialRepository.findByIdAndUser_Id(101L, USER_ID)).thenReturn(Optional.of(material));
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(sameFolder));
+        when(materialTagRepository.findAllWithTagByMaterialIds(List.of(101L))).thenReturn(List.of(first));
+        when(tagRepository.findAllById(List.of(1001L))).thenReturn(List.of(first.getTag()));
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            materialService.finalizeMaterial(
+                    USER_ID,
+                    101L,
+                    new MaterialFinalizeRequest(FOLDER_ID, List.of(1001L))
+            );
+
+            assertThat(TransactionSynchronizationManager.getSynchronizations()).isEmpty();
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+
+        verify(materialIndexingService, never()).syncFolderPayload(any());
     }
 
     @Test

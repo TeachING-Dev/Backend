@@ -34,16 +34,20 @@ import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class MaterialService {
@@ -196,6 +200,7 @@ public class MaterialService {
 
         if (!finalFolder.getId().equals(currentFolderId)) {
             materialIndexingService.syncFolderPayload(material);
+            registerFolderPayloadRollbackCompensation(material.getId(), currentFolderId, finalFolder.getId());
         }
 
         return new MaterialFinalizeResponse(material.getId(), finalFolder.getId(), finalTagIds);
@@ -343,6 +348,48 @@ public class MaterialService {
             throw new TagException(TagErrorCode.TAG_NOT_FOUND);
         }
         return tagsById;
+    }
+
+    private void registerFolderPayloadRollbackCompensation(
+            Long materialId,
+            Long oldFolderId,
+            Long newFolderId
+    ) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status != STATUS_ROLLED_BACK) {
+                    return;
+                }
+
+                try {
+                    Material material = materialRepository.findById(materialId)
+                            .orElse(null);
+                    if (material == null) {
+                        log.error(
+                                "Failed to compensate Qdrant folder payload because material was not found. materialId={}, oldFolderId={}, newFolderId={}",
+                                materialId,
+                                oldFolderId,
+                                newFolderId
+                        );
+                        return;
+                    }
+                    materialIndexingService.syncFolderPayload(material, oldFolderId);
+                } catch (RuntimeException compensationFailure) {
+                    log.error(
+                            "Failed to compensate Qdrant folder payload after finalize rollback. materialId={}, oldFolderId={}, newFolderId={}, reason={}",
+                            materialId,
+                            oldFolderId,
+                            newFolderId,
+                            compensationFailure.getClass().getSimpleName()
+                    );
+                }
+            }
+        });
     }
 
     private MaterialAnalysis getOwnedAnalysis(Long materialId) {
