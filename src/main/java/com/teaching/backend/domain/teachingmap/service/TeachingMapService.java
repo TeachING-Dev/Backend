@@ -216,7 +216,7 @@ public class TeachingMapService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserException(UserErrorCode.USER_NOT_FOUND));
 
-        teachingMapRepository.findByIdAndUser_Id(teachingMapId, userId)
+        teachingMapRepository.findByIdAndUser_IdAndDeletedAtIsNull(teachingMapId, userId)
                 .orElseThrow(() -> new GeneralException(TeachingMapErrorCode.TEACHING_MAP_NOT_FOUND));
 
         TeachingMapStep step = stepRepository.findByIdAndTeachingMapId(stepId, teachingMapId)

@@ -1,10 +1,13 @@
 package com.teaching.backend.domain.teachingmap.service;
 
+import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.entity.MaterialAnalysis;
 import com.teaching.backend.domain.material.entity.MaterialHighlight;
 import com.teaching.backend.domain.material.enums.HighlightType;
+import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
 import com.teaching.backend.domain.material.repository.MaterialHighlightRepository;
+import com.teaching.backend.domain.material.repository.MaterialRepository;
 import com.teaching.backend.domain.teachingmap.dto.response.HighlightAnalysisResponse;
 import com.teaching.backend.domain.teachingmap.entity.AiGuide;
 import com.teaching.backend.domain.teachingmap.enums.AiGuideContentType;
@@ -33,6 +36,7 @@ public class HighlightAnalysisService {
     private final OpenAiClient openAiClient;
     private final HighlightAnalysisPromptGenerator highlightPromptGenerator;
     private final UserRepository userRepository;
+    private final MaterialRepository materialRepository;
 
     public HighlightAnalysisResponse getOrGenerateAiGuide(
             Long userId, Long materialId, Long highlightId
@@ -40,6 +44,10 @@ public class HighlightAnalysisService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new UserException(UserErrorCode.USER_NOT_FOUND));
         GuideType guideType = toGuideType(user.getTeacherPersona());
+
+        // material이 요청 유저 소유인지 확인
+        Material material = materialRepository.findByIdAndUser_Id(materialId, userId)
+                .orElseThrow(() -> new GeneralException(MaterialErrorCode.MATERIAL_NOT_FOUND));
 
         MaterialHighlight highlight = materialHighlightRepository.findById(highlightId)
                 .orElseThrow(() -> new GeneralException(TeachingMapErrorCode.HIGHLIGHT_NOT_FOUND));

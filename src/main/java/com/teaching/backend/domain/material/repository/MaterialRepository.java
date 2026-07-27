@@ -137,6 +137,7 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
     );
 
     List<Material> findAllByFolderId(Long folderId);
+    Optional<Material> findByIdAndUser_Id(Long id, Long userId);
 
 }
 
