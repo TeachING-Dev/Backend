@@ -6,26 +6,28 @@ import com.teaching.backend.domain.folder.exception.FolderException;
 import com.teaching.backend.domain.folder.repository.FolderRepository;
 import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.entity.MaterialAnalysis;
+import com.teaching.backend.domain.material.entity.MaterialHighlight;
 import com.teaching.backend.domain.material.enums.AiStatus;
+import com.teaching.backend.domain.material.enums.HighlightType;
 import com.teaching.backend.domain.material.enums.PlatformType;
 import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
+import com.teaching.backend.domain.material.repository.MaterialHighlightRepository;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
+import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
 import com.teaching.backend.domain.teachingmap.dto.request.TeachingMapCreateRequest;
-import com.teaching.backend.domain.teachingmap.dto.response.SourcePlatform;
-import com.teaching.backend.domain.teachingmap.dto.response.TeachingMapCreateResponse;
-import com.teaching.backend.domain.teachingmap.dto.response.TeachingMapListItem;
-import com.teaching.backend.domain.teachingmap.dto.response.TeachingMapListResponse;
+import com.teaching.backend.domain.teachingmap.dto.response.*;
+import com.teaching.backend.domain.teachingmap.entity.AiGuide;
 import com.teaching.backend.domain.teachingmap.entity.TeachingMap;
 import com.teaching.backend.domain.teachingmap.entity.TeachingMapStep;
-import com.teaching.backend.domain.teachingmap.enums.TeachingMapListSort;
-import com.teaching.backend.domain.teachingmap.enums.TeachingMapStatus;
-import com.teaching.backend.domain.teachingmap.enums.TeachingMapType;
+import com.teaching.backend.domain.teachingmap.enums.*;
 import com.teaching.backend.domain.teachingmap.exception.TeachingMapErrorCode;
 import com.teaching.backend.domain.teachingmap.exception.TeachingMapException;
+import com.teaching.backend.domain.teachingmap.repository.AiGuideRepository;
 import com.teaching.backend.domain.teachingmap.repository.TeachingMapPlatformProjection;
 import com.teaching.backend.domain.teachingmap.repository.TeachingMapRepository;
 import com.teaching.backend.domain.teachingmap.repository.TeachingMapStepRepository;
 import com.teaching.backend.domain.user.entity.User;
+import com.teaching.backend.domain.user.enums.TeacherPersona;
 import com.teaching.backend.domain.user.exception.UserErrorCode;
 import com.teaching.backend.domain.user.exception.UserException;
 import com.teaching.backend.domain.user.repository.UserRepository;
@@ -62,6 +64,13 @@ public class TeachingMapService {
     private final MaterialAnalysisRepository materialAnalysisRepository;
     @Value("${app.icon-base-url}")
     private String iconBaseUrl;
+    @Value("${app.teacher-image-base-url}")
+    private String teacherImageBaseUrl;
+
+    private final MaterialHighlightRepository materialHighlightRepository;
+    private final MaterialTagRepository materialTagRepository;
+    private final AiGuideRepository aiGuideRepository;
+    private final HighlightAnalysisPromptGenerator highlightPromptGenerator;
 
 //티칭맵 전체목록 조회
 
@@ -107,7 +116,16 @@ public class TeachingMapService {
     private String buildIconUrl(String iconPath) {
         return iconBaseUrl + "/" + iconPath;
     }
-
+    private GuideType toGuideType(TeacherPersona persona) {
+        return switch (persona) {
+            case FRIENDLY -> GuideType.FRIENDLY;
+            case STRICT -> GuideType.STRICT;
+            case CHEERING -> GuideType.ENCOURAGING;
+        };
+    }
+    private String buildTeacherImageUrl(GuideType guideType) {
+        return teacherImageBaseUrl + "/" + guideType.getImagePath();
+    }
 
     // 티칭맵 생성
     @Transactional
@@ -159,6 +177,7 @@ public class TeachingMapService {
 
         return TeachingMapCreateResponse.from(teachingMap);
     }
+
     private void validateAiResult(TeachingMapAiResultParser.TeachingMapAiResult result,
                                   TeachingMapType type, int materialCount) {
         List<TeachingMapAiResultParser.TeachingMapAiNode> nodes = result.nodes();
@@ -189,4 +208,45 @@ public class TeachingMapService {
             throw new GeneralException(TeachingMapErrorCode.AI_RESULT_INVALID);
         }
     }
+
+    //티칭맵 상세 조회
+    @Transactional(readOnly = true)
+    public TeachingMapStepDetailResponse getStepDetail(Long userId, Long teachingMapId, Long stepId) {
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UserException(UserErrorCode.USER_NOT_FOUND));
+
+        teachingMapRepository.findByIdAndUser_Id(teachingMapId, userId)
+                .orElseThrow(() -> new GeneralException(TeachingMapErrorCode.TEACHING_MAP_NOT_FOUND));
+
+        TeachingMapStep step = stepRepository.findByIdAndTeachingMapId(stepId, teachingMapId)
+                .orElseThrow(() -> new GeneralException(TeachingMapErrorCode.STEP_NOT_FOUND));
+
+        Material material = step.getMaterial();
+
+        MaterialAnalysis analysis = materialAnalysisRepository.findByMaterialId(material.getId())
+                .orElseThrow(() -> new GeneralException(TeachingMapErrorCode.MATERIAL_ANALYSIS_NOT_FOUND));
+
+        List<MaterialHighlight> materialHighlights = materialHighlightRepository.findAllByMaterialId(material.getId());
+        List<HighlightResponse> highlights = materialHighlights.stream()
+                .map(HighlightResponse::from)
+                .toList();
+
+        List<String> tags = materialTagRepository.findAllTagNamesByMaterialId(material.getId());
+
+        ExistingAiAnalysis existingAiAnalysis = ExistingAiAnalysis.of(analysis, highlights);
+
+        GuideType guideType = toGuideType(user.getTeacherPersona());
+        List<Long> highlightIds = materialHighlights.stream().map(MaterialHighlight::getId).toList();
+        List<FeedbackResponse> feedbacks = aiGuideRepository
+                .findAllByMaterialHighlightIdInAndGuideType(highlightIds, guideType).stream()
+                .map(FeedbackResponse::from)
+                .toList();
+
+        AiTeacherAnalysis aiTeacherAnalysis = AiTeacherAnalysis.of(guideType, buildTeacherImageUrl(guideType), feedbacks);
+
+        return TeachingMapStepDetailResponse.of(step, material, tags, existingAiAnalysis, aiTeacherAnalysis);
+    }
+
+
 }
