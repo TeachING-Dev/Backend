@@ -43,10 +43,9 @@ public class MaterialAiAnalysisOrchestrator {
     public MaterialAiAnalysisPipelineResult analyze(MaterialAnalysisPreparationResult preparationResult) {
         User user = userRepository.findById(preparationResult.userId())
                 .orElseThrow(() -> new UserException(UserErrorCode.USER_NOT_FOUND));
-        Folder folder = folderService.getOwnedFolder(preparationResult.userId(), preparationResult.folderId());
         Material material = materialRepository.save(Material.create(
                 user,
-                folder,
+                null,
                 resolveTitle(preparationResult),
                 preparationResult.originalUrl(),
                 preparationResult.platformType()
