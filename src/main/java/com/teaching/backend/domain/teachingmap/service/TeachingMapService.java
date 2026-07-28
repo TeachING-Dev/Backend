@@ -248,5 +248,15 @@ public class TeachingMapService {
         return TeachingMapStepDetailResponse.of(step, material, tags, existingAiAnalysis, aiTeacherAnalysis);
     }
 
+    public TeachingMapDetailResponse getTeachingMap(Long userId, Long teachingMapId) {
+        TeachingMap teachingMap = teachingMapRepository.findByIdAndUser_IdAndDeletedAtIsNull(teachingMapId, userId)
+                .orElseThrow(() -> new GeneralException(TeachingMapErrorCode.TEACHING_MAP_NOT_FOUND));
+
+        List<TeachingMapStep> steps = stepRepository
+                .findByTeachingMapIdAndDeletedAtIsNullOrderByStepOrder(teachingMapId);
+
+        return TeachingMapDetailResponse.from(teachingMap, steps);
+    }
+
 
 }

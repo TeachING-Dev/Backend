@@ -2,10 +2,7 @@ package com.teaching.backend.domain.teachingmap.controller;
 
 import com.teaching.backend.domain.teachingmap.code.TeachingMapSuccessCode;
 import com.teaching.backend.domain.teachingmap.dto.request.TeachingMapCreateRequest;
-import com.teaching.backend.domain.teachingmap.dto.response.HighlightAnalysisResponse;
-import com.teaching.backend.domain.teachingmap.dto.response.TeachingMapCreateResponse;
-import com.teaching.backend.domain.teachingmap.dto.response.TeachingMapListResponse;
-import com.teaching.backend.domain.teachingmap.dto.response.TeachingMapStepDetailResponse;
+import com.teaching.backend.domain.teachingmap.dto.response.*;
 import com.teaching.backend.domain.teachingmap.enums.GuideType;
 import com.teaching.backend.domain.teachingmap.enums.TeachingMapListSort;
 import com.teaching.backend.domain.teachingmap.enums.TeachingMapStatus;
@@ -113,4 +110,22 @@ public class TeachingMapController {
         return ApiResponse.onSuccess(TeachingMapSuccessCode.HIGHLIGHT_ANALYSIS_SUCCESS, response);
     }
 
+// 티칭맵 단건 조회
+    @Operation(
+            summary = "티칭맵 단건 조회",
+            description = "티칭맵 ID로 특정 티칭맵의 상세 정보(제목, 설명, 타입, 진행률)와 "
+                    + "해당 티칭맵에 속한 스텝 목록(순서, tip, 스텝 제목, 완료 여부)을 함께 조회합니다."
+    )
+
+
+    @GetMapping("/{teachingMapId}")
+    public ApiResponse<TeachingMapDetailResponse> getTeachingMap(
+            @AuthenticationPrincipal AuthMember authMember,
+            @PathVariable Long teachingMapId
+    ) {
+        TeachingMapDetailResponse response = teachingMapService.getTeachingMap(
+                getAuthenticatedUserId(authMember), teachingMapId
+        );
+        return ApiResponse.onSuccess(TeachingMapSuccessCode.TEACHING_MAP_DETAIL_SUCCESS, response);
+    }
 }

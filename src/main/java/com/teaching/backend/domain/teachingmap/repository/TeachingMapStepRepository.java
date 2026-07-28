@@ -30,6 +30,8 @@ public interface TeachingMapStepRepository extends JpaRepository<TeachingMapStep
         );
 
         Optional<TeachingMapStep> findByIdAndTeachingMapId(Long id, Long teachingMapId);
+
+        List<TeachingMapStep> findByTeachingMapIdAndDeletedAtIsNullOrderByStepOrder(Long teachingMapId);
     }
 
 
