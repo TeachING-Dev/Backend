@@ -62,10 +62,8 @@ public class TeachingMapStep extends BaseSoftDeleteEntity {
                 .build();
     }
 
-    public void finish() {
-        if (this.isFinished) {
-            throw new IllegalStateException("이미 완료된 스텝입니다.");
-        }
-        this.isFinished = true;
+    public boolean toggle() {
+        this.isFinished = !this.isFinished;
+        return this.isFinished;
     }
 }

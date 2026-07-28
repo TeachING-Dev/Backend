@@ -257,6 +257,28 @@ public class TeachingMapService {
 
         return TeachingMapDetailResponse.from(teachingMap, steps);
     }
+    //티칭맵 스텝 완료 상태 토글
+    @Transactional
+    public StepToggleResponse toggleStep(Long userId, Long teachingMapId, Long stepId) {
+        TeachingMap teachingMap = teachingMapRepository.findByIdAndUser_IdAndDeletedAtIsNull(teachingMapId, userId)
+                .orElseThrow(() -> new GeneralException(TeachingMapErrorCode.TEACHING_MAP_NOT_FOUND));
 
+        TeachingMapStep step = stepRepository.findByIdAndTeachingMapId(stepId, teachingMapId)
+                .orElseThrow(() -> new GeneralException(TeachingMapErrorCode.STEP_NOT_FOUND));
 
+        boolean isCompleted = step.toggle();
+        teachingMap.applyStepToggle(isCompleted);
+
+        double progressRate = teachingMap.getTotalSteps() == 0
+                ? 0.0
+                : Math.round((teachingMap.getCurrentSteps() * 1000.0) / teachingMap.getTotalSteps()) / 10.0;
+
+        return StepToggleResponse.of(
+                step.getId(),
+                isCompleted,
+                teachingMap.getCurrentSteps(),
+                teachingMap.getTotalSteps(),
+                progressRate
+        );
+    }
 }

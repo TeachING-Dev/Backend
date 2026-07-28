@@ -128,4 +128,19 @@ public class TeachingMapController {
         );
         return ApiResponse.onSuccess(TeachingMapSuccessCode.TEACHING_MAP_DETAIL_SUCCESS, response);
     }
+
+    @Operation(
+            summary = "티칭맵 스텝 완료 상태 토글",
+            description = "스텝의 완료/미완료 상태를 토글하고, 갱신된 완료 스텝 수와 진행률을 반환합니다."
+    )
+    @PatchMapping("/{teachingMapId}/steps/{stepId}/toggle")
+    public ApiResponse<StepToggleResponse> toggleStep(
+            @AuthenticationPrincipal AuthMember authMember,
+            @PathVariable Long teachingMapId,
+            @PathVariable Long stepId
+    ) {
+        Long userId = getAuthenticatedUserId(authMember);
+        StepToggleResponse response = teachingMapService.toggleStep(userId, teachingMapId, stepId);
+        return ApiResponse.onSuccess(TeachingMapSuccessCode.STEP_TOGGLE_SUCCESS, response);
+    }
 }
