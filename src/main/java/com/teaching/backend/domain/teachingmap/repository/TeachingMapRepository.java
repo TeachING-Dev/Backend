@@ -12,6 +12,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface TeachingMapRepository extends JpaRepository<TeachingMap, Long> {
 
@@ -98,4 +99,7 @@ public interface TeachingMapRepository extends JpaRepository<TeachingMap, Long> 
             @Param("teachingMapIds") List<Long> teachingMapIds,
             @Param("userId") Long userId
     );
+
+    Optional<TeachingMap> findByIdAndUser_Id(Long id, Long userId);
+    Optional<TeachingMap> findByIdAndUser_IdAndDeletedAtIsNull(Long id, Long userId);
 }

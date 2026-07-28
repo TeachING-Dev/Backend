@@ -17,7 +17,10 @@ import java.time.LocalDateTime;
 @Getter
 @EntityListeners(AuditingEntityListener.class)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@Table(name = "ai_guides")
+@Table(
+        name = "ai_guides",
+        uniqueConstraints = @UniqueConstraint(columnNames = {"material_highlight_id", "guide_type"})
+)
 public class AiGuide {
 
     @Id
@@ -43,7 +46,7 @@ public class AiGuide {
     private String title;
 
     @Lob
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "MEDIUMTEXT")
     private String content;
 
     @CreatedDate

@@ -17,6 +17,8 @@ services:
       QDRANT_URL: http://qdrant:6333
       QDRANT_API_KEY: ${QDRANT_API_KEY}
       APP_OAUTH2_REDIRECT_URI: ${APP_OAUTH2_REDIRECT_URI:?APP_OAUTH2_REDIRECT_URI 환경변수가 설정되지 않았습니다}
+      ICON_BASE_URL: ${ICON_BASE_URL:?ICON_BASE_URL 환경변수가 설정되지 않았습니다}
+      TEACHER_IMAGE_BASE_URL: ${TEACHER_IMAGE_BASE_URL:?TEACHER_IMAGE_BASE_URL 환경변수가 설정되지 않았습니다}
     depends_on:
       - qdrant
 
