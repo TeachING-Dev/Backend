@@ -91,6 +91,7 @@ if (dotenv.exists()) {
             'OPENAI_API_KEY': 'test-openai-key',
             'QDRANT_URL'    : 'http://localhost:6333',
             'QDRANT_API_KEY': 'test-qdrant-key',
+            'TEACHER_IMAGE_BASE_URL': 'http://localhost/test-teachers',
     ])
     tasks.named('test') { environment(testEnvVars) }
 }
