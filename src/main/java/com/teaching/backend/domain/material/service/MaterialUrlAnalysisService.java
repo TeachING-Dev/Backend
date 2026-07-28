@@ -51,13 +51,10 @@ public class MaterialUrlAnalysisService {
             MaterialAnalyzeRequest request
     ) {
         String originalUrl = validateAndNormalizeUrl(request);
-        Long folderId = validateFolderId(request);
-
-        folderService.getOwnedFolder(userId, folderId);
         PlatformType platformType = materialPlatformResolver.resolve(null, originalUrl);
 
         if (request.isForceAnalyze()) {
-            return analyzeNewMaterial(userId, folderId, originalUrl, platformType);
+            return analyzeNewMaterial(userId, originalUrl, platformType);
         }
 
         return materialUrlAnalysisConcurrencyGuard.executeSerialized(
@@ -65,19 +62,17 @@ public class MaterialUrlAnalysisService {
                 originalUrl,
                 () -> findLatestCompletedMaterial(userId, originalUrl)
                         .map(this::alreadyAnalyzedResponse),
-                () -> analyzeNewMaterial(userId, folderId, originalUrl, platformType)
+                () -> analyzeNewMaterial(userId, originalUrl, platformType)
         );
     }
 
     private MaterialAnalyzeResponse analyzeNewMaterial(
             Long userId,
-            Long folderId,
             String originalUrl,
             PlatformType platformType
     ) {
         MaterialAnalysisPreparationResult preparationResult = prepareAnalysis(
                 userId,
-                folderId,
                 originalUrl,
                 platformType
         );
@@ -96,15 +91,6 @@ public class MaterialUrlAnalysisService {
         }
 
         return originalUrl;
-    }
-
-    private Long validateFolderId(MaterialAnalyzeRequest request) {
-        Long folderId = request == null ? null : request.folderId();
-        if (folderId == null || folderId <= 0) {
-            throw new FolderException(FolderErrorCode.INVALID_FOLDER_ID);
-        }
-
-        return folderId;
     }
 
     private Optional<Material> findLatestCompletedMaterial(
@@ -134,14 +120,13 @@ public class MaterialUrlAnalysisService {
 
     MaterialAnalysisPreparationResult prepareAnalysis(
             Long userId,
-            Long folderId,
             String originalUrl,
             PlatformType platformType
     ) {
         ExtractedMaterialContent extractedContent = materialContentExtractorRegistry.extract(platformType, originalUrl);
         return new MaterialAnalysisPreparationResult(
                 userId,
-                folderId,
+                null,
                 originalUrl,
                 extractedContent.platformType(),
                 extractedContent

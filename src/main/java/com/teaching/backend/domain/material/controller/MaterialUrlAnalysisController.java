@@ -37,13 +37,12 @@ public class MaterialUrlAnalysisController {
 
     @Operation(
             summary = "URL 기반 AI 분석 요청",
-            description = "URL과 저장 폴더를 검증하고, 동일 URL 분석 결과가 있는지 확인합니다."
+            description = "URL과 저장 폴더를 검증하고, 동일 URL 분석 결과가 있는지 확인합니다. 동일 URL 새로 분석 시 forceAnalyze=true로 설정"
     )
     @PostMapping("/analyze")
     public ResponseEntity<ApiResponse<MaterialAnalyzeResponse>> analyze(
             @Parameter(hidden = true)
             @AuthenticationPrincipal AuthMember authMember,
-
             @RequestBody MaterialAnalyzeRequest request
     ) {
         MaterialAnalyzeResponse result = materialUrlAnalysisService.analyze(
