@@ -52,6 +52,10 @@ public class TeachingMap extends BaseSoftDeleteEntity {
     @Column(nullable = false)
     private Boolean isDraft;
 
+    @Version
+    @Column(nullable = false)
+    private Long version;
+
     @Builder(access = AccessLevel.PRIVATE)
     private TeachingMap(Folder folder, User user, String title, String description,
                         Integer totalSteps, TeachingMapType type, Boolean isDraft) {
