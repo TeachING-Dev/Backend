@@ -136,11 +136,57 @@ class FolderServiceTest {
                 .doesNotThrowAnyException();
     }
 
+    @Test
+    void getOwnedFolderReturnsCurrentUsersFolder() {
+        Folder folder = folder(USER_ID, FOLDER_ID, "Backend");
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(folder));
+
+        assertThatCode(() -> folderService.getOwnedFolder(USER_ID, FOLDER_ID))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void getOwnedFolderFailsWhenFolderDoesNotExist() {
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.empty());
+        when(folderRepository.existsById(FOLDER_ID)).thenReturn(false);
+
+        assertFolderExceptionThrown(
+                () -> folderService.getOwnedFolder(USER_ID, FOLDER_ID),
+                FolderErrorCode.FOLDER_NOT_FOUND
+        );
+    }
+
+    @Test
+    void getOwnedFolderFailsWhenFolderBelongsToOtherUser() {
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.empty());
+        when(folderRepository.existsById(FOLDER_ID)).thenReturn(true);
+
+        assertFolderExceptionThrown(
+                () -> folderService.getOwnedFolder(USER_ID, FOLDER_ID),
+                FolderErrorCode.FOLDER_ACCESS_DENIED
+        );
+    }
+
+    @Test
+    void getOwnedFolderRejectsInvalidFolderId() {
+        assertFolderExceptionThrown(
+                () -> folderService.getOwnedFolder(USER_ID, 0L),
+                FolderErrorCode.INVALID_FOLDER_ID
+        );
+    }
+
     private void assertDuplicateNameThrown(Runnable action) {
         assertThatThrownBy(action::run)
                 .isInstanceOf(FolderException.class)
                 .extracting("errorCode")
                 .isEqualTo(FolderErrorCode.DUPLICATE_FOLDER_NAME);
+    }
+
+    private void assertFolderExceptionThrown(Runnable action, FolderErrorCode errorCode) {
+        assertThatThrownBy(action::run)
+                .isInstanceOf(FolderException.class)
+                .extracting("errorCode")
+                .isEqualTo(errorCode);
     }
 
     private User user(Long userId) {

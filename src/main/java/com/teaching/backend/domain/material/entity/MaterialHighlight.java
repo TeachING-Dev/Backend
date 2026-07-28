@@ -23,8 +23,8 @@ public class MaterialHighlight {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "material_chunk_id", nullable = false)
-    private MaterialChunk materialChunk;
+    @JoinColumn(name = "material_analysis_id", nullable = false)
+    private MaterialAnalysis materialAnalysis;
 
     @Lob
     @Column(nullable = false)
@@ -45,7 +45,7 @@ public class MaterialHighlight {
     private LocalDateTime createdAt;
 
     @Builder(access = AccessLevel.PRIVATE)
-    private MaterialHighlight(MaterialChunk materialChunk, String highlightText, HighlightType highlightType,
+    private MaterialHighlight(MaterialAnalysis materialAnalysis, String highlightText, HighlightType highlightType,
                               Integer startPosition, Integer endPosition) {
         if (startPosition == null || endPosition == null) {
                        throw new IllegalArgumentException("시작/종료 위치는 필수입니다.");
@@ -53,17 +53,17 @@ public class MaterialHighlight {
         if (startPosition >= endPosition) {
             throw new IllegalArgumentException("시작 위치는 종료 위치보다 작아야 합니다.");
         }
-        this.materialChunk = materialChunk;
+        this.materialAnalysis = materialAnalysis;
         this.highlightText = highlightText;
         this.highlightType = highlightType;
         this.startPosition = startPosition;
         this.endPosition = endPosition;
     }
 
-    public static MaterialHighlight create(MaterialChunk materialChunk, String highlightText,
+    public static MaterialHighlight create(MaterialAnalysis materialAnalysis, String highlightText,
                                            HighlightType highlightType, Integer startPosition, Integer endPosition) {
         return MaterialHighlight.builder()
-                .materialChunk(materialChunk)
+                .materialAnalysis(materialAnalysis)
                 .highlightText(highlightText)
                 .highlightType(highlightType)
                 .startPosition(startPosition)

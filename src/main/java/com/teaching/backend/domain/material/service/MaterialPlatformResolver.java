@@ -31,8 +31,17 @@ public class MaterialPlatformResolver {
                 || normalizedHost.equals("youtu.be")) {
             return PlatformType.YOUTUBE;
         }
+        if (isDomainOrSubdomain(normalizedHost, "velog.io")) {
+            return PlatformType.VELOG;
+        }
         if (isDomainOrSubdomain(normalizedHost, "notion.so")) {
             return PlatformType.NOTION;
+        }
+        if (isCafeHost(normalizedHost)) {
+            return PlatformType.CAFE;
+        }
+        if (isBlogHost(normalizedHost)) {
+            return PlatformType.BLOG;
         }
 
         String path = uri.getPath();
@@ -44,5 +53,18 @@ public class MaterialPlatformResolver {
 
     private boolean isDomainOrSubdomain(String host, String domain) {
         return host.equals(domain) || host.endsWith("." + domain);
+    }
+
+    private boolean isBlogHost(String host) {
+        return isDomainOrSubdomain(host, "blog.naver.com")
+                || isDomainOrSubdomain(host, "tistory.com")
+                || isDomainOrSubdomain(host, "blogspot.com")
+                || isDomainOrSubdomain(host, "medium.com")
+                || isDomainOrSubdomain(host, "wordpress.com");
+    }
+
+    private boolean isCafeHost(String host) {
+        return isDomainOrSubdomain(host, "cafe.naver.com")
+                || isDomainOrSubdomain(host, "cafe.daum.net");
     }
 }

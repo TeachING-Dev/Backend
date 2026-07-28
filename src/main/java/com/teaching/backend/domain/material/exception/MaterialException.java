@@ -7,4 +7,9 @@ public class MaterialException extends GeneralException {
     public MaterialException(MaterialErrorCode errorCode) {
         super(errorCode);
     }
+
+    public MaterialException(MaterialErrorCode errorCode, Throwable cause) {
+        super(errorCode);
+        initCause(cause);
+    }
 }

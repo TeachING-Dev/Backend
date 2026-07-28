@@ -1,0 +1,150 @@
+package com.teaching.backend.domain.material.service;
+
+import com.teaching.backend.domain.folder.exception.FolderErrorCode;
+import com.teaching.backend.domain.folder.exception.FolderException;
+import com.teaching.backend.domain.folder.service.FolderService;
+import com.teaching.backend.domain.material.dto.extract.ExtractedMaterialContent;
+import com.teaching.backend.domain.material.dto.extract.MaterialAnalysisPreparationResult;
+import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisPipelineResult;
+import com.teaching.backend.domain.material.dto.request.MaterialAnalyzeRequest;
+import com.teaching.backend.domain.material.dto.response.MaterialAnalyzeResponse;
+import com.teaching.backend.domain.material.entity.Material;
+import com.teaching.backend.domain.material.entity.MaterialAnalysis;
+import com.teaching.backend.domain.material.enums.AiStatus;
+import com.teaching.backend.domain.material.enums.PlatformType;
+import com.teaching.backend.domain.material.exception.MaterialErrorCode;
+import com.teaching.backend.domain.material.exception.MaterialException;
+import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
+import com.teaching.backend.domain.material.repository.MaterialChunkRepository;
+import com.teaching.backend.domain.material.repository.MaterialRepository;
+import com.teaching.backend.domain.material.service.ai.MaterialAiAnalysisOrchestrator;
+import com.teaching.backend.domain.material.service.extract.MaterialContentExtractorRegistry;
+import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
+import com.teaching.backend.global.exception.GeneralException;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Comparator;
+import java.util.List;
+import java.util.Optional;
+
+@Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
+public class MaterialUrlAnalysisService {
+
+    private final FolderService folderService;
+    private final MaterialRepository materialRepository;
+    private final MaterialAnalysisRepository materialAnalysisRepository;
+    private final MaterialChunkRepository materialChunkRepository;
+    private final MaterialUrlValidator materialUrlValidator;
+    private final MaterialPlatformResolver materialPlatformResolver;
+    private final MaterialContentExtractorRegistry materialContentExtractorRegistry;
+    private final MaterialAiAnalysisOrchestrator materialAiAnalysisOrchestrator;
+    private final MaterialUrlAnalysisConcurrencyGuard materialUrlAnalysisConcurrencyGuard;
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public MaterialAnalyzeResponse analyze(
+            Long userId,
+            MaterialAnalyzeRequest request
+    ) {
+        String originalUrl = validateAndNormalizeUrl(request);
+        Long folderId = validateFolderId(request);
+
+        folderService.getOwnedFolder(userId, folderId);
+        PlatformType platformType = materialPlatformResolver.resolve(null, originalUrl);
+
+        if (request.isForceAnalyze()) {
+            return analyzeNewMaterial(userId, folderId, originalUrl, platformType);
+        }
+
+        return materialUrlAnalysisConcurrencyGuard.executeSerialized(
+                userId,
+                originalUrl,
+                () -> findLatestCompletedMaterial(userId, originalUrl)
+                        .map(this::alreadyAnalyzedResponse),
+                () -> analyzeNewMaterial(userId, folderId, originalUrl, platformType)
+        );
+    }
+
+    private MaterialAnalyzeResponse analyzeNewMaterial(
+            Long userId,
+            Long folderId,
+            String originalUrl,
+            PlatformType platformType
+    ) {
+        MaterialAnalysisPreparationResult preparationResult = prepareAnalysis(
+                userId,
+                folderId,
+                originalUrl,
+                platformType
+        );
+        MaterialAiAnalysisPipelineResult analysisResult = materialAiAnalysisOrchestrator.analyze(preparationResult);
+        return MaterialAnalyzeResponse.completed(analysisResult);
+    }
+
+    private String validateAndNormalizeUrl(MaterialAnalyzeRequest request) {
+        if (request == null || request.url() == null || request.url().isBlank()) {
+            throw new MaterialException(MaterialErrorCode.ORIGINAL_URL_REQUIRED);
+        }
+
+        String originalUrl = request.url().trim();
+        if (!materialUrlValidator.isValidHttpUrl(originalUrl)) {
+            throw new GeneralException(GlobalErrorCode.BAD_REQUEST);
+        }
+
+        return originalUrl;
+    }
+
+    private Long validateFolderId(MaterialAnalyzeRequest request) {
+        Long folderId = request == null ? null : request.folderId();
+        if (folderId == null || folderId <= 0) {
+            throw new FolderException(FolderErrorCode.INVALID_FOLDER_ID);
+        }
+
+        return folderId;
+    }
+
+    private Optional<Material> findLatestCompletedMaterial(
+            Long userId,
+            String originalUrl
+    ) {
+        List<Material> materials = materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(
+                userId,
+                originalUrl
+        );
+
+        return materials.stream()
+                .filter(material -> material.getAiStatus() == AiStatus.COMPLETED)
+                .max(Comparator
+                        .comparing(Material::getCreatedAt)
+                .thenComparing(Material::getId));
+    }
+
+    private MaterialAnalyzeResponse alreadyAnalyzedResponse(Material material) {
+        Long materialAnalysisId = materialAnalysisRepository.findByMaterialId(material.getId())
+                .map(MaterialAnalysis::getId)
+                .orElse(null);
+        int chunkCount = materialChunkRepository.findAllByMaterial_IdOrderByChunkIndexAsc(material.getId()).size();
+
+        return MaterialAnalyzeResponse.alreadyAnalyzed(material, materialAnalysisId, chunkCount);
+    }
+
+    MaterialAnalysisPreparationResult prepareAnalysis(
+            Long userId,
+            Long folderId,
+            String originalUrl,
+            PlatformType platformType
+    ) {
+        ExtractedMaterialContent extractedContent = materialContentExtractorRegistry.extract(platformType, originalUrl);
+        return new MaterialAnalysisPreparationResult(
+                userId,
+                folderId,
+                originalUrl,
+                extractedContent.platformType(),
+                extractedContent
+        );
+    }
+}

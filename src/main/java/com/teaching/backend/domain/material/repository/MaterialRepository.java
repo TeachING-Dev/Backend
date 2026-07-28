@@ -30,6 +30,11 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
             Long userId
     );
 
+    Optional<Material> findByIdAndUser_Id(
+            Long id,
+            Long userId
+    );
+
     List<Material> findAllByIdInAndFolder_IdAndUser_Id(
             List<Long> ids,
             Long folderId,
@@ -137,7 +142,6 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
     );
 
     List<Material> findAllByFolderId(Long folderId);
-    Optional<Material> findByIdAndUser_Id(Long id, Long userId);
 
 }
 

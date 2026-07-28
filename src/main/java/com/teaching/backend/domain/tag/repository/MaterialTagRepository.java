@@ -33,6 +33,8 @@ public interface MaterialTagRepository
             @Param("materialIds") List<Long> materialIds
     );
 
+    List<MaterialTag> findAllByMaterial_Id(Long materialId);
+
     @Query("SELECT mt.tag.name FROM MaterialTag mt WHERE mt.material.id = :materialId")
     List<String> findAllTagNamesByMaterialId(@Param("materialId") Long materialId);
 }

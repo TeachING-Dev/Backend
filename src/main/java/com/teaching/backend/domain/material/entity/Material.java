@@ -80,8 +80,16 @@ public class Material extends BaseSoftDeleteEntity {
         this.aiStatus = AiStatus.COMPLETED;
     }
 
+    public void markAnalysisInProgress() {
+        this.aiStatus = AiStatus.ANALYZING;
+    }
+
     public void failAnalysis() {
         this.aiStatus = AiStatus.FAILED;
+    }
+
+    public Long getFolderId() {
+        return folder == null ? null : folder.getId();
     }
 
     public void changeFolder(Folder folder) {

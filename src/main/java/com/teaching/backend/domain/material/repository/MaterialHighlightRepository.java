@@ -12,8 +12,8 @@ public interface MaterialHighlightRepository
 
     @Query("""
         SELECT h FROM MaterialHighlight h
-        WHERE h.materialChunk.material.id = :materialId
-        ORDER BY h.materialChunk.chunkIndex, h.startPosition
+        WHERE h.materialAnalysis.material.id = :materialId
+        ORDER BY h.startPosition, h.id
     """)
     List<MaterialHighlight> findAllByMaterialId(@Param("materialId") Long materialId);
 }

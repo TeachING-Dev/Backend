@@ -82,7 +82,7 @@ public class HighlightAnalysisService {
     }
 
     private void validateHighlightBelongsToMaterial(MaterialHighlight highlight, Long materialId) {
-        if (!highlight.getMaterialChunk().getMaterial().getId().equals(materialId)) {
+        if (!highlight.getMaterialAnalysis().getMaterial().getId().equals(materialId)) {
             throw new GeneralException(TeachingMapErrorCode.HIGHLIGHT_MATERIAL_MISMATCH);
         }
     }

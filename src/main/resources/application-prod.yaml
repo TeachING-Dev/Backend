@@ -95,6 +95,11 @@ qdrant:
   collection-name: ${QDRANT_COLLECTION_NAME}
   vector-size: ${QDRANT_VECTOR_SIZE:1536}
 
+material:
+  indexing:
+    chunk-size: ${MATERIAL_INDEXING_CHUNK_SIZE:900}
+    chunk-overlap: ${MATERIAL_INDEXING_CHUNK_OVERLAP:150}
+
 rag:
   top-k: ${RAG_TOP_K:5}
   similarity-threshold: ${RAG_SIMILARITY_THRESHOLD:0.3}

@@ -6,11 +6,13 @@ import com.teaching.backend.domain.folder.exception.FolderException;
 import com.teaching.backend.domain.folder.repository.FolderRepository;
 import com.teaching.backend.domain.material.dto.MaterialListResponse;
 import com.teaching.backend.domain.material.dto.request.MaterialAnalysisSummaryUpdateRequest;
+import com.teaching.backend.domain.material.dto.request.MaterialFinalizeRequest;
 import com.teaching.backend.domain.material.dto.request.MaterialIdsRequest;
 import com.teaching.backend.domain.material.dto.request.MaterialMoveRequest;
 import com.teaching.backend.domain.material.dto.response.MaterialAnalysisResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialAnalysisSummaryUpdateResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialDetailResponse;
+import com.teaching.backend.domain.material.dto.response.MaterialFinalizeResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialMoveResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialOriginUrlResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialRestoreResponse;
@@ -23,22 +25,29 @@ import com.teaching.backend.domain.material.exception.MaterialException;
 import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
 import com.teaching.backend.domain.tag.entity.MaterialTag;
+import com.teaching.backend.domain.tag.entity.Tag;
 import com.teaching.backend.domain.tag.exception.TagErrorCode;
 import com.teaching.backend.domain.tag.exception.TagException;
 import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
+import com.teaching.backend.domain.tag.repository.TagRepository;
 import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class MaterialService {
@@ -46,7 +55,10 @@ public class MaterialService {
     private final MaterialRepository materialRepository;
     private final MaterialAnalysisRepository materialAnalysisRepository;
     private final MaterialTagRepository materialTagRepository;
+    private final TagRepository tagRepository;
     private final FolderRepository folderRepository;
+    private final MaterialIndexingService materialIndexingService;
+    private final EntityManager entityManager;
 
     public List<MaterialListResponse> getMaterialList(Long userId, Integer size) {
         List<Material> materials = findRecentMaterials(userId, size);
@@ -138,6 +150,59 @@ public class MaterialService {
                 .stream()
                 .map(MaterialTagResponse::from)
                 .toList();
+    }
+
+    @Transactional
+    public MaterialFinalizeResponse finalizeMaterial(
+            Long userId,
+            Long materialId,
+            MaterialFinalizeRequest request
+    ) {
+        validateMaterialId(materialId);
+        Long finalFolderId = request == null ? null : request.folderId();
+        if (finalFolderId == null || finalFolderId <= 0) {
+            throw new FolderException(FolderErrorCode.INVALID_FOLDER_ID);
+        }
+
+        Material material = materialRepository.findByIdAndUser_Id(materialId, userId)
+                .orElseThrow(() -> resolveMaterialLookupException(materialId));
+        Folder finalFolder = folderRepository.findByIdAndUser_Id(finalFolderId, userId)
+                .orElseThrow(() -> resolveFolderLookupException(finalFolderId));
+        List<MaterialTag> currentTags = materialTagRepository.findAllWithTagByMaterialIds(List.of(materialId));
+        List<Long> finalTagIds = normalizeFinalTagIds(request == null ? null : request.tagIds());
+        Map<Long, Tag> finalTagsById = findFinalTagsById(finalTagIds);
+        Long currentFolderId = material.getFolderId();
+        Map<Long, MaterialTag> currentTagsByTagId = currentTags.stream()
+                .collect(Collectors.toMap(
+                        materialTag -> materialTag.getTag().getId(),
+                        materialTag -> materialTag,
+                        (current, ignored) -> current
+                ));
+
+        List<MaterialTag> tagsToRemove = currentTags.stream()
+                .filter(materialTag -> !finalTagIds.contains(materialTag.getTag().getId()))
+                .toList();
+        List<MaterialTag> tagsToAdd = finalTagIds.stream()
+                .filter(tagId -> !currentTagsByTagId.containsKey(tagId))
+                .map(tagId -> MaterialTag.create(material, finalTagsById.get(tagId)))
+                .toList();
+
+        if (!finalFolder.getId().equals(currentFolderId)) {
+            material.changeFolder(finalFolder);
+        }
+        if (!tagsToRemove.isEmpty()) {
+            materialTagRepository.deleteAll(tagsToRemove);
+        }
+        if (!tagsToAdd.isEmpty()) {
+            materialTagRepository.saveAll(tagsToAdd);
+        }
+        entityManager.flush();
+
+        if (!finalFolder.getId().equals(currentFolderId)) {
+            registerFolderPayloadSyncAfterCommit(material, currentFolderId, finalFolder.getId());
+        }
+
+        return new MaterialFinalizeResponse(material.getId(), finalFolder.getId(), finalTagIds);
     }
 
     public MaterialOriginUrlResponse getMaterialOriginUrl(
@@ -248,6 +313,74 @@ public class MaterialService {
                 .stream()
                 .map(materialTag -> materialTag.getTag().getName())
                 .toList();
+    }
+
+    private List<Long> normalizeFinalTagIds(List<Long> tagIds) {
+        if (tagIds == null) {
+            return List.of();
+        }
+
+        List<Long> normalized = tagIds.stream()
+                .distinct()
+                .toList();
+        boolean invalidTagIdExists = normalized.stream()
+                .anyMatch(tagId -> tagId == null || tagId <= 0);
+        if (invalidTagIdExists) {
+            throw new TagException(TagErrorCode.TAG_NOT_FOUND);
+        }
+        return normalized;
+    }
+
+    private Map<Long, Tag> findFinalTagsById(List<Long> finalTagIds) {
+        if (finalTagIds.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<Long, Tag> tagsById = tagRepository.findAllById(finalTagIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        Tag::getId,
+                        tag -> tag,
+                        (current, ignored) -> current
+                ));
+        if (tagsById.size() != finalTagIds.size()) {
+            throw new TagException(TagErrorCode.TAG_NOT_FOUND);
+        }
+        return tagsById;
+    }
+
+    private void registerFolderPayloadSyncAfterCommit(
+            Material material,
+            Long oldFolderId,
+            Long newFolderId
+    ) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            log.error(
+                    "Failed to register Qdrant folder payload sync because transaction synchronization is not active. materialId={}, oldFolderId={}, newFolderId={}",
+                    material.getId(),
+                    oldFolderId,
+                    newFolderId
+            );
+            throw new MaterialException(MaterialErrorCode.MATERIAL_VECTOR_STORE_FAILED);
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    materialIndexingService.syncFolderPayload(material, newFolderId);
+                } catch (RuntimeException syncFailure) {
+                    log.error(
+                            "Failed to sync Qdrant folder payload after finalize commit. materialId={}, oldFolderId={}, newFolderId={}, reason={}",
+                            material.getId(),
+                            oldFolderId,
+                            newFolderId,
+                            syncFailure.getClass().getSimpleName(),
+                            syncFailure
+                    );
+                }
+            }
+        });
     }
 
     private MaterialAnalysis getOwnedAnalysis(Long materialId) {

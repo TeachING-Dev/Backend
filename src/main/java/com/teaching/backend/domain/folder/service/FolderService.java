@@ -413,7 +413,7 @@ public class FolderService {
         return folderName;
     }
 
-    private Folder getOwnedFolder(
+    public Folder getOwnedFolder(
             Long userId,
             Long folderId
     ) {
