@@ -110,7 +110,7 @@ public class MaterialService {
                 .map(MaterialAnalysis::getSummary)
                 .orElse(null);
 
-        return MaterialDetailResponse.of(material, summary, getTagNames(materialId));
+        return MaterialDetailResponse.of(material, summary, getTagResponses(materialId));
     }
 
     public MaterialAnalysisResponse getMaterialAnalysis(
@@ -118,9 +118,13 @@ public class MaterialService {
             Long folderId,
             Long materialId
     ) {
-        getOwnedMaterial(userId, folderId, materialId);
+        Material material = getOwnedMaterial(userId, folderId, materialId);
 
-        return MaterialAnalysisResponse.from(getOwnedAnalysis(materialId));
+        return MaterialAnalysisResponse.of(
+                getOwnedAnalysis(materialId),
+                material,
+                getTagResponses(materialId)
+        );
     }
 
     @Transactional
@@ -146,10 +150,7 @@ public class MaterialService {
     ) {
         getOwnedMaterial(userId, folderId, materialId);
 
-        return materialTagRepository.findAllWithTagByMaterialIds(List.of(materialId))
-                .stream()
-                .map(MaterialTagResponse::from)
-                .toList();
+        return getTagResponses(materialId);
     }
 
     @Transactional
@@ -308,10 +309,10 @@ public class MaterialService {
         return materials;
     }
 
-    private List<String> getTagNames(Long materialId) {
+    private List<MaterialTagResponse> getTagResponses(Long materialId) {
         return materialTagRepository.findAllWithTagByMaterialIds(List.of(materialId))
                 .stream()
-                .map(materialTag -> materialTag.getTag().getName())
+                .map(MaterialTagResponse::from)
                 .toList();
     }
 

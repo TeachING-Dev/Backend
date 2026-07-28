@@ -1,6 +1,7 @@
 package com.teaching.backend.domain.material.dto.response;
 
 import com.teaching.backend.domain.material.entity.Material;
+import com.teaching.backend.domain.material.enums.PlatformType;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -11,7 +12,9 @@ public record MaterialDetailResponse(
         String title,
         String originUrl,
         String summary,
-        List<String> tags,
+        String platformType,
+        String platformImageUrl,
+        List<MaterialTagResponse> tags,
         String statusAi,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
@@ -20,14 +23,18 @@ public record MaterialDetailResponse(
     public static MaterialDetailResponse of(
             Material material,
             String summary,
-            List<String> tags
+            List<MaterialTagResponse> tags
     ) {
+        PlatformType platformType = material.getPlatformType();
+
         return new MaterialDetailResponse(
                 material.getId(),
                 material.getFolder().getId(),
                 material.getTitle(),
                 material.getOriginalUrl(),
                 summary,
+                platformType == null ? null : platformType.name(),
+                platformType == null ? null : platformType.getIconPath(),
                 tags,
                 material.getAiStatus().name(),
                 material.getCreatedAt(),
