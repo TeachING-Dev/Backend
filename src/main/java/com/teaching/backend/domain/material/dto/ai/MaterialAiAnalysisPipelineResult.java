@@ -15,10 +15,12 @@ public record MaterialAiAnalysisPipelineResult(
         int chunkCount,
         List<MaterialAiHighlightResult> highlights,
         Long recommendedFolderId,
-        String recommendedFolderName
+        String recommendedFolderName,
+        List<String> tags
 ) {
     public MaterialAiAnalysisPipelineResult {
         highlights = highlights == null ? List.of() : List.copyOf(highlights);
+        tags = tags == null ? List.of() : List.copyOf(tags);
     }
 
     public MaterialAiAnalysisPipelineResult(
@@ -39,7 +41,8 @@ public record MaterialAiAnalysisPipelineResult(
                 0,
                 List.of(),
                 null,
-                null
+                null,
+                List.of()
         );
     }
 }

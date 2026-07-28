@@ -90,6 +90,10 @@ public class MaterialAiAnalysisOrchestrator {
         material.markAnalysisCompleted();
         Folder recommendedFolder = resolveRecommendedFolder(preparationResult.userId(), recommendedFolderName);
 
+        List<String> tags = previousResult
+                .map(MaterialAiAnalysisResult::tags)
+                .orElseGet(List::of);
+
         return new MaterialAiAnalysisPipelineResult(
                 material.getId(),
                 preparationResult.userId(),
@@ -100,7 +104,8 @@ public class MaterialAiAnalysisOrchestrator {
                 chunkCount,
                 highlights,
                 recommendedFolder == null ? null : recommendedFolder.getId(),
-                recommendedFolder == null ? null : recommendedFolder.getName()
+                recommendedFolder == null ? null : recommendedFolder.getName(),
+                tags
         );
     }
 

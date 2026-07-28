@@ -39,4 +39,6 @@ public interface MaterialTagRepository
     List<String> findAllTagNamesByMaterialId(@Param("materialId") Long materialId);
 
     boolean existsByMaterial_IdAndTag_Id(Long materialId, Long tagId);
+
+    List<MaterialTag> findAllByMaterialId(Long materialId);
 }

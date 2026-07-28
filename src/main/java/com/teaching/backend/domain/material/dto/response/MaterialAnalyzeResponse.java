@@ -5,6 +5,8 @@ import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisPipelineRes
 import com.teaching.backend.domain.material.enums.MaterialAnalyzeResultType;
 import com.teaching.backend.domain.material.enums.PlatformType;
 
+import java.util.List;
+
 public record MaterialAnalyzeResponse(
         Long materialAnalysisId,
         MaterialAnalyzeResultType resultType,
@@ -16,13 +18,15 @@ public record MaterialAnalyzeResponse(
         String status,
         Integer chunkCount,
         Long recommendedFolderId,
-        String recommendedFolderName
+        String recommendedFolderName,
+        List<MaterialTagResponse> tags
 ) {
 
     public static MaterialAnalyzeResponse alreadyAnalyzed(
             Material material,
             Long materialAnalysisId,
-            Integer chunkCount
+            Integer chunkCount,
+            List<MaterialTagResponse> tags
     ) {
         PlatformType platformType = material.getPlatformType();
 
@@ -37,7 +41,8 @@ public record MaterialAnalyzeResponse(
                 material.getAiStatus() == null ? null : material.getAiStatus().name(),
                 chunkCount,
                 material.getFolderId(),
-                material.getFolder() == null ? null : material.getFolder().getName()
+                material.getFolder() == null ? null : material.getFolder().getName(),
+                tags
         );
     }
 
@@ -56,11 +61,12 @@ public record MaterialAnalyzeResponse(
                 null,
                 null,
                 null,
+                null,
                 null
         );
     }
 
-    public static MaterialAnalyzeResponse completed(MaterialAiAnalysisPipelineResult result) {
+    public static MaterialAnalyzeResponse completed(MaterialAiAnalysisPipelineResult result,List<MaterialTagResponse> tags) {
         PlatformType platformType = result.platformType();
         String title = result.extractedContent() == null ? null : result.extractedContent().title();
 
@@ -75,7 +81,8 @@ public record MaterialAnalyzeResponse(
                 "COMPLETED",
                 result.chunkCount(),
                 result.recommendedFolderId(),
-                result.recommendedFolderName()
+                result.recommendedFolderName(),
+                tags
         );
     }
 }

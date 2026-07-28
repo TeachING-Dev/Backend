@@ -8,6 +8,7 @@ import com.teaching.backend.domain.material.dto.extract.MaterialAnalysisPreparat
 import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisPipelineResult;
 import com.teaching.backend.domain.material.dto.request.MaterialAnalyzeRequest;
 import com.teaching.backend.domain.material.dto.response.MaterialAnalyzeResponse;
+import com.teaching.backend.domain.material.dto.response.MaterialTagResponse;
 import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.entity.MaterialAnalysis;
 import com.teaching.backend.domain.material.enums.AiStatus;
@@ -19,6 +20,8 @@ import com.teaching.backend.domain.material.repository.MaterialChunkRepository;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
 import com.teaching.backend.domain.material.service.ai.MaterialAiAnalysisOrchestrator;
 import com.teaching.backend.domain.material.service.extract.MaterialContentExtractorRegistry;
+import com.teaching.backend.domain.tag.entity.MaterialTag;
+import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
 import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
 import lombok.RequiredArgsConstructor;
@@ -44,6 +47,7 @@ public class MaterialUrlAnalysisService {
     private final MaterialContentExtractorRegistry materialContentExtractorRegistry;
     private final MaterialAiAnalysisOrchestrator materialAiAnalysisOrchestrator;
     private final MaterialUrlAnalysisConcurrencyGuard materialUrlAnalysisConcurrencyGuard;
+    private final MaterialTagRepository materialTagRepository;
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public MaterialAnalyzeResponse analyze(
@@ -77,7 +81,11 @@ public class MaterialUrlAnalysisService {
                 platformType
         );
         MaterialAiAnalysisPipelineResult analysisResult = materialAiAnalysisOrchestrator.analyze(preparationResult);
-        return MaterialAnalyzeResponse.completed(analysisResult);
+
+        List<MaterialTagResponse> tags = materialTagRepository.findAllByMaterialId(analysisResult.materialId()).stream()
+                .map(MaterialTagResponse::from)
+                .toList();
+        return MaterialAnalyzeResponse.completed(analysisResult,tags);
     }
 
     private String validateAndNormalizeUrl(MaterialAnalyzeRequest request) {
@@ -115,7 +123,11 @@ public class MaterialUrlAnalysisService {
                 .orElse(null);
         int chunkCount = materialChunkRepository.findAllByMaterial_IdOrderByChunkIndexAsc(material.getId()).size();
 
-        return MaterialAnalyzeResponse.alreadyAnalyzed(material, materialAnalysisId, chunkCount);
+        List<MaterialTagResponse> tags = materialTagRepository.findAllByMaterialId(material.getId()).stream()
+                .map(MaterialTagResponse::from)
+                .toList();
+
+        return MaterialAnalyzeResponse.alreadyAnalyzed(material, materialAnalysisId, chunkCount,tags);
     }
 
     MaterialAnalysisPreparationResult prepareAnalysis(
