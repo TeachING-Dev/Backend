@@ -1,5 +1,6 @@
 package com.teaching.backend.global.exception;
 
+import com.teaching.backend.domain.teachingmap.exception.TeachingMapErrorCode;
 import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.response.ApiResponse;
 import jakarta.validation.ConstraintViolationException;
@@ -7,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.validation.BindException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -165,5 +167,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(GlobalErrorCode.INTERNAL_SERVER_ERROR.getStatus())
                 .body(ApiResponse.onFailure(GlobalErrorCode.INTERNAL_SERVER_ERROR));
+    }
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ApiResponse<Object>> handleOptimisticLock(ObjectOptimisticLockingFailureException e) {
+        log.warn("Optimistic lock conflict: {}", e.getMessage());
+        var errorCode = TeachingMapErrorCode.TEACHING_MAP_CONCURRENT_MODIFICATION;
+        return ResponseEntity
+                .status(errorCode.getStatus())
+                .body(ApiResponse.onFailure(errorCode));
     }
 }

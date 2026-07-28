@@ -2,6 +2,7 @@ package com.teaching.backend.domain.teachingmap.controller;
 
 import com.teaching.backend.domain.teachingmap.code.TeachingMapSuccessCode;
 import com.teaching.backend.domain.teachingmap.dto.request.TeachingMapCreateRequest;
+import com.teaching.backend.domain.teachingmap.dto.request.TeachingMapTrashRequest;
 import com.teaching.backend.domain.teachingmap.dto.response.*;
 import com.teaching.backend.domain.teachingmap.enums.GuideType;
 import com.teaching.backend.domain.teachingmap.enums.TeachingMapListSort;
@@ -127,5 +128,34 @@ public class TeachingMapController {
                 getAuthenticatedUserId(authMember), teachingMapId
         );
         return ApiResponse.onSuccess(TeachingMapSuccessCode.TEACHING_MAP_DETAIL_SUCCESS, response);
+    }
+
+    @Operation(
+            summary = "티칭맵 스텝 완료 상태 토글",
+            description = "스텝의 완료/미완료 상태를 토글하고, 갱신된 완료 스텝 수와 진행률을 반환합니다."
+    )
+    @PatchMapping("/{teachingMapId}/steps/{stepId}/toggle")
+    public ApiResponse<StepToggleResponse> toggleStep(
+            @AuthenticationPrincipal AuthMember authMember,
+            @PathVariable Long teachingMapId,
+            @PathVariable Long stepId
+    ) {
+        Long userId = getAuthenticatedUserId(authMember);
+        StepToggleResponse response = teachingMapService.toggleStep(userId, teachingMapId, stepId);
+        return ApiResponse.onSuccess(TeachingMapSuccessCode.STEP_TOGGLE_SUCCESS, response);
+    }
+
+    @Operation(
+            summary = "티칭맵 휴지통으로 이동",
+            description = "선택한 티칭맵들을 일괄로 휴지통으로 이동합니다. 삭제된 티칭맵은 30일간 휴지통에 보관됩니다."
+    )
+    @PatchMapping("/trash")
+    public ApiResponse<TeachingMapTrashResponse> moveToTrash(
+            @AuthenticationPrincipal AuthMember authMember,
+            @Valid @RequestBody TeachingMapTrashRequest request
+    ) {
+        Long userId = getAuthenticatedUserId(authMember);
+        TeachingMapTrashResponse response = teachingMapService.moveToTrash(userId, request.teachingMapIds());
+        return ApiResponse.onSuccess(TeachingMapSuccessCode.TEACHING_MAP_TRASH_SUCCESS, response);
     }
 }

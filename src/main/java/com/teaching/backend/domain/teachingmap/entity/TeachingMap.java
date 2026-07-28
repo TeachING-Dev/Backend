@@ -52,6 +52,10 @@ public class TeachingMap extends BaseSoftDeleteEntity {
     @Column(nullable = false)
     private Boolean isDraft;
 
+    @Version
+    @Column(nullable = false)
+    private Long version;
+
     @Builder(access = AccessLevel.PRIVATE)
     private TeachingMap(Folder folder, User user, String title, String description,
                         Integer totalSteps, TeachingMapType type, Boolean isDraft) {
@@ -98,5 +102,15 @@ public class TeachingMap extends BaseSoftDeleteEntity {
 
     public void finalizeDraft() {
         this.isDraft = false;
+    }
+
+    public void applyStepToggle(boolean isCompleted) {
+        this.currentSteps += isCompleted ? 1 : -1;
+
+        if (this.currentSteps.equals(this.totalSteps)) {
+            this.status = TeachingMapStatus.FINISHED;
+        } else if (this.status == TeachingMapStatus.FINISHED) {
+            this.status = TeachingMapStatus.IN_PROGRESS;
+        }
     }
 }
