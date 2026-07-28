@@ -68,6 +68,7 @@ BEGIN
                       SELECT 1
                         FROM material_analysis valid_ma
                        WHERE valid_ma.id = mh.material_analysis_id
+                         AND valid_ma.material_id = mc.material_id
                   )
                GROUP BY mc.material_id
               HAVING COUNT(DISTINCT ma.id) > 1
@@ -88,6 +89,7 @@ BEGIN
                 SELECT 1
                   FROM material_analysis valid_ma
                  WHERE valid_ma.id = mh.material_analysis_id
+                   AND valid_ma.material_id = mc.material_id
             );
     END IF;
 

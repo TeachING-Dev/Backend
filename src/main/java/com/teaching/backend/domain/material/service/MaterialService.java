@@ -361,7 +361,7 @@ public class MaterialService {
                     oldFolderId,
                     newFolderId
             );
-            return;
+            throw new MaterialException(MaterialErrorCode.MATERIAL_VECTOR_STORE_FAILED);
         }
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {

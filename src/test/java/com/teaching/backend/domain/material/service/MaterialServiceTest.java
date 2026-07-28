@@ -9,6 +9,8 @@ import com.teaching.backend.domain.material.dto.request.MaterialFinalizeRequest;
 import com.teaching.backend.domain.material.dto.response.MaterialFinalizeResponse;
 import com.teaching.backend.domain.material.enums.AiStatus;
 import com.teaching.backend.domain.material.enums.PlatformType;
+import com.teaching.backend.domain.material.exception.MaterialErrorCode;
+import com.teaching.backend.domain.material.exception.MaterialException;
 import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
 import com.teaching.backend.domain.tag.entity.MaterialTag;
@@ -327,6 +329,30 @@ class MaterialServiceTest {
         }
 
         verify(materialIndexingService, never()).syncFolderPayload(any());
+    }
+
+    @Test
+    void finalizeMaterialFailsWhenQdrantSyncSynchronizationIsInactive() {
+        Material material = material(101L, USER_ID, "Material", PlatformType.WEB, AiStatus.COMPLETED, createdAt(1));
+        Folder finalFolder = folder(USER_ID, 20L);
+        MaterialTag first = materialTagWithTagId(material, 1001L, "a");
+        when(materialRepository.findByIdAndUser_Id(101L, USER_ID)).thenReturn(Optional.of(material));
+        when(folderRepository.findByIdAndUser_Id(20L, USER_ID)).thenReturn(Optional.of(finalFolder));
+        when(materialTagRepository.findAllWithTagByMaterialIds(List.of(101L))).thenReturn(List.of(first));
+        when(tagRepository.findAllById(List.of(1001L))).thenReturn(List.of(first.getTag()));
+
+        assertThatThrownBy(() -> materialService.finalizeMaterial(
+                USER_ID,
+                101L,
+                new MaterialFinalizeRequest(20L, List.of(1001L))
+        ))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_VECTOR_STORE_FAILED);
+
+        verify(entityManager).flush();
+        verify(materialIndexingService, never()).syncFolderPayload(any());
+        verify(materialIndexingService, never()).syncFolderPayload(any(), any());
     }
 
     @Test
