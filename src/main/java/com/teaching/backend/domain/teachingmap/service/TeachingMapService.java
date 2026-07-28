@@ -281,4 +281,20 @@ public class TeachingMapService {
                 progressRate
         );
     }
+
+    // 티칭맵 휴지통으로 이동 (다중 선택)
+    @Transactional
+    public TeachingMapTrashResponse moveToTrash(Long userId, List<Long> teachingMapIds) {
+        List<TeachingMap> teachingMaps = teachingMapRepository
+                .findAllByIdInAndUser_IdAndDeletedAtIsNull(teachingMapIds, userId);
+
+        if (teachingMaps.size() != teachingMapIds.size()) {
+            throw new GeneralException(TeachingMapErrorCode.TEACHING_MAP_NOT_FOUND);
+        }
+
+        teachingMaps.forEach(TeachingMap::delete);
+
+        List<Long> deletedIds = teachingMaps.stream().map(TeachingMap::getId).toList();
+        return TeachingMapTrashResponse.of(deletedIds);
+    }
 }

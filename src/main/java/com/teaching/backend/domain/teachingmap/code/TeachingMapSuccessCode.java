@@ -15,7 +15,8 @@ public enum TeachingMapSuccessCode implements BaseSuccessCode {
     TEACHING_MAP_DETAIL_SUCCESS(HttpStatus.OK, "TMAP2005", "티칭맵 단건 조회에 성공했습니다."),
     TEACHING_MAP_STEP_DETAIL_SUCCESS(HttpStatus.OK, "TMAP2003", "스텝 상세 내용 조회에 성공하였습니다."),
     HIGHLIGHT_ANALYSIS_SUCCESS(HttpStatus.OK, "TMAP2002", "하이라이트 분석 조회에 성공하였습니다."),
-    STEP_TOGGLE_SUCCESS(HttpStatus.OK, "TMAP2006", "스텝 완료 상태가 변경되었습니다.");
+    STEP_TOGGLE_SUCCESS(HttpStatus.OK, "TMAP2006", "스텝 완료 상태가 변경되었습니다."),
+    TEACHING_MAP_TRASH_SUCCESS(HttpStatus.OK, "TMAP2007", "티칭맵이 휴지통으로 이동되었습니다.");
     private final HttpStatus status;
     private final String code;
     private final String message;
