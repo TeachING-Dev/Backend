@@ -115,19 +115,21 @@ public class TrashService {
     }
 
     /**
-     * 폴더 다중 선택 복구. 휴지통에 있고, 활성 폴더와 이름이 겹치지 않는 폴더만 복구 대상으로 삼는다.
-     * 이름이 겹치는 폴더는 failedIds로 반환된다.
+     * 폴더 다중 선택 복구. 폴더마다 "휴지통에 있고 활성 폴더와 이름이 겹치지 않는지" 확인과
+     * 복구 UPDATE를 하나의 원자적 쿼리로 묶어 처리하므로, 실제로 갱신된 폴더만 restoredIds에 담긴다.
      */
     @Transactional
     public FolderTrashRestoreResponse restoreFolders(Long userId, FolderIdsRequest request) {
         List<Long> requestedIds = requireFolderIds(request);
 
-        List<Long> restorableIds = folderRepository.findRestorableTrashedIds(requestedIds, userId);
-        if (!restorableIds.isEmpty()) {
-            folderRepository.restoreTrashedFolders(restorableIds, userId);
+        List<Long> restoredIds = new ArrayList<>();
+        for (Long folderId : requestedIds) {
+            if (folderRepository.restoreTrashedFolderIfNameAvailable(folderId, userId) > 0) {
+                restoredIds.add(folderId);
+            }
         }
 
-        return FolderTrashRestoreResponse.of(restorableIds, failedIds(requestedIds, restorableIds));
+        return FolderTrashRestoreResponse.of(restoredIds, failedIds(requestedIds, restoredIds));
     }
 
     private List<Long> requireFolderIds(FolderIdsRequest request) {
