@@ -162,6 +162,69 @@ class MaterialAiAnalysisResponseParserTest {
     }
 
     @Test
+    void normalizesMarkdownFormattingDifferenceToExactLongAnalysisSubstring() {
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis("""
+                {
+                  "short_summary": "summary",
+                  "long_analysis": "## Overview\\n- **Nagle algorithm** reduces frequent transmission of small packets. Small packets can be delayed while waiting for ACK. Real-time systems should tune network options carefully.",
+                  "highlights": [
+                    {"text": "Nagle algorithm reduces frequent transmission of small packets.", "type": "MAIN"},
+                    {"text": "Small packets can be delayed while waiting for ACK.", "type": "CAUTION"},
+                    {"text": "Real-time systems should tune network options carefully.", "type": "MAIN"}
+                  ],
+                  "tags": ["TCP", "HTTP", "TLS"],
+                  "recommended_folder": null
+                }
+                """, List.of("Backend"));
+
+        String longAnalysis = result.analysisResult().longAnalysis();
+
+        assertThat(result.highlights().get(0).text())
+                .isEqualTo("**Nagle algorithm** reduces frequent transmission of small packets.");
+        assertThat(longAnalysis).contains(result.highlights().get(0).text());
+    }
+
+    @Test
+    void normalizesWhitespaceDifferenceToExactLongAnalysisSubstring() {
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis("""
+                {
+                  "short_summary": "summary",
+                  "long_analysis": "## Overview\\n- TCP keeps reliable delivery. Small packets can be delayed\\nwhile waiting for ACK. Real-time systems should tune network options carefully.",
+                  "highlights": [
+                    {"text": "TCP keeps reliable delivery.", "type": "MAIN"},
+                    {"text": "Small packets can be delayed while waiting for ACK.", "type": "CAUTION"},
+                    {"text": "Real-time systems should tune network options carefully.", "type": "MAIN"}
+                  ],
+                  "tags": ["TCP", "HTTP", "TLS"],
+                  "recommended_folder": null
+                }
+                """, List.of("Backend"));
+
+        String longAnalysis = result.analysisResult().longAnalysis();
+
+        assertThat(result.highlights().get(1).text())
+                .isEqualTo("Small packets can be delayed\nwhile waiting for ACK.");
+        assertThat(longAnalysis).contains(result.highlights().get(1).text());
+    }
+
+    @Test
+    void stillRejectsSemanticHighlightEvenAfterNormalization() {
+        assertUrlAnalysisParseFailed("""
+                {
+                  "short_summary": "summary",
+                  "long_analysis": "## Overview\\n- **Nagle algorithm** reduces frequent transmission of small packets. Small packets can be delayed while waiting for ACK. Real-time systems should tune network options carefully.",
+                  "highlights": [
+                    {"text": "Nagle can delay small packet transmission.", "type": "MAIN"},
+                    {"text": "ACK waiting is caused by Nagle in every environment.", "type": "CAUTION"},
+                    {"text": "Network tuning is always unnecessary.", "type": "MAIN"}
+                  ],
+                  "tags": ["TCP", "HTTP", "TLS"],
+                  "recommended_folder": null
+                }
+                """);
+    }
+
+    @Test
     void normalizesImportantHighlightTypeAliasToCore() {
         MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis("""
                 {
