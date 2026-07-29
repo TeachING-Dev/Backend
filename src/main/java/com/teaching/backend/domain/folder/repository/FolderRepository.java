@@ -128,4 +128,43 @@ public interface FolderRepository extends JpaRepository<Folder, Long> {
             @Param("folderId") Long folderId,
             @Param("userId") Long userId
     );
+
+    /** 요청한 폴더ID 중 실제로 복구 가능한(휴지통에 있고, 활성 폴더와 이름이 겹치지 않는) ID만 골라낸다. */
+    @Query(
+            value = """
+                    SELECT target.id FROM folders target
+                    WHERE target.id IN (:folderIds)
+                      AND target.user_id = :userId
+                      AND target.deleted_at IS NOT NULL
+                      AND NOT EXISTS (
+                          SELECT 1 FROM folders active
+                          WHERE active.user_id = target.user_id
+                            AND active.name = target.name
+                            AND active.id <> target.id
+                            AND active.deleted_at IS NULL
+                      )
+                    """,
+            nativeQuery = true
+    )
+    List<Long> findRestorableTrashedIds(
+            @Param("folderIds") List<Long> folderIds,
+            @Param("userId") Long userId
+    );
+
+    @Modifying
+    @Query(
+            value = """
+                    UPDATE folders
+                    SET deleted_at = NULL,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id IN (:folderIds)
+                      AND user_id = :userId
+                      AND deleted_at IS NOT NULL
+                    """,
+            nativeQuery = true
+    )
+    int restoreTrashedFolders(
+            @Param("folderIds") List<Long> folderIds,
+            @Param("userId") Long userId
+    );
 }
