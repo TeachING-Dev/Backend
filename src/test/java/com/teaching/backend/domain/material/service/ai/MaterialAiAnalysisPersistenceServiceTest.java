@@ -32,6 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -72,8 +73,8 @@ class MaterialAiAnalysisPersistenceServiceTest {
         MaterialAnalysis analysis = persistenceService.saveAnalysisResult(material, result);
 
         assertThat(analysis.getSummary()).isEqualTo("summary");
-        verify(tagRepository).insertIfAbsent("spring");
-        verify(tagRepository).insertIfAbsent("jpa");
+        verify(tagRepository, never()).insertIfAbsent("spring");
+        verify(tagRepository, never()).insertIfAbsent("jpa");
         verify(tagRepository).findByName("spring");
         verify(tagRepository).findByName("jpa");
         ArgumentCaptor<MaterialTag> materialTagCaptor = ArgumentCaptor.forClass(MaterialTag.class);
@@ -93,12 +94,14 @@ class MaterialAiAnalysisPersistenceServiceTest {
                 null
         );
         when(materialAnalysisRepository.save(any(MaterialAnalysis.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(tagRepository.findByName("spring")).thenReturn(Optional.of(newTag));
+        when(tagRepository.findByName("spring"))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(newTag));
 
         persistenceService.saveAnalysisResult(material, result);
 
         verify(tagRepository).insertIfAbsent("spring");
-        verify(tagRepository).findByName("spring");
+        verify(tagRepository, times(2)).findByName("spring");
         verify(materialTagRepository).save(any(MaterialTag.class));
     }
 
@@ -120,14 +123,16 @@ class MaterialAiAnalysisPersistenceServiceTest {
                 .hasMessageContaining("spring");
 
         verify(tagRepository).insertIfAbsent("spring");
-        verify(tagRepository).findByName("spring");
+        verify(tagRepository, atLeastOnce()).findByName("spring");
         verify(materialTagRepository, never()).save(any());
     }
 
     @Test
-    void ignoresBlankAndTooLongTagNames() {
+    void ignoresBlankAndTruncatesTooLongTagNames() {
         Material material = material();
         String tooLong = "a".repeat(51);
+        String truncated = "a".repeat(50);
+        Tag truncatedTag = Tag.create(truncated);
         MaterialAiAnalysisResult result = new MaterialAiAnalysisResult(
                 "summary",
                 "detail",
@@ -136,12 +141,16 @@ class MaterialAiAnalysisPersistenceServiceTest {
                 null
         );
         when(materialAnalysisRepository.save(any(MaterialAnalysis.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(tagRepository.findByName(truncated))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(truncatedTag));
 
         persistenceService.saveAnalysisResult(material, result);
 
-        verify(tagRepository, never()).findByName(any());
-        verify(tagRepository, never()).insertIfAbsent(any());
-        verify(materialTagRepository, never()).save(any());
+        verify(tagRepository, never()).findByName("");
+        verify(tagRepository, never()).findByName("  ");
+        verify(tagRepository).insertIfAbsent(truncated);
+        verify(materialTagRepository).save(any(MaterialTag.class));
     }
 
     @Test

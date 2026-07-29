@@ -182,6 +182,30 @@ class MaterialAiAnalysisResponseParserTest {
     }
 
     @Test
+    void materialAiHighlightTypeAcceptsKoreanAndEnumStyleLabels() {
+        assertThat(MaterialAiHighlightType.fromLabel(MaterialAiHighlightType.CORE.getLabel()))
+                .isEqualTo(MaterialAiHighlightType.CORE);
+        assertThat(MaterialAiHighlightType.fromLabel("\uC911\uC694"))
+                .isEqualTo(MaterialAiHighlightType.CORE);
+        assertThat(MaterialAiHighlightType.fromLabel(MaterialAiHighlightType.CAUTION.getLabel()))
+                .isEqualTo(MaterialAiHighlightType.CAUTION);
+        assertThat(MaterialAiHighlightType.fromLabel("MAIN"))
+                .isEqualTo(MaterialAiHighlightType.CORE);
+        assertThat(MaterialAiHighlightType.fromLabel("CORE"))
+                .isEqualTo(MaterialAiHighlightType.CORE);
+        assertThat(MaterialAiHighlightType.fromLabel("CAUTION"))
+                .isEqualTo(MaterialAiHighlightType.CAUTION);
+    }
+
+    @Test
+    void materialAiHighlightTypeRejectsUnrelatedLabel() {
+        assertThatThrownBy(() -> MaterialAiHighlightType.fromLabel("INFO"))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED);
+    }
+
+    @Test
     void excludesUnrelatedHighlightTypeWhenOtherHighlightsAreValid() {
         MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis("""
                 {

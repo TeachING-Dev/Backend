@@ -1,6 +1,8 @@
 package com.teaching.backend.domain.material.service;
 
 import com.teaching.backend.domain.folder.entity.Folder;
+import com.teaching.backend.domain.folder.exception.FolderErrorCode;
+import com.teaching.backend.domain.folder.exception.FolderException;
 import com.teaching.backend.domain.folder.repository.FolderRepository;
 import com.teaching.backend.domain.material.dto.MaterialListResponse;
 import com.teaching.backend.domain.material.entity.Material;
@@ -204,6 +206,111 @@ class MaterialServiceTest {
                 .doesNotThrowAnyException();
 
         verify(materialTagRepository).delete(materialTag);
+    }
+
+    @Test
+    void finalizeMaterialRejectsNullRequestAsInvalidFolderId() {
+        assertFolderExceptionThrown(
+                () -> materialService.finalizeMaterial(USER_ID, 101L, null),
+                FolderErrorCode.INVALID_FOLDER_ID
+        );
+        verify(materialRepository, never()).findByIdAndUser_Id(any(), any());
+    }
+
+    @Test
+    void finalizeMaterialRejectsNullFolderIdAsInvalidFolderId() {
+        assertFolderExceptionThrown(
+                () -> materialService.finalizeMaterial(
+                        USER_ID,
+                        101L,
+                        new MaterialFinalizeRequest(null, List.of())
+                ),
+                FolderErrorCode.INVALID_FOLDER_ID
+        );
+        verify(materialRepository, never()).findByIdAndUser_Id(any(), any());
+    }
+
+    @Test
+    void finalizeMaterialRejectsNonPositiveFolderIdAsInvalidFolderId() {
+        assertFolderExceptionThrown(
+                () -> materialService.finalizeMaterial(
+                        USER_ID,
+                        101L,
+                        new MaterialFinalizeRequest(0L, List.of())
+                ),
+                FolderErrorCode.INVALID_FOLDER_ID
+        );
+        verify(materialRepository, never()).findByIdAndUser_Id(any(), any());
+    }
+
+    @Test
+    void finalizeMaterialAssignsFinalFolderWhenMaterialHasNoFolder() {
+        Material material = materialWithoutFolder(101L, USER_ID, "Material", PlatformType.WEB, AiStatus.COMPLETED, createdAt(1));
+        Folder finalFolder = folder(USER_ID, 20L);
+        when(materialRepository.findByIdAndUser_Id(101L, USER_ID)).thenReturn(Optional.of(material));
+        when(folderRepository.findByIdAndUser_Id(20L, USER_ID)).thenReturn(Optional.of(finalFolder));
+        when(materialTagRepository.findAllWithTagByMaterialIds(List.of(101L))).thenReturn(List.of());
+
+        TransactionSynchronizationManager.initSynchronization();
+        MaterialFinalizeResponse response;
+        try {
+            response = materialService.finalizeMaterial(
+                    USER_ID,
+                    101L,
+                    new MaterialFinalizeRequest(20L, List.of())
+            );
+
+            List<TransactionSynchronization> synchronizations = TransactionSynchronizationManager.getSynchronizations();
+            assertThat(synchronizations).hasSize(1);
+            synchronizations.forEach(TransactionSynchronization::afterCommit);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+
+        assertThat(response.folderId()).isEqualTo(20L);
+        assertThat(material.getFolder()).isSameAs(finalFolder);
+        verify(entityManager).flush();
+        verify(materialIndexingService).syncFolderPayload(material, 20L);
+    }
+
+    @Test
+    void finalizeMaterialRejectsMissingFolder() {
+        Material material = materialWithoutFolder(101L, USER_ID, "Material", PlatformType.WEB, AiStatus.COMPLETED, createdAt(1));
+        when(materialRepository.findByIdAndUser_Id(101L, USER_ID)).thenReturn(Optional.of(material));
+        when(folderRepository.findByIdAndUser_Id(20L, USER_ID)).thenReturn(Optional.empty());
+        when(folderRepository.existsById(20L)).thenReturn(false);
+
+        assertFolderExceptionThrown(
+                () -> materialService.finalizeMaterial(
+                        USER_ID,
+                        101L,
+                        new MaterialFinalizeRequest(20L, List.of())
+                ),
+                FolderErrorCode.FOLDER_NOT_FOUND
+        );
+
+        verify(entityManager, never()).flush();
+        verify(materialIndexingService, never()).syncFolderPayload(any(), any());
+    }
+
+    @Test
+    void finalizeMaterialRejectsOtherUsersFolder() {
+        Material material = materialWithoutFolder(101L, USER_ID, "Material", PlatformType.WEB, AiStatus.COMPLETED, createdAt(1));
+        when(materialRepository.findByIdAndUser_Id(101L, USER_ID)).thenReturn(Optional.of(material));
+        when(folderRepository.findByIdAndUser_Id(20L, USER_ID)).thenReturn(Optional.empty());
+        when(folderRepository.existsById(20L)).thenReturn(true);
+
+        assertFolderExceptionThrown(
+                () -> materialService.finalizeMaterial(
+                        USER_ID,
+                        101L,
+                        new MaterialFinalizeRequest(20L, List.of())
+                ),
+                FolderErrorCode.FOLDER_ACCESS_DENIED
+        );
+
+        verify(entityManager, never()).flush();
+        verify(materialIndexingService, never()).syncFolderPayload(any(), any());
     }
 
     @Test
@@ -539,6 +646,13 @@ class MaterialServiceTest {
                 .isEqualTo(errorCode);
     }
 
+    private void assertFolderExceptionThrown(Runnable action, FolderErrorCode errorCode) {
+        assertThatThrownBy(action::run)
+                .isInstanceOf(FolderException.class)
+                .extracting("errorCode")
+                .isEqualTo(errorCode);
+    }
+
     private Material material(
             Long materialId,
             Long userId,
@@ -551,6 +665,21 @@ class MaterialServiceTest {
         Folder folder = Folder.create(user, "Folder");
         ReflectionTestUtils.setField(folder, "id", FOLDER_ID);
         Material material = Material.create(user, folder, title, "https://example.com", platformType);
+        ReflectionTestUtils.setField(material, "id", materialId);
+        ReflectionTestUtils.setField(material, "aiStatus", aiStatus);
+        ReflectionTestUtils.setField(material, "createdAt", createdAt);
+        return material;
+    }
+
+    private Material materialWithoutFolder(
+            Long materialId,
+            Long userId,
+            String title,
+            PlatformType platformType,
+            AiStatus aiStatus,
+            LocalDateTime createdAt
+    ) {
+        Material material = Material.create(user(userId), null, title, "https://example.com", platformType);
         ReflectionTestUtils.setField(material, "id", materialId);
         ReflectionTestUtils.setField(material, "aiStatus", aiStatus);
         ReflectionTestUtils.setField(material, "createdAt", createdAt);
