@@ -21,10 +21,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -167,16 +164,20 @@ public class MaterialIndexingService {
             float[] vector
     ) {
         try {
-            qdrantClient.upsertPoint(pointId, vector, Map.of(
-                    "materialChunkId", materialChunkId,
-                    "materialId", material.getId(),
-                    "userId", material.getUser().getId(),
-                    "folderId", material.getFolderId(),
-                    "chunkIndex", chunkIndex,
-                    "text", chunkText,
-                    "materialTitle", material.getTitle(),
-                    "originalUrl", material.getOriginalUrl()
-            ));
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("materialChunkId", materialChunkId);
+            payload.put("materialId", material.getId());
+            payload.put("userId", material.getUser().getId());
+            payload.put("chunkIndex", chunkIndex);
+            payload.put("text", chunkText);
+            payload.put("materialTitle", material.getTitle());
+            payload.put("originalUrl", material.getOriginalUrl());
+
+            if (material.getFolderId() != null) {
+                payload.put("folderId", material.getFolderId());
+            }
+
+            qdrantClient.upsertPoint(pointId, vector, payload);
         } catch (RuntimeException e) {
             throw new MaterialException(MaterialErrorCode.MATERIAL_VECTOR_STORE_FAILED);
         }

@@ -43,10 +43,9 @@ public class MaterialAiAnalysisOrchestrator {
     public MaterialAiAnalysisPipelineResult analyze(MaterialAnalysisPreparationResult preparationResult) {
         User user = userRepository.findById(preparationResult.userId())
                 .orElseThrow(() -> new UserException(UserErrorCode.USER_NOT_FOUND));
-        Folder folder = folderService.getOwnedFolder(preparationResult.userId(), preparationResult.folderId());
         Material material = materialRepository.save(Material.create(
                 user,
-                folder,
+                null,
                 resolveTitle(preparationResult),
                 preparationResult.originalUrl(),
                 preparationResult.platformType()
@@ -91,6 +90,10 @@ public class MaterialAiAnalysisOrchestrator {
         material.markAnalysisCompleted();
         Folder recommendedFolder = resolveRecommendedFolder(preparationResult.userId(), recommendedFolderName);
 
+        List<String> tags = previousResult
+                .map(MaterialAiAnalysisResult::tags)
+                .orElseGet(List::of);
+
         return new MaterialAiAnalysisPipelineResult(
                 material.getId(),
                 preparationResult.userId(),
@@ -101,7 +104,8 @@ public class MaterialAiAnalysisOrchestrator {
                 chunkCount,
                 highlights,
                 recommendedFolder == null ? null : recommendedFolder.getId(),
-                recommendedFolder == null ? null : recommendedFolder.getName()
+                recommendedFolder == null ? null : recommendedFolder.getName(),
+                tags
         );
     }
 

@@ -5,39 +5,44 @@ import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisPipelineRes
 import com.teaching.backend.domain.material.enums.MaterialAnalyzeResultType;
 import com.teaching.backend.domain.material.enums.PlatformType;
 
+import java.util.List;
+
 public record MaterialAnalyzeResponse(
-        MaterialAnalyzeResultType resultType,
-        Long existingMaterialId,
-        Long materialId,
         Long materialAnalysisId,
-        String title,
+        MaterialAnalyzeResultType resultType,
+        Long materialId,
+        Long existingMaterialId,
         String originalUrl,
+        String title,
         String platformType,
         String status,
         Integer chunkCount,
         Long recommendedFolderId,
-        String recommendedFolderName
+        String recommendedFolderName,
+        List<MaterialTagResponse> tags
 ) {
 
     public static MaterialAnalyzeResponse alreadyAnalyzed(
             Material material,
             Long materialAnalysisId,
-            Integer chunkCount
+            Integer chunkCount,
+            List<MaterialTagResponse> tags
     ) {
         PlatformType platformType = material.getPlatformType();
 
         return new MaterialAnalyzeResponse(
+                materialAnalysisId,
                 MaterialAnalyzeResultType.ALREADY_ANALYZED,
                 material.getId(),
-                null,
-                materialAnalysisId,
-                material.getTitle(),
+                material.getId(),
                 material.getOriginalUrl(),
+                material.getTitle(),
                 platformType == null ? null : platformType.name(),
                 material.getAiStatus() == null ? null : material.getAiStatus().name(),
                 chunkCount,
-                null,
-                null
+                material.getFolderId(),
+                material.getFolder() == null ? null : material.getFolder().getName(),
+                tags
         );
     }
 
@@ -46,13 +51,14 @@ public record MaterialAnalyzeResponse(
             PlatformType platformType
     ) {
         return new MaterialAnalyzeResponse(
+                null,
                 MaterialAnalyzeResultType.ANALYSIS_REQUIRED,
                 null,
                 null,
-                null,
-                null,
                 originalUrl,
+                null,
                 platformType == null ? null : platformType.name(),
+                null,
                 null,
                 null,
                 null,
@@ -60,21 +66,23 @@ public record MaterialAnalyzeResponse(
         );
     }
 
-    public static MaterialAnalyzeResponse completed(MaterialAiAnalysisPipelineResult result) {
+    public static MaterialAnalyzeResponse completed(MaterialAiAnalysisPipelineResult result,List<MaterialTagResponse> tags) {
         PlatformType platformType = result.platformType();
+        String title = result.extractedContent() == null ? null : result.extractedContent().title();
 
         return new MaterialAnalyzeResponse(
-                MaterialAnalyzeResultType.ANALYSIS_COMPLETED,
-                null,
-                result.materialId(),
                 result.materialAnalysisId(),
-                result.extractedContent() == null ? null : result.extractedContent().title(),
+                MaterialAnalyzeResultType.ANALYSIS_COMPLETED,
+                result.materialId(),
+                null,
                 result.originalUrl(),
+                title,
                 platformType == null ? null : platformType.name(),
                 "COMPLETED",
                 result.chunkCount(),
                 result.recommendedFolderId(),
-                result.recommendedFolderName()
+                result.recommendedFolderName(),
+                tags
         );
     }
 }

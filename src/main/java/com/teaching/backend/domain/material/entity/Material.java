@@ -26,7 +26,7 @@ public class Material extends BaseSoftDeleteEntity {
     private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "folder_id", nullable = false)
+    @JoinColumn(name = "folder_id", nullable = true)
     private Folder folder;
 
     @Column(nullable = false, length = 200)

@@ -8,6 +8,7 @@ import com.teaching.backend.domain.material.dto.extract.MaterialAnalysisPreparat
 import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisPipelineResult;
 import com.teaching.backend.domain.material.dto.request.MaterialAnalyzeRequest;
 import com.teaching.backend.domain.material.dto.response.MaterialAnalyzeResponse;
+import com.teaching.backend.domain.material.dto.response.MaterialTagResponse;
 import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.entity.MaterialAnalysis;
 import com.teaching.backend.domain.material.enums.AiStatus;
@@ -19,6 +20,8 @@ import com.teaching.backend.domain.material.repository.MaterialChunkRepository;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
 import com.teaching.backend.domain.material.service.ai.MaterialAiAnalysisOrchestrator;
 import com.teaching.backend.domain.material.service.extract.MaterialContentExtractorRegistry;
+import com.teaching.backend.domain.tag.entity.MaterialTag;
+import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
 import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
 import lombok.RequiredArgsConstructor;
@@ -44,6 +47,7 @@ public class MaterialUrlAnalysisService {
     private final MaterialContentExtractorRegistry materialContentExtractorRegistry;
     private final MaterialAiAnalysisOrchestrator materialAiAnalysisOrchestrator;
     private final MaterialUrlAnalysisConcurrencyGuard materialUrlAnalysisConcurrencyGuard;
+    private final MaterialTagRepository materialTagRepository;
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public MaterialAnalyzeResponse analyze(
@@ -51,13 +55,10 @@ public class MaterialUrlAnalysisService {
             MaterialAnalyzeRequest request
     ) {
         String originalUrl = validateAndNormalizeUrl(request);
-        Long folderId = validateFolderId(request);
-
-        folderService.getOwnedFolder(userId, folderId);
         PlatformType platformType = materialPlatformResolver.resolve(null, originalUrl);
 
         if (request.isForceAnalyze()) {
-            return analyzeNewMaterial(userId, folderId, originalUrl, platformType);
+            return analyzeNewMaterial(userId, originalUrl, platformType);
         }
 
         return materialUrlAnalysisConcurrencyGuard.executeSerialized(
@@ -65,24 +66,26 @@ public class MaterialUrlAnalysisService {
                 originalUrl,
                 () -> findLatestCompletedMaterial(userId, originalUrl)
                         .map(this::alreadyAnalyzedResponse),
-                () -> analyzeNewMaterial(userId, folderId, originalUrl, platformType)
+                () -> analyzeNewMaterial(userId, originalUrl, platformType)
         );
     }
 
     private MaterialAnalyzeResponse analyzeNewMaterial(
             Long userId,
-            Long folderId,
             String originalUrl,
             PlatformType platformType
     ) {
         MaterialAnalysisPreparationResult preparationResult = prepareAnalysis(
                 userId,
-                folderId,
                 originalUrl,
                 platformType
         );
         MaterialAiAnalysisPipelineResult analysisResult = materialAiAnalysisOrchestrator.analyze(preparationResult);
-        return MaterialAnalyzeResponse.completed(analysisResult);
+
+        List<MaterialTagResponse> tags = materialTagRepository.findAllByMaterialId(analysisResult.materialId()).stream()
+                .map(MaterialTagResponse::from)
+                .toList();
+        return MaterialAnalyzeResponse.completed(analysisResult,tags);
     }
 
     private String validateAndNormalizeUrl(MaterialAnalyzeRequest request) {
@@ -96,15 +99,6 @@ public class MaterialUrlAnalysisService {
         }
 
         return originalUrl;
-    }
-
-    private Long validateFolderId(MaterialAnalyzeRequest request) {
-        Long folderId = request == null ? null : request.folderId();
-        if (folderId == null || folderId <= 0) {
-            throw new FolderException(FolderErrorCode.INVALID_FOLDER_ID);
-        }
-
-        return folderId;
     }
 
     private Optional<Material> findLatestCompletedMaterial(
@@ -129,19 +123,22 @@ public class MaterialUrlAnalysisService {
                 .orElse(null);
         int chunkCount = materialChunkRepository.findAllByMaterial_IdOrderByChunkIndexAsc(material.getId()).size();
 
-        return MaterialAnalyzeResponse.alreadyAnalyzed(material, materialAnalysisId, chunkCount);
+        List<MaterialTagResponse> tags = materialTagRepository.findAllByMaterialId(material.getId()).stream()
+                .map(MaterialTagResponse::from)
+                .toList();
+
+        return MaterialAnalyzeResponse.alreadyAnalyzed(material, materialAnalysisId, chunkCount,tags);
     }
 
     MaterialAnalysisPreparationResult prepareAnalysis(
             Long userId,
-            Long folderId,
             String originalUrl,
             PlatformType platformType
     ) {
         ExtractedMaterialContent extractedContent = materialContentExtractorRegistry.extract(platformType, originalUrl);
         return new MaterialAnalysisPreparationResult(
                 userId,
-                folderId,
+                null,
                 originalUrl,
                 extractedContent.platformType(),
                 extractedContent

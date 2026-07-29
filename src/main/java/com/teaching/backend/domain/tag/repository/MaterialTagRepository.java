@@ -37,4 +37,8 @@ public interface MaterialTagRepository
 
     @Query("SELECT mt.tag.name FROM MaterialTag mt WHERE mt.material.id = :materialId")
     List<String> findAllTagNamesByMaterialId(@Param("materialId") Long materialId);
+
+    boolean existsByMaterial_IdAndTag_Id(Long materialId, Long tagId);
+
+    List<MaterialTag> findAllByMaterialId(Long materialId);
 }

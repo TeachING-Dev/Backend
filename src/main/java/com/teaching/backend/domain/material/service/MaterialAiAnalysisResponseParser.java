@@ -151,6 +151,16 @@ public class MaterialAiAnalysisResponseParser {
 
         String text = highlight.text().trim();
         int highlightStart = longAnalysis.indexOf(text);
+
+        if (highlightStart < 0) {
+            String cleanTarget = text.replaceAll("[^a-zA-Z0-9가-힣]", "");
+            String cleanSource = longAnalysis.replaceAll("[^a-zA-Z0-9가-힣]", "");
+
+            if (!cleanTarget.isBlank() && cleanSource.contains(cleanTarget)) {
+                highlightStart = 0;
+            }
+        }
+
         if (!seenTexts.add(text) || highlightStart < 0) {
             return null;
         }
@@ -162,8 +172,7 @@ public class MaterialAiAnalysisResponseParser {
             return null;
         }
 
-        String exactText = longAnalysis.substring(highlightStart, highlightStart + text.length());
-        return new MaterialAiHighlightResult(exactText, type);
+        return new MaterialAiHighlightResult(text, type);
     }
 
     private List<String> validateTags(List<String> tags) {
