@@ -15,7 +15,6 @@ import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -124,20 +123,36 @@ public class DefaultYoutubeTranscriptProvider implements YoutubeTranscriptProvid
     }
 
     private Optional<TranscriptCandidate> selectTranscript(List<TranscriptCandidate> candidates) {
-        return candidates.stream()
-                .min(Comparator
-                        .comparingInt((TranscriptCandidate candidate) -> languagePriority(candidate.languageCode()))
-                        .thenComparingInt(candidate -> candidate.generated() ? 1 : 0));
+        Optional<TranscriptCandidate> koreanTranscript = selectPreferredTranscript(candidates, KOREAN_LANGUAGES);
+        if (koreanTranscript.isPresent()) {
+            return koreanTranscript;
+        }
+
+        Optional<TranscriptCandidate> englishTranscript = selectPreferredTranscript(candidates, ENGLISH_LANGUAGES);
+        if (englishTranscript.isPresent()) {
+            return englishTranscript;
+        }
+
+        return candidates.isEmpty() ? Optional.empty() : Optional.of(candidates.get(0));
     }
 
-    private int languagePriority(String languageCode) {
-        if (matchesAnyLanguage(languageCode, KOREAN_LANGUAGES)) {
-            return 0;
+    private Optional<TranscriptCandidate> selectPreferredTranscript(
+            List<TranscriptCandidate> candidates,
+            List<String> targetLanguages
+    ) {
+        TranscriptCandidate generatedCandidate = null;
+        for (TranscriptCandidate candidate : candidates) {
+            if (!matchesAnyLanguage(candidate.languageCode(), targetLanguages)) {
+                continue;
+            }
+            if (!candidate.generated()) {
+                return Optional.of(candidate);
+            }
+            if (generatedCandidate == null) {
+                generatedCandidate = candidate;
+            }
         }
-        if (matchesAnyLanguage(languageCode, ENGLISH_LANGUAGES)) {
-            return 2;
-        }
-        return 4;
+        return Optional.ofNullable(generatedCandidate);
     }
 
     private boolean matchesAnyLanguage(String languageCode, List<String> targetLanguages) {

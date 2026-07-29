@@ -293,6 +293,58 @@ class MaterialAiAnalysisResponseParserTest {
     }
 
     @Test
+    void invalidTypeDoesNotConsumeDuplicateHighlightTextBeforeValidType() {
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis("""
+                {
+                  "short_summary": "summary",
+                  "long_analysis": "## Overview\\n- First stable sentence. Second stable sentence. Third stable sentence.",
+                  "highlights": [
+                    {"text": "First stable sentence.", "type": "INFO"},
+                    {"text": "First stable sentence.", "type": "MAIN"},
+                    {"text": "Second stable sentence.", "type": "CAUTION"},
+                    {"text": "Third stable sentence.", "type": "CORE"}
+                  ],
+                  "tags": ["one", "two", "three"],
+                  "recommended_folder": null
+                }
+                """, List.of("Backend"));
+
+        assertThat(result.highlights())
+                .extracting(MaterialAiHighlightResult::text)
+                .containsExactly(
+                        "First stable sentence.",
+                        "Second stable sentence.",
+                        "Third stable sentence."
+                );
+    }
+
+    @Test
+    void doesNotNormalizeAcrossMarkdownBulletMarkers() {
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis("""
+                {
+                  "short_summary": "summary",
+                  "long_analysis": "## Overview\\n* First item\\n* Second item\\nThird sentence remains valid.",
+                  "highlights": [
+                    {"text": "First item Second item", "type": "MAIN"},
+                    {"text": "First item", "type": "MAIN"},
+                    {"text": "Second item", "type": "CAUTION"},
+                    {"text": "Third sentence remains valid.", "type": "CORE"}
+                  ],
+                  "tags": ["one", "two", "three"],
+                  "recommended_folder": null
+                }
+                """, List.of("Backend"));
+
+        assertThat(result.highlights())
+                .extracting(MaterialAiHighlightResult::text)
+                .containsExactly(
+                        "First item",
+                        "Second item",
+                        "Third sentence remains valid."
+                );
+    }
+
+    @Test
     void rejectsWhenNoValidHighlightRemains() {
         assertUrlAnalysisParseFailed("""
                 {

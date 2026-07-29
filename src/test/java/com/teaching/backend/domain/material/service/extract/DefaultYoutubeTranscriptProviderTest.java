@@ -64,6 +64,18 @@ class DefaultYoutubeTranscriptProviderTest {
     }
 
     @Test
+    void preservesCandidateOrderWhenKoreanAndEnglishAreMissing() {
+        DefaultYoutubeTranscriptProvider provider = provider(
+                candidate("ja", true, "generated Japanese caption"),
+                candidate("fr", false, "manual French caption")
+        );
+
+        Optional<String> result = provider.getTranscript("https://www.youtube.com/watch?v=video");
+
+        assertThat(result).contains("generated Japanese caption");
+    }
+
+    @Test
     void joinsTranscriptFragmentsAsPlainText() {
         DefaultYoutubeTranscriptProvider provider = provider(
                 candidate("ko", false, "첫 번째 줄", "두 번째 줄")

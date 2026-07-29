@@ -149,7 +149,7 @@ public class MaterialAiAnalysisResponseParser {
         }
 
         Optional<String> exactText = findExactHighlightText(longAnalysis, highlight.text().trim());
-        if (exactText.isEmpty() || !seenTexts.add(exactText.get())) {
+        if (exactText.isEmpty()) {
             return null;
         }
 
@@ -157,6 +157,10 @@ public class MaterialAiAnalysisResponseParser {
         try {
             type = MaterialAiHighlightType.fromLabel(highlight.type());
         } catch (MaterialException e) {
+            return null;
+        }
+
+        if (!seenTexts.add(exactText.get())) {
             return null;
         }
 
@@ -201,7 +205,7 @@ public class MaterialAiAnalysisResponseParser {
 
         for (int i = 0; i < value.length(); i++) {
             char current = value.charAt(i);
-            if (INLINE_MARKDOWN_FORMATTING_CHARS.contains(current)) {
+            if (shouldSkipInlineMarkdownFormatting(value, i)) {
                 continue;
             }
 
@@ -224,6 +228,32 @@ public class MaterialAiAnalysisResponseParser {
         }
 
         return new NormalizedText(normalized.toString(), sourceIndexes);
+    }
+
+    private boolean shouldSkipInlineMarkdownFormatting(String value, int index) {
+        char current = value.charAt(index);
+        if (!INLINE_MARKDOWN_FORMATTING_CHARS.contains(current)) {
+            return false;
+        }
+        return current != '*' || !isLineStartBulletMarker(value, index);
+    }
+
+    private boolean isLineStartBulletMarker(String value, int index) {
+        if (value.charAt(index) != '*' || index + 1 >= value.length() || !isWhitespaceLike(value.charAt(index + 1))) {
+            return false;
+        }
+
+        int lineStart = index;
+        while (lineStart > 0 && value.charAt(lineStart - 1) != '\n' && value.charAt(lineStart - 1) != '\r') {
+            lineStart--;
+        }
+
+        for (int i = lineStart; i < index; i++) {
+            if (value.charAt(i) != ' ') {
+                return false;
+            }
+        }
+        return index - lineStart <= 3;
     }
 
     private int[] expandInlineMarkdownBounds(String source, int start, int end) {
