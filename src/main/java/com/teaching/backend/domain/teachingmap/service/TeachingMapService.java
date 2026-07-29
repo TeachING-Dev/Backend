@@ -136,7 +136,7 @@ public class TeachingMapService {
         Folder folder = folderRepository.findByIdAndUser_Id(request.folderId(), userId)
                 .orElseThrow(() -> new GeneralException(TeachingMapErrorCode.FOLDER_NOT_FOUND));
 
-        List<Material> materials = materialRepository.findAllByFolderId(folder.getId()).stream()
+        List<Material> materials = materialRepository.findAllByFolder_Id(folder.getId()).stream()
                 .filter(m -> m.getAiStatus() == AiStatus.COMPLETED)
                 .toList();
         if (materials.size() < 3) {
