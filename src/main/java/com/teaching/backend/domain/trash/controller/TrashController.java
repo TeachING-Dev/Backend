@@ -1,5 +1,8 @@
 package com.teaching.backend.domain.trash.controller;
 
+import com.teaching.backend.domain.folder.code.FolderSuccessCode;
+import com.teaching.backend.domain.folder.dto.request.FolderIdsRequest;
+import com.teaching.backend.domain.folder.dto.response.FolderTrashRestoreResponse;
 import com.teaching.backend.domain.material.code.MaterialSuccessCode;
 import com.teaching.backend.domain.material.dto.MaterialRestoreResponse;
 import com.teaching.backend.domain.material.dto.request.MaterialIdsRequest;
@@ -72,6 +75,19 @@ public class TrashController {
     ) {
         TrashTeachingMapListResponse result = trashService.getTrashedTeachingMaps(authMember.getUserId(), sort, page);
         return ApiResponse.onSuccess(TrashSuccessCode.TRASH_TEACHING_MAP_LIST_SUCCESS, result);
+    }
+
+    @Operation(
+            summary = "폴더 다중 복구",
+            description = "휴지통 내 폴더를 여러 개 선택하여 한 번에 복구합니다. 활성 폴더와 이름이 겹치는 폴더는 복구되지 않고 failedIds로 반환됩니다."
+    )
+    @PatchMapping("/folders/restore")
+    public ApiResponse<FolderTrashRestoreResponse> restoreFolders(
+            @AuthenticationPrincipal AuthMember authMember,
+            @RequestBody FolderIdsRequest request
+    ) {
+        FolderTrashRestoreResponse result = trashService.restoreFolders(authMember.getUserId(), request);
+        return ApiResponse.onSuccess(FolderSuccessCode.FOLDER_TRASH_RESTORE_SUCCESS, result);
     }
 
     @Operation(

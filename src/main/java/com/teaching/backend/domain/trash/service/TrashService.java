@@ -1,6 +1,10 @@
 package com.teaching.backend.domain.trash.service;
 
+import com.teaching.backend.domain.folder.dto.request.FolderIdsRequest;
+import com.teaching.backend.domain.folder.dto.response.FolderTrashRestoreResponse;
 import com.teaching.backend.domain.folder.entity.Folder;
+import com.teaching.backend.domain.folder.exception.FolderErrorCode;
+import com.teaching.backend.domain.folder.exception.FolderException;
 import com.teaching.backend.domain.folder.repository.FolderRepository;
 import com.teaching.backend.domain.material.dto.MaterialRestoreResponse;
 import com.teaching.backend.domain.material.dto.request.MaterialIdsRequest;
@@ -108,6 +112,29 @@ public class TrashService {
         }
 
         return TeachingMapRestoreResponse.of(restorableIds, failedIds(requestedIds, restorableIds));
+    }
+
+    /**
+     * 폴더 다중 선택 복구. 휴지통에 있고, 활성 폴더와 이름이 겹치지 않는 폴더만 복구 대상으로 삼는다.
+     * 이름이 겹치는 폴더는 failedIds로 반환된다.
+     */
+    @Transactional
+    public FolderTrashRestoreResponse restoreFolders(Long userId, FolderIdsRequest request) {
+        List<Long> requestedIds = requireFolderIds(request);
+
+        List<Long> restorableIds = folderRepository.findRestorableTrashedIds(requestedIds, userId);
+        if (!restorableIds.isEmpty()) {
+            folderRepository.restoreTrashedFolders(restorableIds, userId);
+        }
+
+        return FolderTrashRestoreResponse.of(restorableIds, failedIds(requestedIds, restorableIds));
+    }
+
+    private List<Long> requireFolderIds(FolderIdsRequest request) {
+        if (request == null || request.folderIds() == null || request.folderIds().isEmpty()) {
+            throw new FolderException(FolderErrorCode.FOLDER_IDS_REQUIRED);
+        }
+        return request.folderIds();
     }
 
     private List<Long> requireMaterialIds(MaterialIdsRequest request) {
