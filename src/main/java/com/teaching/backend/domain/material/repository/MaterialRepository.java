@@ -141,7 +141,7 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
             Pageable pageable
     );
 
-    List<Material> findAllByFolderId(Long folderId);
+    List<Material> findAllByFolder_Id(Long folderId);
 
 }
 
