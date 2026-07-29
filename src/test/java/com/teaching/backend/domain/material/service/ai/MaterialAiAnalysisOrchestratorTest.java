@@ -2,7 +2,6 @@ package com.teaching.backend.domain.material.service.ai;
 
 import com.teaching.backend.domain.folder.entity.Folder;
 import com.teaching.backend.domain.folder.repository.FolderRepository;
-import com.teaching.backend.domain.folder.service.FolderService;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiHighlightResult;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisPipelineResult;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisResult;
@@ -56,9 +55,6 @@ class MaterialAiAnalysisOrchestratorTest {
     private FolderRepository folderRepository;
 
     @Mock
-    private FolderService folderService;
-
-    @Mock
     private MaterialRepository materialRepository;
 
     @Mock
@@ -103,7 +99,6 @@ class MaterialAiAnalysisOrchestratorTest {
             }
         };
         when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
-        when(folderService.getOwnedFolder(USER_ID, FOLDER_ID)).thenReturn(folder);
         when(materialRepository.save(any(Material.class))).thenAnswer(invocation -> {
             Material material = invocation.getArgument(0);
             ReflectionTestUtils.setField(material, "id", 100L);
@@ -166,7 +161,6 @@ class MaterialAiAnalysisOrchestratorTest {
             }
         };
         when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
-        when(folderService.getOwnedFolder(USER_ID, FOLDER_ID)).thenReturn(folder);
         when(materialRepository.save(any(Material.class))).thenAnswer(invocation -> {
             Material material = invocation.getArgument(0);
             ReflectionTestUtils.setField(material, "id", 100L);
@@ -216,7 +210,6 @@ class MaterialAiAnalysisOrchestratorTest {
             }
         };
         when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
-        when(folderService.getOwnedFolder(USER_ID, FOLDER_ID)).thenReturn(initialFolder);
         when(materialRepository.save(any(Material.class))).thenAnswer(invocation -> {
             Material material = invocation.getArgument(0);
             ReflectionTestUtils.setField(material, "id", 100L);
@@ -238,7 +231,6 @@ class MaterialAiAnalysisOrchestratorTest {
     @Test
     void propagatesStageFailureForTransactionRollback() {
         User user = user();
-        Folder folder = folder(user);
         MaterialAiAnalysisStage failingStage = new MaterialAiAnalysisStage() {
             @Override
             public MaterialAiStageType type() {
@@ -251,7 +243,6 @@ class MaterialAiAnalysisOrchestratorTest {
             }
         };
         when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
-        when(folderService.getOwnedFolder(USER_ID, FOLDER_ID)).thenReturn(folder);
         when(materialRepository.save(any(Material.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(stageRegistry.stagesInOrder()).thenReturn(List.of(failingStage));
 
@@ -283,7 +274,6 @@ class MaterialAiAnalysisOrchestratorTest {
             }
         };
         when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
-        when(folderService.getOwnedFolder(USER_ID, FOLDER_ID)).thenReturn(folder);
         when(materialRepository.save(any(Material.class))).thenReturn(savedMaterial);
         when(stageRegistry.stagesInOrder()).thenReturn(List.of(stage));
         when(persistenceService.saveAnalysisResult(savedMaterial, aiResult)).thenReturn(analysis);
@@ -320,7 +310,7 @@ class MaterialAiAnalysisOrchestratorTest {
         );
         return new MaterialAnalysisPreparationResult(
                 USER_ID,
-                FOLDER_ID,
+                null,
                 "https://example.com",
                 PlatformType.BLOG,
                 content

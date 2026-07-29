@@ -35,7 +35,7 @@ class MaterialUrlAnalysisControllerTest {
 
     @Test
     void analyzeUsesAuthenticatedUserIdAndReturnsApiResponse() {
-        MaterialAnalyzeRequest request = new MaterialAnalyzeRequest("https://example.com", 10L, false);
+        MaterialAnalyzeRequest request = new MaterialAnalyzeRequest("https://example.com", false);
         MaterialAnalyzeResponse serviceResponse = MaterialAnalyzeResponse.analysisRequired(
                 "https://example.com",
                 null
@@ -56,7 +56,7 @@ class MaterialUrlAnalysisControllerTest {
 
     @Test
     void analyzeRejectsMissingAuthentication() {
-        MaterialAnalyzeRequest request = new MaterialAnalyzeRequest("https://example.com", 10L, false);
+        MaterialAnalyzeRequest request = new MaterialAnalyzeRequest("https://example.com", false);
 
         assertThatThrownBy(() -> materialUrlAnalysisController.analyze(null, request))
                 .isInstanceOf(GeneralException.class)

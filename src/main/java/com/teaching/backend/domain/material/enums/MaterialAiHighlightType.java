@@ -29,6 +29,12 @@ public enum MaterialAiHighlightType {
         if ("중요".equals(normalized)) {
             return CORE;
         }
+        if ("MAIN".equals(normalized) || "CORE".equals(normalized)) {
+            return CORE;
+        }
+        if ("CAUTION".equals(normalized)) {
+            return CAUTION;
+        }
         throw new MaterialException(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED);
     }
 }
