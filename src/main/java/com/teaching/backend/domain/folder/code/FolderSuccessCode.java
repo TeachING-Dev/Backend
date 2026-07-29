@@ -14,7 +14,10 @@ public enum FolderSuccessCode implements BaseSuccessCode {
     FOLDER_RENAME_SUCCESS(HttpStatus.OK, "FOLDER2002", "폴더명이 수정되었습니다."),
     FOLDER_TRASH_SUCCESS(HttpStatus.OK, "FOLDER2003", "폴더가 휴지통으로 이동되었습니다."),
     FOLDER_RESTORE_SUCCESS(HttpStatus.OK, "FOLDER2004", "폴더가 복구되었습니다."),
-    FOLDER_CREATE_SUCCESS(HttpStatus.CREATED, "FOLDER2010", "폴더가 생성되었습니다.");
+    FOLDER_CREATE_SUCCESS(HttpStatus.CREATED, "FOLDER2010", "폴더가 생성되었습니다."),
+
+    // 휴지통(전역) 폴더 다중 복구
+    FOLDER_TRASH_RESTORE_SUCCESS(HttpStatus.OK, "FOLDER2005", "폴더가 성공적으로 복구되었습니다.");
 
     private final HttpStatus status;
     private final String code;

@@ -1,6 +1,10 @@
 package com.teaching.backend.domain.trash.service;
 
+import com.teaching.backend.domain.folder.dto.request.FolderIdsRequest;
+import com.teaching.backend.domain.folder.dto.response.FolderTrashRestoreResponse;
 import com.teaching.backend.domain.folder.entity.Folder;
+import com.teaching.backend.domain.folder.exception.FolderErrorCode;
+import com.teaching.backend.domain.folder.exception.FolderException;
 import com.teaching.backend.domain.folder.repository.FolderRepository;
 import com.teaching.backend.domain.material.dto.MaterialRestoreResponse;
 import com.teaching.backend.domain.material.dto.request.MaterialIdsRequest;
@@ -108,6 +112,31 @@ public class TrashService {
         }
 
         return TeachingMapRestoreResponse.of(restorableIds, failedIds(requestedIds, restorableIds));
+    }
+
+    /**
+     * 폴더 다중 선택 복구. 폴더마다 "휴지통에 있고 활성 폴더와 이름이 겹치지 않는지" 확인과
+     * 복구 UPDATE를 하나의 원자적 쿼리로 묶어 처리하므로, 실제로 갱신된 폴더만 restoredIds에 담긴다.
+     */
+    @Transactional
+    public FolderTrashRestoreResponse restoreFolders(Long userId, FolderIdsRequest request) {
+        List<Long> requestedIds = requireFolderIds(request);
+
+        List<Long> restoredIds = new ArrayList<>();
+        for (Long folderId : requestedIds) {
+            if (folderRepository.restoreTrashedFolderIfNameAvailable(folderId, userId) > 0) {
+                restoredIds.add(folderId);
+            }
+        }
+
+        return FolderTrashRestoreResponse.of(restoredIds, failedIds(requestedIds, restoredIds));
+    }
+
+    private List<Long> requireFolderIds(FolderIdsRequest request) {
+        if (request == null || request.folderIds() == null || request.folderIds().isEmpty()) {
+            throw new FolderException(FolderErrorCode.FOLDER_IDS_REQUIRED);
+        }
+        return request.folderIds();
     }
 
     private List<Long> requireMaterialIds(MaterialIdsRequest request) {

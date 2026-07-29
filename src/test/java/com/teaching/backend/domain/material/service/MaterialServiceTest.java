@@ -8,7 +8,10 @@ import com.teaching.backend.domain.material.dto.MaterialListResponse;
 import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.entity.MaterialAnalysis;
 import com.teaching.backend.domain.material.dto.request.MaterialFinalizeRequest;
+import com.teaching.backend.domain.material.dto.response.MaterialAnalysisResponse;
+import com.teaching.backend.domain.material.dto.response.MaterialDetailResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialFinalizeResponse;
+import com.teaching.backend.domain.material.dto.response.MaterialTagResponse;
 import com.teaching.backend.domain.material.enums.AiStatus;
 import com.teaching.backend.domain.material.enums.PlatformType;
 import com.teaching.backend.domain.material.exception.MaterialErrorCode;
@@ -311,6 +314,50 @@ class MaterialServiceTest {
 
         verify(entityManager, never()).flush();
         verify(materialIndexingService, never()).syncFolderPayload(any(), any());
+    }
+
+    @Test
+    void getMaterialDetailIncludesPlatformImageAndTagIdsAlongsideTitleAndOriginUrl() {
+        Material material = material(101L, USER_ID, "Original Title", PlatformType.YOUTUBE, AiStatus.COMPLETED, createdAt(1));
+        Folder ownedFolder = material.getFolder();
+        MaterialTag tagRelation = materialTagWithTagId(material, 501L, "javascript");
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(ownedFolder));
+        when(materialRepository.findByIdAndFolder_IdAndUser_Id(101L, FOLDER_ID, USER_ID)).thenReturn(Optional.of(material));
+        when(materialAnalysisRepository.findByMaterialId(101L)).thenReturn(Optional.of(analysis(material, "summary")));
+        when(materialTagRepository.findAllWithTagByMaterialIds(List.of(101L))).thenReturn(List.of(tagRelation));
+
+        MaterialDetailResponse result = materialService.getMaterialDetail(USER_ID, FOLDER_ID, 101L);
+
+        assertThat(result.title()).isEqualTo("Original Title");
+        assertThat(result.originUrl()).isEqualTo("https://example.com");
+        assertThat(result.platformType()).isEqualTo("YOUTUBE");
+        assertThat(result.platformImageUrl()).isEqualTo(PlatformType.YOUTUBE.getIconPath());
+        assertThat(result.tags()).hasSize(1);
+        assertThat(result.tags().get(0).tagId()).isEqualTo(501L);
+        assertThat(result.tags().get(0).tagName()).isEqualTo("javascript");
+    }
+
+    @Test
+    void getMaterialAnalysisIncludesPlatformImageTitleOriginUrlAndTagsAlongsideAnalysis() {
+        Material material = material(101L, USER_ID, "Original Title", PlatformType.NOTION, AiStatus.COMPLETED, createdAt(1));
+        Folder ownedFolder = material.getFolder();
+        MaterialTag tagRelation = materialTagWithTagId(material, 501L, "javascript");
+        MaterialAnalysis analysis = analysis(material, "summary");
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(ownedFolder));
+        when(materialRepository.findByIdAndFolder_IdAndUser_Id(101L, FOLDER_ID, USER_ID)).thenReturn(Optional.of(material));
+        when(materialAnalysisRepository.findByMaterialId(101L)).thenReturn(Optional.of(analysis));
+        when(materialTagRepository.findAllWithTagByMaterialIds(List.of(101L))).thenReturn(List.of(tagRelation));
+
+        MaterialAnalysisResponse result = materialService.getMaterialAnalysis(USER_ID, FOLDER_ID, 101L);
+
+        assertThat(result.title()).isEqualTo("Original Title");
+        assertThat(result.originUrl()).isEqualTo("https://example.com");
+        assertThat(result.platformType()).isEqualTo("NOTION");
+        assertThat(result.platformImageUrl()).isEqualTo(PlatformType.NOTION.getIconPath());
+        assertThat(result.tags()).hasSize(1);
+        assertThat(result.tags().get(0).tagId()).isEqualTo(501L);
+        assertThat(result.tags().get(0).tagName()).isEqualTo("javascript");
+        assertThat(result.shortSummary()).isEqualTo("summary");
     }
 
     @Test
