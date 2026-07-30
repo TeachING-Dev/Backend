@@ -15,15 +15,19 @@ public class HtmlPlatformClassifier {
             String html
     ) {
         String host = resolveHost(originalUrl);
-        String lowerHtml = html.toLowerCase(Locale.ROOT);
+        String lowerHtml = html == null ? "" : html.toLowerCase(Locale.ROOT);
         String path = resolvePath(originalUrl);
 
-        if (isKnownCafeHost(host) || cafeScore(lowerHtml, path) >= 3) {
+        if (isKnownCafeHost(host)) {
             return Optional.of(PlatformType.CAFE);
         }
 
         if (isKnownBlogHost(host) || blogScore(lowerHtml, path) >= 3) {
             return Optional.of(PlatformType.BLOG);
+        }
+
+        if (cafeScore(lowerHtml, path) >= 3) {
+            return Optional.of(PlatformType.CAFE);
         }
 
         return Optional.empty();
@@ -32,41 +36,30 @@ public class HtmlPlatformClassifier {
     private int blogScore(String html, String path) {
         int score = 0;
         if (html.contains("og:type") && html.contains("article")) {
-            score += 2;
+            score++;
         }
         if (html.contains("<article")) {
-            score++;
-        }
-        if (html.contains("name=\"author\"") || html.contains("property=\"article:author\"")) {
-            score++;
-        }
-        if (html.contains("article:published_time") || html.contains("datepublished")) {
             score++;
         }
         if (html.contains("wordpress") || html.contains("blogger") || html.contains("tistory")) {
             score += 2;
         }
         if (path.contains("/post") || path.contains("/article") || path.contains("/entry")) {
-            score++;
+            score += 2;
         }
         return score;
     }
 
     private int cafeScore(String html, String path) {
         int score = 0;
-        if (html.contains("cafe") || html.contains("community") || html.contains("board")) {
+        if (html.contains("cafe") || html.contains("community") || html.contains("board")
+                || path.contains("/board") || path.contains("/community") || path.contains("/cafe")) {
             score += 2;
         }
-        if (html.contains("comment") || html.contains("reply") || html.contains("댓글")) {
-            score++;
+        if (html.contains("clubid") || html.contains("articleid") || html.contains("member-only")) {
+            score += 2;
         }
-        if (html.contains("name=\"author\"") || html.contains("작성자")) {
-            score++;
-        }
-        if (html.contains("article:published_time") || html.contains("datepublished") || html.contains("작성일")) {
-            score++;
-        }
-        if (path.contains("/board") || path.contains("/community") || path.contains("/cafe")) {
+        if (html.contains("comment") || html.contains("reply")) {
             score++;
         }
         return score;

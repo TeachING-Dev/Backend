@@ -34,6 +34,7 @@ import java.util.Locale;
 public class ExternalHtmlDocumentClient {
 
     private static final int MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+    private static final int MAX_RESPONSE_HEADER_BYTES = 32 * 1024;
     private static final int ERROR_BODY_LOG_LIMIT = 500;
 
     private final WebClient webClient;
@@ -50,7 +51,7 @@ public class ExternalHtmlDocumentClient {
     ) {
         this.hostAddressResolver = hostAddressResolver;
         this.responseTimeout = Duration.ofMillis(responseTimeoutMs);
-        this.httpClient = HttpClient.create()
+        this.httpClient = configureExtractionHttpClient(HttpClient.create())
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeoutMs)
                 .responseTimeout(responseTimeout);
 
@@ -283,6 +284,7 @@ public class ExternalHtmlDocumentClient {
                     new PinnedHostAddressResolverGroup(target.host(), target.addresses())
             );
         }
+        requestHttpClient = configureExtractionHttpClient(requestHttpClient);
 
         return WebClient.builder()
                 .exchangeStrategies(ExchangeStrategies.builder()
@@ -290,6 +292,10 @@ public class ExternalHtmlDocumentClient {
                         .build())
                 .clientConnector(new ReactorClientHttpConnector(requestHttpClient))
                 .build();
+    }
+
+    private HttpClient configureExtractionHttpClient(HttpClient baseHttpClient) {
+        return baseHttpClient.httpResponseDecoder(decoder -> decoder.maxHeaderSize(MAX_RESPONSE_HEADER_BYTES));
     }
 
     private String normalizeHost(String host) {
