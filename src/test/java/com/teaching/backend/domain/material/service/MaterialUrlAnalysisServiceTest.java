@@ -56,6 +56,7 @@ class MaterialUrlAnalysisServiceTest {
     private static final Long FOLDER_ID = 10L;
     private static final Long RECOMMENDED_FOLDER_ID = 20L;
     private static final String URL = "https://velog.io/@example/spring";
+    private static final String YOUTUBE_URL = "https://www.youtube.com/watch?v=video";
 
     @Mock
     private MaterialRepository materialRepository;
@@ -419,6 +420,71 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(captor.getValue().extractedContent()).isEqualTo(extractedContent);
         assertThat(captor.getValue().extractedContent().content())
                 .isEqualTo("Extracted content for next analysis bundle");
+    }
+
+    @Test
+    void passesYoutubeTranscriptContentToExistingPipeline() {
+        ExtractedMaterialContent youtubeContent = new ExtractedMaterialContent(
+                YOUTUBE_URL,
+                PlatformType.YOUTUBE,
+                "Video Title",
+                "YouTube transcript text from official captions",
+                "https://example.com/youtube-thumb.jpg",
+                "channel",
+                createdAt(1)
+        );
+        when(materialUrlValidator.isValidHttpUrl(YOUTUBE_URL)).thenReturn(true);
+        when(materialPlatformResolver.resolve(null, YOUTUBE_URL)).thenReturn(PlatformType.YOUTUBE);
+        when(materialUrlAnalysisConcurrencyGuard.executeSerialized(eq(USER_ID), eq(YOUTUBE_URL), any(), any()))
+                .thenAnswer(invocation -> {
+                    Optional<?> completed = (Optional<?>) invocation.getArgument(2, Supplier.class).get();
+                    if (completed.isPresent()) {
+                        return completed.get();
+                    }
+                    return invocation.getArgument(3, Supplier.class).get();
+                });
+        when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, YOUTUBE_URL))
+                .thenReturn(List.of());
+        when(materialContentExtractorRegistry.extract(PlatformType.YOUTUBE, YOUTUBE_URL)).thenReturn(youtubeContent);
+        when(materialAiAnalysisOrchestrator.analyze(any(MaterialAnalysisPreparationResult.class)))
+                .thenAnswer(invocation -> {
+                    MaterialAnalysisPreparationResult preparationResult = invocation.getArgument(
+                            0,
+                            MaterialAnalysisPreparationResult.class
+                    );
+                    return new MaterialAiAnalysisPipelineResult(
+                            200L,
+                            USER_ID,
+                            YOUTUBE_URL,
+                            PlatformType.YOUTUBE,
+                            preparationResult.extractedContent(),
+                            300L,
+                            1,
+                            List.of(),
+                            RECOMMENDED_FOLDER_ID,
+                            "Backend",
+                            List.of("YouTube")
+                    );
+                });
+        when(materialTagRepository.findAllByMaterialId(200L))
+                .thenReturn(List.of(materialTag(null, 501L, "YouTube")));
+
+        MaterialAnalyzeResponse result = materialUrlAnalysisService.analyze(
+                USER_ID,
+                new MaterialAnalyzeRequest(YOUTUBE_URL, false)
+        );
+
+        ArgumentCaptor<MaterialAnalysisPreparationResult> captor =
+                ArgumentCaptor.forClass(MaterialAnalysisPreparationResult.class);
+        verify(materialContentExtractorRegistry).extract(PlatformType.YOUTUBE, YOUTUBE_URL);
+        verify(materialAiAnalysisOrchestrator).analyze(captor.capture());
+        assertThat(captor.getValue().platformType()).isEqualTo(PlatformType.YOUTUBE);
+        assertThat(captor.getValue().folderId()).isNull();
+        assertThat(captor.getValue().extractedContent().content())
+                .isEqualTo("YouTube transcript text from official captions");
+        assertThat(result.platformType()).isEqualTo("YOUTUBE");
+        assertThat(result.tags()).singleElement()
+                .satisfies(tag -> assertThat(tag.tagName()).isEqualTo("YouTube"));
     }
 
     @Test
