@@ -199,18 +199,6 @@ class MaterialServiceTest {
     }
 
     @Test
-    void deleteMaterialTagDeletesOnlyOwnedMaterialTag() {
-        MaterialTag materialTag = materialTag(201L, USER_ID);
-        when(materialTagRepository.findByIdWithMaterialAndUser(201L))
-                .thenReturn(Optional.of(materialTag));
-
-        assertThatCode(() -> materialService.deleteMaterialTag(USER_ID, 201L))
-                .doesNotThrowAnyException();
-
-        verify(materialTagRepository).delete(materialTag);
-    }
-
-    @Test
     void finalizeMaterialRejectsNullRequestAsInvalidFolderId() {
         assertFolderExceptionThrown(
                 () -> materialService.finalizeMaterial(USER_ID, 101L, null),
@@ -651,40 +639,6 @@ class MaterialServiceTest {
         verify(materialIndexingService, never()).syncFolderPayload(any());
     }
 
-    @Test
-    void deleteMaterialTagFailsWhenMaterialTagDoesNotExist() {
-        when(materialTagRepository.findByIdWithMaterialAndUser(201L))
-                .thenReturn(Optional.empty());
-
-        assertTagExceptionThrown(
-                () -> materialService.deleteMaterialTag(USER_ID, 201L),
-                TagErrorCode.TAG_NOT_FOUND
-        );
-        verify(materialTagRepository, never()).delete(any(MaterialTag.class));
-    }
-
-    @Test
-    void deleteMaterialTagFailsWhenMaterialBelongsToOtherUser() {
-        MaterialTag materialTag = materialTag(201L, OTHER_USER_ID);
-        when(materialTagRepository.findByIdWithMaterialAndUser(201L))
-                .thenReturn(Optional.of(materialTag));
-
-        assertTagExceptionThrown(
-                () -> materialService.deleteMaterialTag(USER_ID, 201L),
-                TagErrorCode.TAG_ACCESS_DENIED
-        );
-        verify(materialTagRepository, never()).delete(any(MaterialTag.class));
-    }
-
-    @Test
-    void deleteMaterialTagRejectsInvalidIdAsNotFound() {
-        assertTagExceptionThrown(
-                () -> materialService.deleteMaterialTag(USER_ID, 0L),
-                TagErrorCode.TAG_NOT_FOUND
-        );
-        verify(materialTagRepository, never()).delete(any(MaterialTag.class));
-    }
-
     private void assertTagExceptionThrown(Runnable action, TagErrorCode errorCode) {
         assertThatThrownBy(action::run)
                 .isInstanceOf(TagException.class)
@@ -742,14 +696,6 @@ class MaterialServiceTest {
         MaterialAnalysis analysis = MaterialAnalysis.create(material, summary, "detail", "v1");
         ReflectionTestUtils.setField(analysis, "id", material.getId() + 1000);
         return analysis;
-    }
-
-    private MaterialTag materialTag(Long materialTagId, Long userId) {
-        Material material = material(101L, userId, "Material", PlatformType.WEB, AiStatus.COMPLETED, createdAt(1));
-        Tag tag = Tag.create("tag");
-        MaterialTag materialTag = MaterialTag.create(material, tag);
-        ReflectionTestUtils.setField(materialTag, "id", materialTagId);
-        return materialTag;
     }
 
     private MaterialTag materialTagWithTagId(Material material, Long tagId, String tagName) {

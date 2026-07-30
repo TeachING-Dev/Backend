@@ -39,6 +39,7 @@ class HomeServiceTest {
 
     private static final Long USER_ID = 1L;
     private static final Long OTHER_USER_ID = 2L;
+    private static final Long FOLDER_ID = 10L;
 
     @Mock
     private MaterialRepository materialRepository;
@@ -67,7 +68,7 @@ class HomeServiceTest {
                 teachingMap(202L, USER_ID, "Map 2", TeachingMapType.DEEPDIVE, createdAt(2)),
                 teachingMap(203L, USER_ID, "Map 3", TeachingMapType.SHORTCUT, createdAt(3))
         );
-        when(materialRepository.findAllByUser_Id(eq(USER_ID), any(Pageable.class)))
+        when(materialRepository.findAllByUser_IdAndFolderIsNotNull(eq(USER_ID), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(materials));
         when(materialAnalysisRepository.findAllActiveByMaterialIds(List.of(101L, 102L, 103L, 104L, 105L, 106L)))
                 .thenReturn(List.of(analysis(materials.get(0), "Summary 1")));
@@ -82,13 +83,14 @@ class HomeServiceTest {
         assertThat(result.recentMaterials()).hasSize(6);
         assertThat(result.activeTeachingMaps()).hasSize(3);
         assertThat(result.recentMaterials().get(0).materialId()).isEqualTo(101L);
+        assertThat(result.recentMaterials().get(0).folderId()).isEqualTo(FOLDER_ID);
         assertThat(result.recentMaterials().get(0).summary()).isEqualTo("Summary 1");
         assertThat(result.activeTeachingMaps().get(0).teachingMapId()).isEqualTo(201L);
     }
 
     @Test
     void getDashboardReturnsEmptyListsWhenNoDataExists() {
-        when(materialRepository.findAllByUser_Id(eq(USER_ID), any(Pageable.class)))
+        when(materialRepository.findAllByUser_IdAndFolderIsNotNull(eq(USER_ID), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
         when(teachingMapRepository.findAllByUser_IdAndStatusAndIsDraftFalseAndDeletedAtIsNull(
                 eq(USER_ID),
@@ -105,7 +107,7 @@ class HomeServiceTest {
     @Test
     void getDashboardAllowsMaterialWithoutAnalysis() {
         Material material = material(101L, USER_ID, "Material", PlatformType.WEB, AiStatus.PENDING, createdAt(1));
-        when(materialRepository.findAllByUser_Id(eq(USER_ID), any(Pageable.class)))
+        when(materialRepository.findAllByUser_IdAndFolderIsNotNull(eq(USER_ID), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(material)));
         when(materialAnalysisRepository.findAllActiveByMaterialIds(List.of(101L)))
                 .thenReturn(List.of());
@@ -124,7 +126,7 @@ class HomeServiceTest {
     void getDashboardQueriesMaterialAnalysisInBatch() {
         Material first = material(101L, USER_ID, "First", PlatformType.YOUTUBE, AiStatus.COMPLETED, createdAt(1));
         Material second = material(102L, USER_ID, "Second", PlatformType.BLOG, AiStatus.COMPLETED, createdAt(2));
-        when(materialRepository.findAllByUser_Id(eq(USER_ID), any(Pageable.class)))
+        when(materialRepository.findAllByUser_IdAndFolderIsNotNull(eq(USER_ID), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(first, second)));
         when(materialAnalysisRepository.findAllActiveByMaterialIds(List.of(101L, 102L)))
                 .thenReturn(List.of(analysis(first, "First summary"), analysis(second, "Second summary")));
@@ -144,7 +146,7 @@ class HomeServiceTest {
 
     @Test
     void getDashboardPassesCurrentUserIdToRepositories() {
-        when(materialRepository.findAllByUser_Id(eq(USER_ID), any(Pageable.class)))
+        when(materialRepository.findAllByUser_IdAndFolderIsNotNull(eq(USER_ID), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
         when(teachingMapRepository.findAllByUser_IdAndStatusAndIsDraftFalseAndDeletedAtIsNull(
                 eq(USER_ID),
@@ -154,20 +156,20 @@ class HomeServiceTest {
 
         homeService.getDashboard(USER_ID);
 
-        verify(materialRepository).findAllByUser_Id(eq(USER_ID), any(Pageable.class));
+        verify(materialRepository).findAllByUser_IdAndFolderIsNotNull(eq(USER_ID), any(Pageable.class));
         verify(teachingMapRepository).findAllByUser_IdAndStatusAndIsDraftFalseAndDeletedAtIsNull(
                 eq(USER_ID),
                 eq(TeachingMapStatus.IN_PROGRESS),
                 any(Pageable.class)
         );
-        verify(materialRepository, never()).findAllByUser_Id(eq(OTHER_USER_ID), any(Pageable.class));
+        verify(materialRepository, never()).findAllByUser_IdAndFolderIsNotNull(eq(OTHER_USER_ID), any(Pageable.class));
     }
 
     @Test
     void getDashboardAllowsNullPlatformType() {
         Material material = material(101L, USER_ID, "Material", PlatformType.WEB, AiStatus.PENDING, createdAt(1));
         ReflectionTestUtils.setField(material, "platformType", null);
-        when(materialRepository.findAllByUser_Id(eq(USER_ID), any(Pageable.class)))
+        when(materialRepository.findAllByUser_IdAndFolderIsNotNull(eq(USER_ID), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(material)));
         when(materialAnalysisRepository.findAllActiveByMaterialIds(List.of(101L)))
                 .thenReturn(List.of());
@@ -187,7 +189,7 @@ class HomeServiceTest {
     void getDashboardAllowsNullTeachingMapType() {
         TeachingMap teachingMap = teachingMap(201L, USER_ID, "Map", TeachingMapType.SHORTCUT, createdAt(1));
         ReflectionTestUtils.setField(teachingMap, "type", null);
-        when(materialRepository.findAllByUser_Id(eq(USER_ID), any(Pageable.class)))
+        when(materialRepository.findAllByUser_IdAndFolderIsNotNull(eq(USER_ID), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
         when(teachingMapRepository.findAllByUser_IdAndStatusAndIsDraftFalseAndDeletedAtIsNull(
                 eq(USER_ID),
@@ -202,7 +204,7 @@ class HomeServiceTest {
 
     @Test
     void getDashboardAppliesMaterialLimitSixAndTeachingMapLimitThree() {
-        when(materialRepository.findAllByUser_Id(eq(USER_ID), any(Pageable.class)))
+        when(materialRepository.findAllByUser_IdAndFolderIsNotNull(eq(USER_ID), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of()));
         when(teachingMapRepository.findAllByUser_IdAndStatusAndIsDraftFalseAndDeletedAtIsNull(
                 eq(USER_ID),
@@ -214,7 +216,7 @@ class HomeServiceTest {
 
         ArgumentCaptor<Pageable> materialPageableCaptor = ArgumentCaptor.forClass(Pageable.class);
         ArgumentCaptor<Pageable> teachingMapPageableCaptor = ArgumentCaptor.forClass(Pageable.class);
-        verify(materialRepository).findAllByUser_Id(eq(USER_ID), materialPageableCaptor.capture());
+        verify(materialRepository).findAllByUser_IdAndFolderIsNotNull(eq(USER_ID), materialPageableCaptor.capture());
         verify(teachingMapRepository).findAllByUser_IdAndStatusAndIsDraftFalseAndDeletedAtIsNull(
                 eq(USER_ID),
                 eq(TeachingMapStatus.IN_PROGRESS),
@@ -227,9 +229,8 @@ class HomeServiceTest {
     @Test
     void getDashboardMapsMaterialAndTeachingMapFields() {
         Material material = material(101L, USER_ID, "Original", PlatformType.YOUTUBE, AiStatus.COMPLETED, createdAt(1));
-        ReflectionTestUtils.setField(material, "difficulty", 2);
         TeachingMap teachingMap = teachingMap(201L, USER_ID, "Teaching", TeachingMapType.DEEPDIVE, createdAt(2));
-        when(materialRepository.findAllByUser_Id(eq(USER_ID), any(Pageable.class)))
+        when(materialRepository.findAllByUser_IdAndFolderIsNotNull(eq(USER_ID), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(material)));
         when(materialAnalysisRepository.findAllActiveByMaterialIds(List.of(101L)))
                 .thenReturn(List.of(analysis(material, "Summary")));
@@ -242,7 +243,6 @@ class HomeServiceTest {
         HomeDashboardResponse result = homeService.getDashboard(USER_ID);
 
         assertThat(result.recentMaterials().get(0).title()).isEqualTo("Original");
-        assertThat(result.recentMaterials().get(0).difficulty()).isEqualTo(2);
         assertThat(result.recentMaterials().get(0).platformImageUrl()).isEqualTo(PlatformType.YOUTUBE.getIconPath());
         assertThat(result.activeTeachingMaps().get(0).title()).isEqualTo("Teaching");
         assertThat(result.activeTeachingMaps().get(0).type()).isEqualTo("DEEPDIVE");
@@ -253,7 +253,7 @@ class HomeServiceTest {
     void getDashboardDoesNotThrowWhenMaterialAiStatusIsNull() {
         Material material = material(101L, USER_ID, "Material", PlatformType.WEB, AiStatus.PENDING, createdAt(1));
         ReflectionTestUtils.setField(material, "aiStatus", null);
-        when(materialRepository.findAllByUser_Id(eq(USER_ID), any(Pageable.class)))
+        when(materialRepository.findAllByUser_IdAndFolderIsNotNull(eq(USER_ID), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(material)));
         when(materialAnalysisRepository.findAllActiveByMaterialIds(List.of(101L)))
                 .thenReturn(List.of());
@@ -277,6 +277,7 @@ class HomeServiceTest {
     ) {
         User user = user(userId);
         Folder folder = Folder.create(user, "Folder");
+        ReflectionTestUtils.setField(folder, "id", FOLDER_ID);
         Material material = Material.create(user, folder, title, "https://example.com", platformType);
         ReflectionTestUtils.setField(material, "id", materialId);
         ReflectionTestUtils.setField(material, "aiStatus", aiStatus);

@@ -6,6 +6,10 @@ import com.teaching.backend.domain.folder.entity.Folder;
 import com.teaching.backend.domain.folder.exception.FolderErrorCode;
 import com.teaching.backend.domain.folder.exception.FolderException;
 import com.teaching.backend.domain.folder.repository.FolderRepository;
+import com.teaching.backend.domain.material.entity.Material;
+import com.teaching.backend.domain.material.entity.MaterialAnalysis;
+import com.teaching.backend.domain.material.enums.AiStatus;
+import com.teaching.backend.domain.material.enums.PlatformType;
 import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
 import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
@@ -17,13 +21,19 @@ import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -175,6 +185,31 @@ class FolderServiceTest {
         );
     }
 
+    @Test
+    void getFolderMaterialsIncludesStoredPlatformTypeForEachMaterial() {
+        Folder folder = folder(USER_ID, FOLDER_ID, "Backend");
+        Material material = material(101L, USER_ID, folder, PlatformType.YOUTUBE);
+        MaterialAnalysis analysis = MaterialAnalysis.create(material, "Summary", "Detail", "v1");
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(folder));
+        when(materialRepository.searchFolderMaterials(
+                eq(FOLDER_ID),
+                eq(USER_ID),
+                eq(null),
+                any(Pageable.class)
+        )).thenReturn(new PageImpl<>(List.of(material)));
+        when(materialAnalysisRepository.findAllActiveByMaterialIds(List.of(101L))).thenReturn(List.of(analysis));
+        when(materialTagRepository.findAllWithTagByMaterialIds(List.of(101L))).thenReturn(List.of());
+
+        var result = folderService.getFolderMaterials(USER_ID, FOLDER_ID, null, "recent", 0, 10);
+
+        assertThat(result.content()).singleElement()
+                .satisfies(item -> {
+                    assertThat(item.materialId()).isEqualTo(101L);
+                    assertThat(item.platformType()).isEqualTo("YOUTUBE");
+                    assertThat(item.summary()).isEqualTo("Summary");
+                });
+    }
+
     private void assertDuplicateNameThrown(Runnable action) {
         assertThatThrownBy(action::run)
                 .isInstanceOf(FolderException.class)
@@ -199,5 +234,25 @@ class FolderServiceTest {
         Folder folder = Folder.create(user(userId), name);
         ReflectionTestUtils.setField(folder, "id", folderId);
         return folder;
+    }
+
+    private Material material(
+            Long materialId,
+            Long userId,
+            Folder folder,
+            PlatformType platformType
+    ) {
+        Material material = Material.create(
+                user(userId),
+                folder,
+                "Material",
+                "https://example.com",
+                platformType
+        );
+        ReflectionTestUtils.setField(material, "id", materialId);
+        ReflectionTestUtils.setField(material, "aiStatus", AiStatus.COMPLETED);
+        ReflectionTestUtils.setField(material, "createdAt", LocalDateTime.of(2026, 7, 31, 10, 0));
+        ReflectionTestUtils.setField(material, "updatedAt", LocalDateTime.of(2026, 7, 31, 11, 0));
+        return material;
     }
 }
