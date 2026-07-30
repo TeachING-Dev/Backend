@@ -15,6 +15,7 @@ import com.teaching.backend.domain.material.repository.MaterialHighlightReposito
 import com.teaching.backend.domain.material.repository.MaterialRepository;
 import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
 import com.teaching.backend.domain.teachingmap.dto.request.TeachingMapCreateRequest;
+import com.teaching.backend.domain.teachingmap.dto.request.TeachingMapTempSaveRequest;
 import com.teaching.backend.domain.teachingmap.dto.response.*;
 import com.teaching.backend.domain.teachingmap.entity.AiGuide;
 import com.teaching.backend.domain.teachingmap.entity.TeachingMap;
@@ -296,5 +297,47 @@ public class TeachingMapService {
 
         List<Long> deletedIds = teachingMaps.stream().map(TeachingMap::getId).toList();
         return TeachingMapTrashResponse.of(deletedIds);
+    }
+
+    //티칭맵 임시저장
+    @Transactional
+    public TeachingMapCreateResponse tempSave (Long userId, TeachingMapTempSaveRequest request)
+    { if (request.type() == TeachingMapType.ALL) {
+        throw new GeneralException(TeachingMapErrorCode.INVALID_TEACHING_MAP_TYPE); // 티칭맵 모드 설정 관련
+    }
+
+
+        Folder folder = folderRepository.findByIdAndUser_Id(request.folderId(), userId)
+                .orElseThrow(() -> new GeneralException(TeachingMapErrorCode.FOLDER_NOT_FOUND));
+
+        List<Material> materials = materialRepository.findAllByFolder_Id(folder.getId()).stream()
+                .filter(m -> m.getAiStatus() == AiStatus.COMPLETED)
+                .toList();
+        if (materials.size() < 3) {
+            throw new GeneralException(TeachingMapErrorCode.FOLDER_MATERIAL_NOT_ENOUGH);
+        }
+
+        TeachingMap teachingMap;
+        if (request.teachingMapId() != null) {
+            teachingMap = teachingMapRepository.findById(request.teachingMapId())
+                    .orElseThrow(() -> new GeneralException(TeachingMapErrorCode.TEACHING_MAP_NOT_FOUND));
+
+            if (!teachingMap.getUser().getId().equals(userId)) {
+                throw new GeneralException(GlobalErrorCode.UNAUTHORIZED);
+            }
+            teachingMap.updateDraft(folder, request.title(), request.description(), request.type());
+        } else {
+            User user = userRepository.getReferenceById(userId);
+            teachingMap = TeachingMap.create(
+                    folder, user, request.title(), request.description(),
+                    0, request.type(), true
+            );
+            teachingMapRepository.save(teachingMap);
+        }
+
+        return TeachingMapCreateResponse.from(teachingMap);
+
+
+
     }
 }

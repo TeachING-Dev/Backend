@@ -1,10 +1,13 @@
 package com.teaching.backend.domain.teachingmap.entity;
 
+import com.teaching.backend.domain.teachingmap.exception.TeachingMapException;
 import com.teaching.backend.global.common.BaseSoftDeleteEntity;
 import com.teaching.backend.domain.folder.entity.Folder;
 import com.teaching.backend.domain.teachingmap.enums.TeachingMapStatus;
 import com.teaching.backend.domain.teachingmap.enums.TeachingMapType;
 import com.teaching.backend.domain.user.entity.User;
+import com.teaching.backend.global.exception.GeneralException;
+import com.teaching.backend.domain.teachingmap.exception.TeachingMapErrorCode;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -65,20 +68,20 @@ public class TeachingMap extends BaseSoftDeleteEntity {
         this.description = description;
         this.currentSteps = 0;
         this.totalSteps = totalSteps;
-        this.status = TeachingMapStatus.IN_PROGRESS;
+        this.status = isDraft ? TeachingMapStatus.TEMPORARY : TeachingMapStatus.IN_PROGRESS;
         this.type = type;
         this.isDraft = isDraft;
     }
 
     public static TeachingMap create(Folder folder, User user, String title, String description,
                                      Integer totalSteps, TeachingMapType type, Boolean isDraft) {
-        if (totalSteps == null || totalSteps <= 0) {
-                       throw new IllegalArgumentException("totalSteps는 1 이상이어야 합니다.");
-                   }
+        if (!isDraft && (totalSteps == null || totalSteps <= 0)) {
+            throw new IllegalArgumentException("totalSteps는 1 이상이어야 합니다.");
+        }
 
-    if (type == TeachingMapType.ALL) {
-        throw new IllegalArgumentException("ALL은 티칭맵 생성 시 사용할 수 없습니다.");
-    }
+        if (type == TeachingMapType.ALL) {
+            throw new IllegalArgumentException("ALL은 티칭맵 생성 시 사용할 수 없습니다.");
+        }
         return TeachingMap.builder()
                 .folder(folder)
                 .user(user)
@@ -112,5 +115,15 @@ public class TeachingMap extends BaseSoftDeleteEntity {
         } else if (this.status == TeachingMapStatus.FINISHED) {
             this.status = TeachingMapStatus.IN_PROGRESS;
         }
+    }
+
+    public void updateDraft(Folder folder, String title, String description, TeachingMapType type) {
+        if (this.status != TeachingMapStatus.TEMPORARY) {
+            throw new TeachingMapException(TeachingMapErrorCode.TEACHING_MAP_ALREADY_FINISHED);
+        }
+        this.folder = folder;
+        this.title = title;
+        this.description = description;
+        this.type = type;
     }
 }
