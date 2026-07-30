@@ -8,7 +8,6 @@ import java.time.LocalDateTime;
 public record MaterialListResponse(
         Long materialId,
         String title,
-        String analysisTitle,
         String summary,
         String platformType,
         String platformImageUrl,
@@ -23,7 +22,6 @@ public record MaterialListResponse(
         return new MaterialListResponse(
                 material.getId(),
                 material.getTitle(),
-                material.getAnalysisTitle(),
                 summary,
                 platformType == null ? null : platformType.name(),
                 platformType == null ? null : platformType.getIconPath(),

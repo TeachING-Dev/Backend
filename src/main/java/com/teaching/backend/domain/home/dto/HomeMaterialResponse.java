@@ -9,7 +9,6 @@ import java.time.LocalDateTime;
 public record HomeMaterialResponse(
         Long materialId,
         String title,
-        String analysisTitle,
         String summary,
         String platformType,
         String platformImageUrl,
@@ -25,7 +24,6 @@ public record HomeMaterialResponse(
         return new HomeMaterialResponse(
                 material.getId(),
                 material.getTitle(),
-                material.getAnalysisTitle(),
                 summary,
                 platformType == null ? null : platformType.name(),
                 platformType == null ? null : platformType.getIconPath(),
