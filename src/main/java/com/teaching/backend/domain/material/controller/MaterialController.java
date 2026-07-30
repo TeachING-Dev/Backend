@@ -5,7 +5,6 @@ import com.teaching.backend.domain.material.dto.MaterialIndexResponse;
 import com.teaching.backend.domain.material.dto.MaterialListResponse;
 import com.teaching.backend.domain.material.service.MaterialIndexingService;
 import com.teaching.backend.domain.material.service.MaterialService;
-import com.teaching.backend.domain.tag.code.TagSuccessCode;
 import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
 import com.teaching.backend.global.response.ApiResponse;
@@ -15,7 +14,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -46,21 +44,6 @@ public class MaterialController {
 
         return ResponseEntity.ok(
                 ApiResponse.onSuccess(MaterialSuccessCode.MATERIAL_LIST_SUCCESS, result)
-        );
-    }
-
-    @DeleteMapping("/tags/{materialTagId}")
-    public ResponseEntity<ApiResponse<Void>> deleteMaterialTag(
-            @AuthenticationPrincipal AuthMember authMember,
-            @PathVariable Long materialTagId
-    ) {
-        materialService.deleteMaterialTag(
-                getAuthenticatedUserId(authMember),
-                materialTagId
-        );
-
-        return ResponseEntity.ok(
-                ApiResponse.onSuccess(TagSuccessCode.TAG_DELETE_SUCCESS, null)
         );
     }
 

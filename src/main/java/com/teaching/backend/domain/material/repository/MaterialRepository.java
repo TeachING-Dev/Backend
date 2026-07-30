@@ -19,6 +19,8 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
 
     Page<Material> findAllByUser_Id(Long userId, Pageable pageable);
 
+    Page<Material> findAllByUser_IdAndFolderIsNotNull(Long userId, Pageable pageable);
+
     List<Material> findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(
             Long userId,
             String originalUrl

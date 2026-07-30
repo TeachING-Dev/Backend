@@ -37,7 +37,7 @@ public class HomeService {
     public HomeDashboardResponse getDashboard(Long userId) {
         validateUserId(userId);
 
-        List<Material> materials = materialRepository.findAllByUser_Id(
+        List<Material> materials = materialRepository.findAllByUser_IdAndFolderIsNotNull(
                 userId,
                 PageRequest.of(0, RECENT_MATERIAL_LIMIT, recentSort())
         ).getContent();

@@ -11,6 +11,7 @@ public record FolderMaterialItemResponse(
         String summary,
         String originalUrl,
         List<String> tags,
+        String platformType,
         String statusAi,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
@@ -27,6 +28,7 @@ public record FolderMaterialItemResponse(
                 summary,
                 material.getOriginalUrl(),
                 tags,
+                material.getPlatformType() == null ? null : material.getPlatformType().name(),
                 material.getAiStatus().name(),
                 material.getCreatedAt(),
                 material.getUpdatedAt()
