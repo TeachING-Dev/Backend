@@ -27,6 +27,22 @@ class MaterialContentExtractorRegistryTest {
     }
 
     @Test
+    void extractsNotionWithNotionExtractorWhenResolverReturnsNotion() {
+        ExtractedMaterialContent expected = content(PlatformType.NOTION);
+        MaterialContentExtractorRegistry registry = new MaterialContentExtractorRegistry(List.of(
+                extractor(PlatformType.NOTION, expected),
+                extractor(PlatformType.WEB, content(PlatformType.WEB))
+        ));
+
+        ExtractedMaterialContent result = registry.extract(
+                PlatformType.NOTION,
+                "https://shinmini.notion.site/BE-6b1862e1557a4403a65ffe4df97fb3cc"
+        );
+
+        assertThat(result).isEqualTo(expected);
+    }
+
+    @Test
     void failsWhenPlatformIsUnsupported() {
         MaterialContentExtractorRegistry registry = new MaterialContentExtractorRegistry(List.of());
 
