@@ -159,7 +159,7 @@ class MaterialServiceTest {
     void getMaterialListMapsMaterialAndAnalysisFields() {
         LocalDateTime createdAt = createdAt(1);
         Material material = material(101L, USER_ID, "Original Title", PlatformType.YOUTUBE, AiStatus.COMPLETED, createdAt);
-        material.completeAnalysis("Analysis Title", 2);
+        ReflectionTestUtils.setField(material, "difficulty", 2);
         MaterialAnalysis analysis = analysis(material, "Mapped summary");
         when(materialRepository.findAllByUser_Id(eq(USER_ID), any(Sort.class)))
                 .thenReturn(List.of(material));
@@ -170,7 +170,6 @@ class MaterialServiceTest {
 
         assertThat(result.materialId()).isEqualTo(101L);
         assertThat(result.title()).isEqualTo("Original Title");
-        assertThat(result.analysisTitle()).isEqualTo("Analysis Title");
         assertThat(result.summary()).isEqualTo("Mapped summary");
         assertThat(result.platformType()).isEqualTo("YOUTUBE");
         assertThat(result.difficulty()).isEqualTo(2);

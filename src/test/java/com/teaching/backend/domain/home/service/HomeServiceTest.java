@@ -227,7 +227,7 @@ class HomeServiceTest {
     @Test
     void getDashboardMapsMaterialAndTeachingMapFields() {
         Material material = material(101L, USER_ID, "Original", PlatformType.YOUTUBE, AiStatus.COMPLETED, createdAt(1));
-        material.completeAnalysis("Analyzed", 2);
+        ReflectionTestUtils.setField(material, "difficulty", 2);
         TeachingMap teachingMap = teachingMap(201L, USER_ID, "Teaching", TeachingMapType.DEEPDIVE, createdAt(2));
         when(materialRepository.findAllByUser_Id(eq(USER_ID), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(material)));
@@ -242,7 +242,6 @@ class HomeServiceTest {
         HomeDashboardResponse result = homeService.getDashboard(USER_ID);
 
         assertThat(result.recentMaterials().get(0).title()).isEqualTo("Original");
-        assertThat(result.recentMaterials().get(0).analysisTitle()).isEqualTo("Analyzed");
         assertThat(result.recentMaterials().get(0).difficulty()).isEqualTo(2);
         assertThat(result.recentMaterials().get(0).platformImageUrl()).isEqualTo(PlatformType.YOUTUBE.getIconPath());
         assertThat(result.activeTeachingMaps().get(0).title()).isEqualTo("Teaching");

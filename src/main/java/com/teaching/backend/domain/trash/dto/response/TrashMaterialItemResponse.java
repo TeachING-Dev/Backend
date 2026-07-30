@@ -6,14 +6,14 @@ import java.time.LocalDateTime;
 
 public record TrashMaterialItemResponse(
         Long materialId,
-        String analysisTitle,
+        String title,
         LocalDateTime deletedAt
 ) {
 
     public static TrashMaterialItemResponse from(Material material) {
         return new TrashMaterialItemResponse(
                 material.getId(),
-                material.getAnalysisTitle(),
+                material.getTitle(),
                 material.getDeletedAt()
         );
     }
