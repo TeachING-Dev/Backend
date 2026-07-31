@@ -105,5 +105,4 @@ public interface TeachingMapRepository extends JpaRepository<TeachingMap, Long> 
     List<TeachingMap> findAllByIdInAndUser_IdAndDeletedAtIsNull(List<Long> ids, Long userId);
 
 
-
 }

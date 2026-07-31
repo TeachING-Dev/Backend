@@ -320,12 +320,9 @@ public class TeachingMapService {
 
         TeachingMap teachingMap;
         if (request.teachingMapId() != null) {
-            teachingMap = teachingMapRepository.findById(request.teachingMapId())
+            teachingMap = teachingMapRepository.findByIdAndUser_IdAndDeletedAtIsNull(request.teachingMapId(), userId)
                     .orElseThrow(() -> new GeneralException(TeachingMapErrorCode.TEACHING_MAP_NOT_FOUND));
 
-            if (!teachingMap.getUser().getId().equals(userId)) {
-                throw new GeneralException(GlobalErrorCode.UNAUTHORIZED);
-            }
             teachingMap.updateDraft(folder, request.title(), request.description(), request.type());
         } else {
             User user = userRepository.getReferenceById(userId);
@@ -344,12 +341,8 @@ public class TeachingMapService {
 
     @Transactional
     public TeachingMapCreateResponse updateInfo(Long userId, Long teachingMapId, TeachingMapUpdateRequest request) {
-        TeachingMap teachingMap = teachingMapRepository.findById(teachingMapId)
+        TeachingMap teachingMap = teachingMapRepository.findByIdAndUser_IdAndDeletedAtIsNull(teachingMapId, userId)
                 .orElseThrow(() -> new GeneralException(TeachingMapErrorCode.TEACHING_MAP_NOT_FOUND));
-
-        if (!teachingMap.getUser().getId().equals(userId)) {
-            throw new GeneralException(GlobalErrorCode.UNAUTHORIZED);
-        }
 
         teachingMap.updateInfo(request.title(), request.description());
         return TeachingMapCreateResponse.from(teachingMap);

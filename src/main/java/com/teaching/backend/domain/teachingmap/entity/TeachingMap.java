@@ -105,6 +105,7 @@ public class TeachingMap extends BaseSoftDeleteEntity {
 
     public void finalizeDraft() {
         this.isDraft = false;
+        this.status = TeachingMapStatus.IN_PROGRESS;
     }
 
     public void applyStepToggle(boolean isCompleted) {
