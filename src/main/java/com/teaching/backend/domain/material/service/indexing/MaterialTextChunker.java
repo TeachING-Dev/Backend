@@ -33,30 +33,41 @@ public class MaterialTextChunker {
     }
 
     public List<MaterialTextChunk> chunk(String text) {
-        String normalized = normalize(text);
-        if (normalized.isBlank()) {
+        NormalizedText normalized = normalize(text);
+        String normalizedText = normalized.text();
+        if (normalizedText.isBlank()) {
             return List.of();
         }
 
-        int[] lineStarts = computeLineStarts(normalized);
+        int[] lineStarts = computeLineStarts(normalizedText);
 
         List<MaterialTextChunk> chunks = new ArrayList<>();
         int start = 0;
         int chunkIndex = 0;
-        while (start < normalized.length()) {
-            int end = Math.min(start + chunkSize, normalized.length());
-            if (end < normalized.length()) {
-                end = preferredEnd(normalized, start, end);
+        while (start < normalizedText.length()) {
+            int end = Math.min(start + chunkSize, normalizedText.length());
+            if (end < normalizedText.length()) {
+                end = preferredEnd(normalizedText, start, end);
             }
 
-            String chunkText = normalized.substring(start, end).strip();
+            // strip() 전 start/end로 줄 번호를 매기면 잘려나간 공백/개행이 속한 줄이 잘못 포함되므로,
+            // 실제 본문이 시작/종료하는 오프셋을 먼저 구한 뒤 그 오프셋으로 줄 번호를 계산한다.
+            int contentStart = start;
+            while (contentStart < end && Character.isWhitespace(normalizedText.charAt(contentStart))) {
+                contentStart++;
+            }
+            int contentEnd = end;
+            while (contentEnd > contentStart && Character.isWhitespace(normalizedText.charAt(contentEnd - 1))) {
+                contentEnd--;
+            }
+            String chunkText = normalizedText.substring(contentStart, contentEnd);
             if (!chunkText.isBlank()) {
-                int startLine = lineNumberAt(lineStarts, start);
-                int endLine = lineNumberAt(lineStarts, Math.max(start, end - 1));
+                int startLine = originalLineAt(normalized, lineStarts, contentStart);
+                int endLine = originalLineAt(normalized, lineStarts, contentEnd - 1);
                 chunks.add(new MaterialTextChunk(chunkIndex++, chunkText, startLine, endLine));
             }
 
-            if (end >= normalized.length()) {
+            if (end >= normalizedText.length()) {
                 break;
             }
 
@@ -86,13 +97,13 @@ public class MaterialTextChunker {
         return result;
     }
 
-    // 문자 오프셋이 몇 번째 줄(1-based)에 속하는지 계산
-    private int lineNumberAt(int[] lineStarts, int offset) {
+    // normalized 텍스트의 문자 오프셋을 원문(정규화 전) 기준 1-based 줄 번호로 변환
+    private int originalLineAt(NormalizedText normalized, int[] lineStarts, int offset) {
         int index = Arrays.binarySearch(lineStarts, offset);
         if (index < 0) {
             index = -index - 2;
         }
-        return index + 1;
+        return normalized.lineToOriginalLine()[index];
     }
 
     private int preferredEnd(String text, int start, int hardEnd) {
@@ -118,21 +129,45 @@ public class MaterialTextChunker {
         return hardEnd;
     }
 
-    private String normalize(String text) {
+    // 원문을 정규화(개행 통일, 공백 정리, 빈 줄 축약)하면서 각 결과 줄이 원문의 몇 번째 줄이었는지 함께 기록한다.
+    // 정규화 과정에서 선행 빈 줄은 통째로 삭제되고, 연속된 빈 줄은 1줄로 축약되어 원문과 줄 번호가 어긋나므로
+    // startLine/endLine을 원문 기준으로 정확히 계산하려면 이 매핑이 반드시 필요하다.
+    private NormalizedText normalize(String text) {
         if (text == null) {
-            return "";
+            return new NormalizedText("", new int[0]);
         }
 
-        String normalized = text.replace("\r\n", "\n")
+        String unified = text.replace("\r\n", "\n")
                 .replace('\r', '\n')
                 .replaceAll("[\\t\\x0B\\f ]+", " ");
-        String[] lines = normalized.split("\\n", -1);
-        List<String> trimmedLines = new ArrayList<>();
-        for (String line : lines) {
-            trimmedLines.add(line.strip());
+        String[] rawLines = unified.split("\n", -1);
+
+        List<String> resultLines = new ArrayList<>();
+        List<Integer> lineToOriginalLine = new ArrayList<>();
+        int blankRun = 0;
+        for (int i = 0; i < rawLines.length; i++) {
+            String stripped = rawLines[i].strip();
+            if (stripped.isEmpty()) {
+                blankRun++;
+                continue;
+            }
+
+            // 선행 빈 줄(resultLines가 아직 비어있음)은 버리고, 그 외 연속된 빈 줄은 최대 1줄로만 남긴다.
+            if (!resultLines.isEmpty() && blankRun > 0) {
+                resultLines.add("");
+                lineToOriginalLine.add(i); // 축약된 빈 줄 구간의 마지막 원문 줄 번호(1-based)
+            }
+            resultLines.add(stripped);
+            lineToOriginalLine.add(i + 1);
+            blankRun = 0;
         }
-        return String.join("\n", trimmedLines)
-                .replaceAll("\\n{3,}", "\n\n")
-                .strip();
+
+        String normalizedText = String.join("\n", resultLines);
+        int[] originalLines = lineToOriginalLine.stream().mapToInt(Integer::intValue).toArray();
+        return new NormalizedText(normalizedText, originalLines);
+    }
+
+    // normalize() 결과 텍스트와, 그 텍스트의 각 줄(0-based)이 원문의 몇 번째 줄(1-based)이었는지 매핑
+    private record NormalizedText(String text, int[] lineToOriginalLine) {
     }
 }
