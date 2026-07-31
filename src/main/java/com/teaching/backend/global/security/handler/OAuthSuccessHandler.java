@@ -3,6 +3,7 @@ package com.teaching.backend.global.security.handler;
 import com.teaching.backend.domain.auth.service.TokenHasher;
 import com.teaching.backend.global.security.entity.AuthMember;
 import com.teaching.backend.global.security.entity.OAuthMember;
+import com.teaching.backend.global.security.service.RefreshTokenService;
 import com.teaching.backend.global.security.util.JwtUtil;
 import com.teaching.backend.domain.auth.entity.RefreshToken;
 import com.teaching.backend.domain.user.entity.User;
@@ -13,6 +14,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.security.core.Authentication;
@@ -22,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 
 @Component
 
@@ -29,8 +32,7 @@ import java.io.IOException;
 public class OAuthSuccessHandler implements AuthenticationSuccessHandler {
 
     private final JwtUtil jwtUtil;
-    private final RefreshTokenRepository refreshTokenRepository;
-
+private final RefreshTokenService refreshTokenService;
     @Value("${app.oauth2.redirect-uri}")
     private String redirectUri;
 
@@ -41,7 +43,6 @@ public class OAuthSuccessHandler implements AuthenticationSuccessHandler {
 
 
     @Override
-    @Transactional
     public void onAuthenticationSuccess(
             HttpServletRequest request,
             HttpServletResponse response,
@@ -55,15 +56,13 @@ public class OAuthSuccessHandler implements AuthenticationSuccessHandler {
         String accessToken = jwtUtil.createAccessToken(authMember);
         String refreshToken = jwtUtil.createRefreshToken(authMember);
         String refreshTokenHash = tokenHasher.hash(refreshToken);
+        LocalDateTime expiry = jwtUtil.getRefreshTokenExpiryDate();
 
-        // 기존 refreshToken 있으면 갱신, 없으면 생성 (Rotate)
-        refreshTokenRepository.findByUser(user)
-                .ifPresentOrElse(
-                        existing -> existing.update(refreshTokenHash, jwtUtil.getRefreshTokenExpiryDate()),  // ← 변경
-                        () -> refreshTokenRepository.save(
-                                RefreshToken.create(user, refreshTokenHash, jwtUtil.getRefreshTokenExpiryDate())  // ← 변경
-                        )
-                );
+        try {
+            refreshTokenService.saveOrUpdate(user, refreshTokenHash, expiry);
+        } catch (DataIntegrityViolationException e) {
+            refreshTokenService.forceUpdate(user, refreshTokenHash, expiry);
+        }
 
         // refreshToken은 HttpOnly 쿠키로
         ResponseCookie refreshCookie = ResponseCookie.from("refreshToken", refreshToken)

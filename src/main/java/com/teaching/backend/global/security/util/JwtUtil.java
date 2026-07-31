@@ -17,6 +17,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Date;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Component
@@ -88,6 +89,7 @@ public class JwtUtil {
                 .subject(String.valueOf(member.getUserId())) // User Id를 Subject로
                 .claim("role", authorities)
                 .claim("email", member.getUsername())
+                .id(UUID.randomUUID().toString()) // 매번 고유한 jti
                 .issuedAt(Date.from(now)) // 언제 발급한지
                 .expiration(Date.from(now.plus(expiration))) // 언제까지 유효한지
                 .signWith(secretKey) // sign할 Key
