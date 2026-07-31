@@ -64,6 +64,28 @@ class MaterialTextChunkerTest {
     }
 
     @Test
+    void computesStartAndEndLineWithinChunk() {
+        MaterialTextChunker chunker = new MaterialTextChunker(100, 10);
+
+        List<MaterialTextChunk> chunks = chunker.chunk("첫째 줄\n둘째 줄\n셋째 줄");
+
+        assertThat(chunks).hasSize(1);
+        assertThat(chunks.get(0).startLine()).isEqualTo(1);
+        assertThat(chunks.get(0).endLine()).isEqualTo(3);
+    }
+
+    @Test
+    void splitAcrossLinesReportsDistinctStartAndEndLinePerChunk() {
+        MaterialTextChunker chunker = new MaterialTextChunker(5, 1);
+
+        List<MaterialTextChunk> chunks = chunker.chunk("ab\ncd\nef\ngh");
+
+        assertThat(chunks).isNotEmpty();
+        assertThat(chunks.get(0).startLine()).isEqualTo(1);
+        assertThat(chunks.get(chunks.size() - 1).endLine()).isEqualTo(4);
+    }
+
+    @Test
     void rejectsInvalidConfiguration() {
         assertThatThrownBy(() -> new MaterialTextChunker(0, 0))
                 .isInstanceOf(IllegalArgumentException.class);

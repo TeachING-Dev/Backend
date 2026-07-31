@@ -55,7 +55,8 @@ public class MaterialIndexingService {
                 .map(chunk -> new MaterialTextChunk(
                         chunk.getChunkIndex(),
                         chunk.getChunkText(),
-                        chunk.getPosition()
+                        chunk.getStartLine(),
+                        chunk.getEndLine()
                 ))
                 .toList());
     }
@@ -115,10 +116,12 @@ public class MaterialIndexingService {
                 MaterialChunk chunk = existingChunkByIndex.get(textChunk.chunkIndex());
                 if (chunk == null) {
                     chunk = materialChunkRepository.save(
-                            MaterialChunk.create(material, textChunk.chunkIndex(), textChunk.text(), pointId, textChunk.position())
+                            MaterialChunk.create(material, textChunk.chunkIndex(), textChunk.text(), pointId,
+                                    textChunk.startLine(), textChunk.endLine())
                     );
                 } else {
-                    pendingUpdates.add(new PendingChunkUpdate(chunk, textChunk.text(), pointId, textChunk.position()));
+                    pendingUpdates.add(new PendingChunkUpdate(chunk, textChunk.text(), pointId,
+                            textChunk.startLine(), textChunk.endLine()));
                     if (!chunk.getQdrantPointId().equals(pointId)) {
                         oldPointIdsToDeleteAfterCommit.add(chunk.getQdrantPointId());
                     }
@@ -130,6 +133,8 @@ public class MaterialIndexingService {
                         textChunk.chunkIndex(),
                         textChunk.text(),
                         pointId,
+                        textChunk.startLine(),
+                        textChunk.endLine(),
                         embeddedChunk.vector()
                 );
                 stagedPointIds.add(pointId);
@@ -161,6 +166,8 @@ public class MaterialIndexingService {
             int chunkIndex,
             String chunkText,
             String pointId,
+            Integer startLine,
+            Integer endLine,
             float[] vector
     ) {
         try {
@@ -173,6 +180,12 @@ public class MaterialIndexingService {
             payload.put("materialTitle", material.getTitle());
             payload.put("originalUrl", material.getOriginalUrl());
 
+            if (startLine != null) {
+                payload.put("startLine", startLine);
+            }
+            if (endLine != null) {
+                payload.put("endLine", endLine);
+            }
             if (material.getFolderId() != null) {
                 payload.put("folderId", material.getFolderId());
             }
@@ -312,11 +325,12 @@ public class MaterialIndexingService {
             MaterialChunk chunk,
             String chunkText,
             String pointId,
-            String position
+            Integer startLine,
+            Integer endLine
     ) {
 
         private void apply() {
-            chunk.updateContent(chunkText, pointId, position);
+            chunk.updateContent(chunkText, pointId, startLine, endLine);
         }
     }
 }

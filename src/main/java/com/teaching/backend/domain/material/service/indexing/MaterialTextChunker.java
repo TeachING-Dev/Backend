@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 @Getter
@@ -37,6 +38,8 @@ public class MaterialTextChunker {
             return List.of();
         }
 
+        int[] lineStarts = computeLineStarts(normalized);
+
         List<MaterialTextChunk> chunks = new ArrayList<>();
         int start = 0;
         int chunkIndex = 0;
@@ -48,7 +51,9 @@ public class MaterialTextChunker {
 
             String chunkText = normalized.substring(start, end).strip();
             if (!chunkText.isBlank()) {
-                chunks.add(new MaterialTextChunk(chunkIndex++, chunkText, "청크 " + chunkIndex));
+                int startLine = lineNumberAt(lineStarts, start);
+                int endLine = lineNumberAt(lineStarts, Math.max(start, end - 1));
+                chunks.add(new MaterialTextChunk(chunkIndex++, chunkText, startLine, endLine));
             }
 
             if (end >= normalized.length()) {
@@ -63,6 +68,31 @@ public class MaterialTextChunker {
         }
 
         return chunks;
+    }
+
+    // normalized 텍스트에서 각 줄이 시작하는 문자 오프셋 목록 (1번째 줄은 항상 0부터 시작)
+    private int[] computeLineStarts(String text) {
+        List<Integer> starts = new ArrayList<>();
+        starts.add(0);
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) == '\n') {
+                starts.add(i + 1);
+            }
+        }
+        int[] result = new int[starts.size()];
+        for (int i = 0; i < starts.size(); i++) {
+            result[i] = starts.get(i);
+        }
+        return result;
+    }
+
+    // 문자 오프셋이 몇 번째 줄(1-based)에 속하는지 계산
+    private int lineNumberAt(int[] lineStarts, int offset) {
+        int index = Arrays.binarySearch(lineStarts, offset);
+        if (index < 0) {
+            index = -index - 2;
+        }
+        return index + 1;
     }
 
     private int preferredEnd(String text, int start, int hardEnd) {

@@ -8,6 +8,8 @@ public record ChatSourceResponse(
         String folderName,
         String url,
         String citedText,
-        String position
+        String position,
+        Integer startLine,
+        Integer endLine
 ) {
 }

@@ -23,8 +23,8 @@ class MaterialEmbeddingServiceTest {
 
     @Test
     void embedsChunksInOrder() {
-        MaterialTextChunk first = new MaterialTextChunk(0, "first", "청크 1");
-        MaterialTextChunk second = new MaterialTextChunk(1, "second", "청크 2");
+        MaterialTextChunk first = new MaterialTextChunk(0, "first", 1, 1);
+        MaterialTextChunk second = new MaterialTextChunk(1, "second", 2, 2);
         when(openAiClient.embed("first")).thenReturn(new float[]{0.1f});
         when(openAiClient.embed("second")).thenReturn(new float[]{0.2f});
 
@@ -39,7 +39,7 @@ class MaterialEmbeddingServiceTest {
 
     @Test
     void skipsBlankChunksWithoutApiCall() {
-        MaterialTextChunk blank = new MaterialTextChunk(0, " ", "청크 1");
+        MaterialTextChunk blank = new MaterialTextChunk(0, " ", 1, 1);
 
         assertThat(embeddingService.embedChunks(List.of(blank))).isEmpty();
         verify(openAiClient, never()).embed(org.mockito.ArgumentMatchers.anyString());
@@ -50,7 +50,7 @@ class MaterialEmbeddingServiceTest {
         RuntimeException cause = new RuntimeException("network");
         when(openAiClient.embed("first")).thenThrow(cause);
 
-        assertThatThrownBy(() -> embeddingService.embedChunks(List.of(new MaterialTextChunk(0, "first", "청크 1"))))
+        assertThatThrownBy(() -> embeddingService.embedChunks(List.of(new MaterialTextChunk(0, "first", 1, 1))))
                 .isInstanceOf(MaterialException.class)
                 .satisfies(exception -> {
                     MaterialException materialException = (MaterialException) exception;

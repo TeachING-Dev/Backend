@@ -66,7 +66,7 @@ class MaterialIndexingServiceTest {
     @Test
     void indexesMaterialAnalysisWithStablePointIdAndPayload() {
         Material material = material();
-        MaterialTextChunk textChunk = new MaterialTextChunk(0, "chunk text", "청크 1");
+        MaterialTextChunk textChunk = new MaterialTextChunk(0, "chunk text", 1, 1);
         when(materialTextChunker.chunk("source text")).thenReturn(List.of(textChunk));
         when(materialEmbeddingService.embedChunks(List.of(textChunk)))
                 .thenReturn(List.of(new EmbeddedMaterialTextChunk(textChunk, new float[]{0.1f, 0.2f})));
@@ -92,7 +92,9 @@ class MaterialIndexingServiceTest {
                 .containsEntry("chunkIndex", 0)
                 .containsEntry("text", "chunk text")
                 .containsEntry("materialTitle", "Title")
-                .containsEntry("originalUrl", "https://example.com");
+                .containsEntry("originalUrl", "https://example.com")
+                .containsEntry("startLine", 1)
+                .containsEntry("endLine", 1);
     }
 
     @Test
@@ -113,7 +115,7 @@ class MaterialIndexingServiceTest {
     @Test
     void reindexReusesExistingChunkAndDeletesExcessChunks() {
         Material material = material();
-        MaterialTextChunk textChunk = new MaterialTextChunk(0, "new text", "청크 1");
+        MaterialTextChunk textChunk = new MaterialTextChunk(0, "new text", 1, 1);
         String firstPointId = MaterialIndexingService.qdrantPointIdOf(100L, 0);
         String excessPointId = MaterialIndexingService.qdrantPointIdOf(100L, 1);
         MaterialChunk first = chunk(material, 0, "old text", firstPointId, 300L);
@@ -142,7 +144,7 @@ class MaterialIndexingServiceTest {
     @Test
     void repeatedSameContentReindexUsesFreshStagedPointIds() {
         Material material = material();
-        MaterialTextChunk textChunk = new MaterialTextChunk(0, "same text", "chunk 1");
+        MaterialTextChunk textChunk = new MaterialTextChunk(0, "same text", 1, 1);
         String initialPointId = MaterialIndexingService.qdrantPointIdOf(100L, 0);
         MaterialChunk existingChunk = chunk(material, 0, "same text", initialPointId, 300L);
         when(materialTextChunker.chunk("source text")).thenReturn(List.of(textChunk));
@@ -182,7 +184,7 @@ class MaterialIndexingServiceTest {
     @Test
     void qdrantFailureIsConvertedToMaterialException() {
         Material material = material();
-        MaterialTextChunk textChunk = new MaterialTextChunk(0, "chunk text", "청크 1");
+        MaterialTextChunk textChunk = new MaterialTextChunk(0, "chunk text", 1, 1);
         when(materialTextChunker.chunk("source text")).thenReturn(List.of(textChunk));
         when(materialEmbeddingService.embedChunks(List.of(textChunk)))
                 .thenReturn(List.of(new EmbeddedMaterialTextChunk(textChunk, new float[]{0.1f})));
@@ -205,7 +207,7 @@ class MaterialIndexingServiceTest {
     @Test
     void ensureCollectionFailureStopsBeforeChunkSaveAndUpsert() {
         Material material = material();
-        MaterialTextChunk textChunk = new MaterialTextChunk(0, "chunk text", "청크 1");
+        MaterialTextChunk textChunk = new MaterialTextChunk(0, "chunk text", 1, 1);
         when(materialTextChunker.chunk("source text")).thenReturn(List.of(textChunk));
         when(materialEmbeddingService.embedChunks(List.of(textChunk)))
                 .thenReturn(List.of(new EmbeddedMaterialTextChunk(textChunk, new float[]{0.1f})));
@@ -226,7 +228,7 @@ class MaterialIndexingServiceTest {
     @Test
     void embeddingFailureStopsBeforeCollectionAndQdrant() {
         Material material = material();
-        MaterialTextChunk textChunk = new MaterialTextChunk(0, "chunk text", "청크 1");
+        MaterialTextChunk textChunk = new MaterialTextChunk(0, "chunk text", 1, 1);
         when(materialTextChunker.chunk("source text")).thenReturn(List.of(textChunk));
         when(materialEmbeddingService.embedChunks(List.of(textChunk)))
                 .thenThrow(new MaterialException(MaterialErrorCode.MATERIAL_EMBEDDING_FAILED));
@@ -243,8 +245,8 @@ class MaterialIndexingServiceTest {
     @Test
     void newMaterialIndexingFailureCleansUpAlreadyUpsertedPoints() {
         Material material = material();
-        MaterialTextChunk first = new MaterialTextChunk(0, "first chunk", "chunk 1");
-        MaterialTextChunk second = new MaterialTextChunk(1, "second chunk", "chunk 2");
+        MaterialTextChunk first = new MaterialTextChunk(0, "first chunk", 1, 1);
+        MaterialTextChunk second = new MaterialTextChunk(1, "second chunk", 2, 2);
         String firstPointId = MaterialIndexingService.qdrantPointIdOf(100L, 0);
         String secondPointId = MaterialIndexingService.qdrantPointIdOf(100L, 1);
         when(materialTextChunker.chunk("source text")).thenReturn(List.of(first, second));
@@ -277,8 +279,8 @@ class MaterialIndexingServiceTest {
     @Test
     void existingChunkReindexFailureKeepsOldChunksAndDeletesOnlyStagedPoints() {
         Material material = material();
-        MaterialTextChunk first = new MaterialTextChunk(0, "new first", "chunk 1");
-        MaterialTextChunk second = new MaterialTextChunk(1, "new second", "chunk 2");
+        MaterialTextChunk first = new MaterialTextChunk(0, "new first", 1, 1);
+        MaterialTextChunk second = new MaterialTextChunk(1, "new second", 2, 2);
         String firstPointId = MaterialIndexingService.qdrantPointIdOf(100L, 0);
         String secondPointId = MaterialIndexingService.qdrantPointIdOf(100L, 1);
         MaterialChunk existingFirst = chunk(material, 0, "old first", firstPointId, 300L);
@@ -318,8 +320,8 @@ class MaterialIndexingServiceTest {
         Material material = material();
         String pointId = MaterialIndexingService.qdrantPointIdOf(100L, 0);
         MaterialChunk existingChunk = chunk(material, 0, "cleaned original chunk", pointId, 300L);
-        MaterialTextChunk textChunk = new MaterialTextChunk(0, "detail text", "청크 1");
-        MaterialTextChunk expectedChunk = new MaterialTextChunk(0, "cleaned original chunk", existingChunk.getPosition());
+        MaterialTextChunk textChunk = new MaterialTextChunk(0, "detail text", 1, 1);
+        MaterialTextChunk expectedChunk = new MaterialTextChunk(0, "cleaned original chunk", existingChunk.getStartLine(), existingChunk.getEndLine());
         when(materialRepository.findById(100L)).thenReturn(Optional.of(material));
         when(materialChunkRepository.findAllByMaterial_IdOrderByChunkIndexAsc(100L)).thenReturn(List.of(existingChunk));
         when(materialEmbeddingService.embedChunks(List.of(expectedChunk)))
@@ -362,7 +364,7 @@ class MaterialIndexingServiceTest {
     }
 
     private MaterialChunk chunk(Material material, int index, String text, String pointId, Long id) {
-        MaterialChunk chunk = MaterialChunk.create(material, index, text, pointId, "청크 " + (index + 1));
+        MaterialChunk chunk = MaterialChunk.create(material, index, text, pointId, index + 1, index + 1);
         ReflectionTestUtils.setField(chunk, "id", id);
         return chunk;
     }
