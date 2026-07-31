@@ -2,7 +2,9 @@ package com.teaching.backend.domain.teachingmap.controller;
 
 import com.teaching.backend.domain.teachingmap.code.TeachingMapSuccessCode;
 import com.teaching.backend.domain.teachingmap.dto.request.TeachingMapCreateRequest;
+import com.teaching.backend.domain.teachingmap.dto.request.TeachingMapTempSaveRequest;
 import com.teaching.backend.domain.teachingmap.dto.request.TeachingMapTrashRequest;
+import com.teaching.backend.domain.teachingmap.dto.request.TeachingMapUpdateRequest;
 import com.teaching.backend.domain.teachingmap.dto.response.*;
 import com.teaching.backend.domain.teachingmap.enums.GuideType;
 import com.teaching.backend.domain.teachingmap.enums.TeachingMapListSort;
@@ -157,5 +159,40 @@ public class TeachingMapController {
         Long userId = getAuthenticatedUserId(authMember);
         TeachingMapTrashResponse response = teachingMapService.moveToTrash(userId, request.teachingMapIds());
         return ApiResponse.onSuccess(TeachingMapSuccessCode.TEACHING_MAP_TRASH_SUCCESS, response);
+    }
+
+    // 티칭맵 정보 수정
+    @Operation(
+            summary = "티칭맵 제목 / 설명 수정 ",
+            description = "티칭맵의 제목과 설명을 수정합니다."
+    )
+
+
+    @PatchMapping("/{teachingMapId}")
+    public ApiResponse<TeachingMapCreateResponse> updateInfo(
+            @AuthenticationPrincipal AuthMember authMember,
+            @PathVariable Long teachingMapId,
+            @Valid @RequestBody TeachingMapUpdateRequest request
+    ) {
+        Long userId = getAuthenticatedUserId(authMember);
+        TeachingMapCreateResponse response = teachingMapService.updateInfo(userId, teachingMapId, request);
+        return ApiResponse.onSuccess(TeachingMapSuccessCode.TEACHING_MAP_UPDATE_SUCCESS, response);
+    }
+
+    // 티칭맵 임시 저장
+    @Operation(
+            summary = "티칭맵 임시저장",
+            description = "티칭맵을 임시저장합니다. teachingMapId가 없으면 새로 생성하고, "
+                    + "있으면 기존 임시저장 항목을 이어서 수정합니다."
+    )
+    @PostMapping("/temp")
+    public ApiResponse<TeachingMapCreateResponse> tempSave(
+            @AuthenticationPrincipal AuthMember authMember,
+            @Valid @RequestBody TeachingMapTempSaveRequest request
+            )
+    {
+        Long userId = getAuthenticatedUserId(authMember);
+        TeachingMapCreateResponse response = teachingMapService.tempSave(userId, request);
+        return ApiResponse.onSuccess(TeachingMapSuccessCode.TEACHING_MAP_TEMP_SAVE_SUCCESS, response);
     }
 }

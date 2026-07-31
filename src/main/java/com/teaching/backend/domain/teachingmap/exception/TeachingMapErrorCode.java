@@ -22,7 +22,9 @@ public enum TeachingMapErrorCode implements BaseErrorCode {
     MATERIAL_ANALYSIS_NOT_FOUND(HttpStatus.NOT_FOUND, "TEACHING_MAP_404_4", "자료 분석 결과를 찾을 수 없습니다."),
     HIGHLIGHT_NOT_FOUND(HttpStatus.NOT_FOUND, "TEACHING_MAP_404_5", "존재하지 않는 하이라이트입니다."),
     HIGHLIGHT_MATERIAL_MISMATCH(HttpStatus.BAD_REQUEST, "TEACHING_MAP_400_2", "해당 하이라이트는 요청한 자료에 속하지 않습니다."),
-    TEACHING_MAP_CONCURRENT_MODIFICATION(HttpStatus.CONFLICT, "TMAP4XXX", "다른 요청에 의해 티칭맵이 변경되었습니다. 다시 시도해주세요.");
+    TEACHING_MAP_CONCURRENT_MODIFICATION(HttpStatus.CONFLICT, "TMAP4003", "다른 요청에 의해 티칭맵이 변경되었습니다. 다시 시도해주세요."),
+    INVALID_TEACHING_MAP_TYPE(HttpStatus.BAD_REQUEST , "TMAP4004","모드는 shortcut,deepdive 두 모드 중 하나여야 합니다."),
+    TEACHING_MAP_ALREADY_FINISHED(HttpStatus.BAD_REQUEST,"TMAP4005","이미 생성이 완료된 티칭맵은 임시저장할 수 없습니다.");
     private final HttpStatus status;
     private final String code;
     private final String message;
