@@ -16,6 +16,7 @@ import com.teaching.backend.domain.material.repository.MaterialRepository;
 import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
 import com.teaching.backend.domain.teachingmap.dto.request.TeachingMapCreateRequest;
 import com.teaching.backend.domain.teachingmap.dto.request.TeachingMapTempSaveRequest;
+import com.teaching.backend.domain.teachingmap.dto.request.TeachingMapUpdateRequest;
 import com.teaching.backend.domain.teachingmap.dto.response.*;
 import com.teaching.backend.domain.teachingmap.entity.AiGuide;
 import com.teaching.backend.domain.teachingmap.entity.TeachingMap;
@@ -339,5 +340,18 @@ public class TeachingMapService {
 
 
 
+    }
+
+    @Transactional
+    public TeachingMapCreateResponse updateInfo(Long userId, Long teachingMapId, TeachingMapUpdateRequest request) {
+        TeachingMap teachingMap = teachingMapRepository.findById(teachingMapId)
+                .orElseThrow(() -> new GeneralException(TeachingMapErrorCode.TEACHING_MAP_NOT_FOUND));
+
+        if (!teachingMap.getUser().getId().equals(userId)) {
+            throw new GeneralException(GlobalErrorCode.UNAUTHORIZED);
+        }
+
+        teachingMap.updateInfo(request.title(), request.description());
+        return TeachingMapCreateResponse.from(teachingMap);
     }
 }

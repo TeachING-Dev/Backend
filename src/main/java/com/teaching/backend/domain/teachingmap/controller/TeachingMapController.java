@@ -4,6 +4,7 @@ import com.teaching.backend.domain.teachingmap.code.TeachingMapSuccessCode;
 import com.teaching.backend.domain.teachingmap.dto.request.TeachingMapCreateRequest;
 import com.teaching.backend.domain.teachingmap.dto.request.TeachingMapTempSaveRequest;
 import com.teaching.backend.domain.teachingmap.dto.request.TeachingMapTrashRequest;
+import com.teaching.backend.domain.teachingmap.dto.request.TeachingMapUpdateRequest;
 import com.teaching.backend.domain.teachingmap.dto.response.*;
 import com.teaching.backend.domain.teachingmap.enums.GuideType;
 import com.teaching.backend.domain.teachingmap.enums.TeachingMapListSort;
@@ -161,7 +162,22 @@ public class TeachingMapController {
     }
 
     // 티칭맵 정보 수정
+    @Operation(
+            summary = "티칭맵 제목 / 설명 수정 ",
+            description = "티칭맵의 제목과 설명을 수정합니다."
+    )
 
+
+    @PatchMapping("/{teachingMapId}")
+    public ApiResponse<TeachingMapCreateResponse> updateInfo(
+            @AuthenticationPrincipal AuthMember authMember,
+            @PathVariable Long teachingMapId,
+            @Valid @RequestBody TeachingMapUpdateRequest request
+    ) {
+        Long userId = getAuthenticatedUserId(authMember);
+        TeachingMapCreateResponse response = teachingMapService.updateInfo(userId, teachingMapId, request);
+        return ApiResponse.onSuccess(TeachingMapSuccessCode.TEACHING_MAP_UPDATE_SUCCESS, response);
+    }
 
     // 티칭맵 임시 저장
     @Operation(

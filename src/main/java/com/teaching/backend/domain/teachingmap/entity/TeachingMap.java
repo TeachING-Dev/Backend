@@ -126,4 +126,9 @@ public class TeachingMap extends BaseSoftDeleteEntity {
         this.description = description;
         this.type = type;
     }
+
+    public void updateInfo(String title, String description) {
+        this.title = title;
+        this.description = description;
+    }
 }
