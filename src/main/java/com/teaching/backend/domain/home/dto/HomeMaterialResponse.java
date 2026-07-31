@@ -8,12 +8,11 @@ import java.time.LocalDateTime;
 
 public record HomeMaterialResponse(
         Long materialId,
+        Long folderId,
         String title,
-        String analysisTitle,
         String summary,
         String platformType,
         String platformImageUrl,
-        Integer difficulty,
         String aiStatus,
         LocalDateTime createdAt
 ) {
@@ -24,12 +23,11 @@ public record HomeMaterialResponse(
 
         return new HomeMaterialResponse(
                 material.getId(),
+                material.getFolderId(),
                 material.getTitle(),
-                material.getAnalysisTitle(),
                 summary,
                 platformType == null ? null : platformType.name(),
                 platformType == null ? null : platformType.getIconPath(),
-                material.getDifficulty(),
                 aiStatus == null ? null : aiStatus.name(),
                 material.getCreatedAt()
         );

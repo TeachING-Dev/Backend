@@ -86,20 +86,6 @@ public class MaterialService {
                 .toList();
     }
 
-    @Transactional
-    public void deleteMaterialTag(Long userId, Long materialTagId) {
-        validateMaterialTagId(materialTagId);
-
-        MaterialTag materialTag = materialTagRepository.findByIdWithMaterialAndUser(materialTagId)
-                .orElseThrow(() -> new TagException(TagErrorCode.TAG_NOT_FOUND));
-
-        if (!materialTag.getMaterial().getUser().getId().equals(userId)) {
-            throw new TagException(TagErrorCode.TAG_ACCESS_DENIED);
-        }
-
-        materialTagRepository.delete(materialTag);
-    }
-
     public MaterialDetailResponse getMaterialDetail(
             Long userId,
             Long folderId,
@@ -283,12 +269,6 @@ public class MaterialService {
                 userId,
                 PageRequest.of(0, size, recentSort)
         ).getContent();
-    }
-
-    private void validateMaterialTagId(Long materialTagId) {
-        if (materialTagId == null || materialTagId <= 0) {
-            throw new TagException(TagErrorCode.TAG_NOT_FOUND);
-        }
     }
 
     private List<Material> findOwnedMaterialsInFolder(

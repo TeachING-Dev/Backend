@@ -159,7 +159,7 @@ class MaterialServiceTest {
     void getMaterialListMapsMaterialAndAnalysisFields() {
         LocalDateTime createdAt = createdAt(1);
         Material material = material(101L, USER_ID, "Original Title", PlatformType.YOUTUBE, AiStatus.COMPLETED, createdAt);
-        material.completeAnalysis("Analysis Title", 2);
+        ReflectionTestUtils.setField(material, "difficulty", 2);
         MaterialAnalysis analysis = analysis(material, "Mapped summary");
         when(materialRepository.findAllByUser_Id(eq(USER_ID), any(Sort.class)))
                 .thenReturn(List.of(material));
@@ -170,7 +170,6 @@ class MaterialServiceTest {
 
         assertThat(result.materialId()).isEqualTo(101L);
         assertThat(result.title()).isEqualTo("Original Title");
-        assertThat(result.analysisTitle()).isEqualTo("Analysis Title");
         assertThat(result.summary()).isEqualTo("Mapped summary");
         assertThat(result.platformType()).isEqualTo("YOUTUBE");
         assertThat(result.difficulty()).isEqualTo(2);
@@ -197,18 +196,6 @@ class MaterialServiceTest {
                 .isInstanceOf(GeneralException.class)
                 .extracting("errorCode")
                 .isEqualTo(GlobalErrorCode.BAD_REQUEST);
-    }
-
-    @Test
-    void deleteMaterialTagDeletesOnlyOwnedMaterialTag() {
-        MaterialTag materialTag = materialTag(201L, USER_ID);
-        when(materialTagRepository.findByIdWithMaterialAndUser(201L))
-                .thenReturn(Optional.of(materialTag));
-
-        assertThatCode(() -> materialService.deleteMaterialTag(USER_ID, 201L))
-                .doesNotThrowAnyException();
-
-        verify(materialTagRepository).delete(materialTag);
     }
 
     @Test
@@ -652,40 +639,6 @@ class MaterialServiceTest {
         verify(materialIndexingService, never()).syncFolderPayload(any());
     }
 
-    @Test
-    void deleteMaterialTagFailsWhenMaterialTagDoesNotExist() {
-        when(materialTagRepository.findByIdWithMaterialAndUser(201L))
-                .thenReturn(Optional.empty());
-
-        assertTagExceptionThrown(
-                () -> materialService.deleteMaterialTag(USER_ID, 201L),
-                TagErrorCode.TAG_NOT_FOUND
-        );
-        verify(materialTagRepository, never()).delete(any(MaterialTag.class));
-    }
-
-    @Test
-    void deleteMaterialTagFailsWhenMaterialBelongsToOtherUser() {
-        MaterialTag materialTag = materialTag(201L, OTHER_USER_ID);
-        when(materialTagRepository.findByIdWithMaterialAndUser(201L))
-                .thenReturn(Optional.of(materialTag));
-
-        assertTagExceptionThrown(
-                () -> materialService.deleteMaterialTag(USER_ID, 201L),
-                TagErrorCode.TAG_ACCESS_DENIED
-        );
-        verify(materialTagRepository, never()).delete(any(MaterialTag.class));
-    }
-
-    @Test
-    void deleteMaterialTagRejectsInvalidIdAsNotFound() {
-        assertTagExceptionThrown(
-                () -> materialService.deleteMaterialTag(USER_ID, 0L),
-                TagErrorCode.TAG_NOT_FOUND
-        );
-        verify(materialTagRepository, never()).delete(any(MaterialTag.class));
-    }
-
     private void assertTagExceptionThrown(Runnable action, TagErrorCode errorCode) {
         assertThatThrownBy(action::run)
                 .isInstanceOf(TagException.class)
@@ -743,14 +696,6 @@ class MaterialServiceTest {
         MaterialAnalysis analysis = MaterialAnalysis.create(material, summary, "detail", "v1");
         ReflectionTestUtils.setField(analysis, "id", material.getId() + 1000);
         return analysis;
-    }
-
-    private MaterialTag materialTag(Long materialTagId, Long userId) {
-        Material material = material(101L, userId, "Material", PlatformType.WEB, AiStatus.COMPLETED, createdAt(1));
-        Tag tag = Tag.create("tag");
-        MaterialTag materialTag = MaterialTag.create(material, tag);
-        ReflectionTestUtils.setField(materialTag, "id", materialTagId);
-        return materialTag;
     }
 
     private MaterialTag materialTagWithTagId(Material material, Long tagId, String tagName) {
