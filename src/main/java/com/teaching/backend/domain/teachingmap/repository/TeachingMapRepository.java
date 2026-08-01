@@ -46,12 +46,12 @@ public interface TeachingMapRepository extends JpaRepository<TeachingMap, Long> 
         AND (:status IS NULL OR tm.status = :status)
         AND (:type IS NULL OR tm.type = :type)
     """)
-    List<TeachingMap> findAllByFilter(
+    Page<TeachingMap> findAllByFilter(
             @Param("userId") Long userId,
             @Param("isDraft") boolean isDraft,
             @Param("status") TeachingMapStatus status,
             @Param("type") TeachingMapType type,
-            Sort sort
+            Pageable pageable
     );
 
     @Query(
