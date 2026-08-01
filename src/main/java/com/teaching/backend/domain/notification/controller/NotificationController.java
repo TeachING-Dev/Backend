@@ -2,6 +2,8 @@ package com.teaching.backend.domain.notification.controller;
 
 import com.teaching.backend.domain.notification.code.NotificationSuccessCode;
 import com.teaching.backend.domain.notification.dto.NotificationListResponse;
+import com.teaching.backend.domain.notification.dto.NotificationReadResponse;
+import com.teaching.backend.domain.notification.dto.NotificationSummaryResponse;
 import com.teaching.backend.domain.notification.service.NotificationService;
 import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
@@ -12,6 +14,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -38,6 +42,34 @@ public class NotificationController {
 
         return ResponseEntity.ok(
                 ApiResponse.onSuccess(NotificationSuccessCode.NOTIFICATION_LIST_SUCCESS, result)
+        );
+    }
+
+    @GetMapping("/summary")
+    public ResponseEntity<ApiResponse<NotificationSummaryResponse>> getNotificationSummary(
+            @AuthenticationPrincipal AuthMember authMember
+    ) {
+        NotificationSummaryResponse result = notificationService.getNotificationSummary(
+                getAuthenticatedUserId(authMember)
+        );
+
+        return ResponseEntity.ok(
+                ApiResponse.onSuccess(NotificationSuccessCode.NOTIFICATION_SUMMARY_SUCCESS, result)
+        );
+    }
+
+    @PatchMapping("/{notificationId}/read")
+    public ResponseEntity<ApiResponse<NotificationReadResponse>> markAsRead(
+            @AuthenticationPrincipal AuthMember authMember,
+            @PathVariable Long notificationId
+    ) {
+        NotificationReadResponse result = notificationService.markAsRead(
+                getAuthenticatedUserId(authMember),
+                notificationId
+        );
+
+        return ResponseEntity.ok(
+                ApiResponse.onSuccess(NotificationSuccessCode.NOTIFICATION_READ_SUCCESS, result)
         );
     }
 

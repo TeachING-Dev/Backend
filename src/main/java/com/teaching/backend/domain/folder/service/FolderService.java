@@ -21,6 +21,7 @@ import com.teaching.backend.domain.material.repository.MaterialRepository;
 import com.teaching.backend.domain.tag.entity.MaterialTag;
 import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
 import com.teaching.backend.domain.user.entity.User;
+import com.teaching.backend.domain.user.enums.MembershipType;
 import com.teaching.backend.domain.user.exception.UserErrorCode;
 import com.teaching.backend.domain.user.exception.UserException;
 import com.teaching.backend.domain.user.repository.UserRepository;
@@ -39,6 +40,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -49,6 +51,7 @@ public class FolderService {
     private static final int MAX_FOLDER_COUNT = 6;
     private static final int MAX_FOLDER_NAME_LENGTH = 10;
     private static final int MAX_PAGE_SIZE = 100;
+    private static final Pattern FOLDER_NAME_PATTERN = Pattern.compile("^[A-Za-z가-힣]+$");
 
     private final FolderRepository folderRepository;
     private final UserRepository userRepository;
@@ -140,7 +143,7 @@ public class FolderService {
 
         User user = lockUserForFolderMutation(userId);
 
-        if (folderRepository.countByUser_Id(userId) >= MAX_FOLDER_COUNT) {
+        if (isFolderLimitApplicable(user) && folderRepository.countByUser_Id(userId) >= MAX_FOLDER_COUNT) {
             throw new FolderException(FolderErrorCode.FOLDER_LIMIT_EXCEEDED);
         }
 
@@ -161,7 +164,7 @@ public class FolderService {
             FolderRenameRequest request
     ) {
         String folderName = validateAndNormalizeFolderName(request);
-        lockUserForFolderMutation(userId);
+        User user = lockUserForFolderMutation(userId);
         Folder folder = getOwnedFolder(userId, folderId);
 
         if (folder.getName().equals(folderName)) {
@@ -197,10 +200,10 @@ public class FolderService {
     @Transactional
     public FolderRestoreResponse restoreFolder(
             Long userId,
-            Long folderId
+        Long folderId
     ) {
         validateFolderId(folderId);
-        lockUserForFolderMutation(userId);
+        User user = lockUserForFolderMutation(userId);
 
         if (folderRepository.findByIdAndUser_Id(folderId, userId).isPresent()) {
             return FolderRestoreResponse.of(folderId, false);
@@ -208,7 +211,7 @@ public class FolderService {
 
         validateRestorableFolder(userId, folderId);
 
-        if (folderRepository.countByUser_Id(userId) >= MAX_FOLDER_COUNT) {
+        if (isFolderLimitApplicable(user) && folderRepository.countByUser_Id(userId) >= MAX_FOLDER_COUNT) {
             throw new FolderException(FolderErrorCode.FOLDER_LIMIT_EXCEEDED);
         }
 
@@ -415,12 +418,7 @@ public class FolderService {
             throw new FolderException(FolderErrorCode.FOLDER_NAME_REQUIRED);
         }
 
-        String folderName = request.normalizedFolderName();
-        if (folderName.length() > MAX_FOLDER_NAME_LENGTH) {
-            throw new FolderException(FolderErrorCode.FOLDER_NAME_TOO_LONG);
-        }
-
-        return folderName;
+        return validateAndNormalizeFolderName(request.folderName());
     }
 
     private String validateAndNormalizeFolderName(FolderRenameRequest request) {
@@ -428,12 +426,28 @@ public class FolderService {
             throw new FolderException(FolderErrorCode.FOLDER_NAME_REQUIRED);
         }
 
-        String folderName = request.normalizedFolderName();
+        return validateAndNormalizeFolderName(request.folderName());
+    }
+
+    private String validateAndNormalizeFolderName(String rawFolderName) {
+        String folderName = rawFolderName.trim();
         if (folderName.length() > MAX_FOLDER_NAME_LENGTH) {
             throw new FolderException(FolderErrorCode.FOLDER_NAME_TOO_LONG);
         }
 
+        if (containsWhitespace(rawFolderName) || !FOLDER_NAME_PATTERN.matcher(folderName).matches()) {
+            throw new FolderException(FolderErrorCode.INVALID_FOLDER_NAME_FORMAT);
+        }
+
         return folderName;
+    }
+
+    private boolean containsWhitespace(String value) {
+        return value.chars().anyMatch(Character::isWhitespace);
+    }
+
+    private boolean isFolderLimitApplicable(User user) {
+        return user.getMembershipType() == null || user.getMembershipType() == MembershipType.FREE;
     }
 
     public Folder getOwnedFolder(

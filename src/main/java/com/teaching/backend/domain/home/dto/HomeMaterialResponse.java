@@ -10,14 +10,13 @@ public record HomeMaterialResponse(
         Long materialId,
         Long folderId,
         String title,
-        String summary,
         String platformType,
         String platformImageUrl,
         String aiStatus,
         LocalDateTime createdAt
 ) {
 
-    public static HomeMaterialResponse of(Material material, String summary) {
+    public static HomeMaterialResponse from(Material material) {
         PlatformType platformType = material.getPlatformType();
         AiStatus aiStatus = material.getAiStatus();
 
@@ -25,7 +24,6 @@ public record HomeMaterialResponse(
                 material.getId(),
                 material.getFolderId(),
                 material.getTitle(),
-                summary,
                 platformType == null ? null : platformType.name(),
                 platformType == null ? null : platformType.getIconPath(),
                 aiStatus == null ? null : aiStatus.name(),

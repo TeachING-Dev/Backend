@@ -2,6 +2,7 @@ package com.teaching.backend.domain.material.repository;
 
 import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.entity.MaterialHighlight;
+import com.teaching.backend.domain.material.enums.AiStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -20,6 +21,19 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
     Page<Material> findAllByUser_Id(Long userId, Pageable pageable);
 
     Page<Material> findAllByUser_IdAndFolderIsNotNull(Long userId, Pageable pageable);
+
+    @Query("""
+            SELECT m FROM Material m
+            JOIN m.folder f
+            WHERE m.user.id = :userId
+              AND m.aiStatus = :aiStatus
+              AND f.deletedAt IS NULL
+            """)
+    Page<Material> findHomeRecentMaterials(
+            @Param("userId") Long userId,
+            @Param("aiStatus") AiStatus aiStatus,
+            Pageable pageable
+    );
 
     List<Material> findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(
             Long userId,
