@@ -197,6 +197,60 @@ class ContentAnalysisMaterialAiStageTest {
         );
     }
 
+    @Test
+    void promptLengthDiagnosticHandlesNullInputsSafely() {
+        ContentAnalysisMaterialAiStage.PromptLengthDiagnostic diagnostic =
+                ContentAnalysisMaterialAiStage.promptLengthDiagnostic(null, null, null, null);
+
+        assertThat(diagnostic.extractedContentLength()).isZero();
+        assertThat(diagnostic.systemPromptLength()).isZero();
+        assertThat(diagnostic.userMessageLength()).isZero();
+        assertThat(diagnostic.folderCount()).isZero();
+        assertThat(diagnostic.folderContextLength()).isZero();
+        assertThat(diagnostic.totalPromptLength()).isZero();
+        assertThat(diagnostic.platformType()).isNull();
+        assertThat(diagnostic.sanitizedUrl()).isNull();
+    }
+
+    @Test
+    void promptLengthDiagnosticMasksUrlQueryAndCalculatesLengths() {
+        ExtractedMaterialContent content = new ExtractedMaterialContent(
+                "https://velog.io/@user/post?token=secret",
+                PlatformType.VELOG,
+                "Title",
+                "source content",
+                null,
+                null,
+                LocalDateTime.now()
+        );
+        MaterialAiStageContext context = new MaterialAiStageContext(
+                1L,
+                null,
+                "https://velog.io/@user/post?token=secret",
+                PlatformType.VELOG,
+                content,
+                null,
+                Optional.empty()
+        );
+
+        ContentAnalysisMaterialAiStage.PromptLengthDiagnostic diagnostic =
+                ContentAnalysisMaterialAiStage.promptLengthDiagnostic(
+                        context,
+                        List.of("Backend", "AI"),
+                        "system",
+                        "user message"
+                );
+
+        assertThat(diagnostic.extractedContentLength()).isEqualTo("source content".length());
+        assertThat(diagnostic.systemPromptLength()).isEqualTo("system".length());
+        assertThat(diagnostic.userMessageLength()).isEqualTo("user message".length());
+        assertThat(diagnostic.folderCount()).isEqualTo(2);
+        assertThat(diagnostic.folderContextLength()).isEqualTo("Backend".length() + "AI".length());
+        assertThat(diagnostic.totalPromptLength()).isEqualTo("system".length() + "user message".length());
+        assertThat(diagnostic.platformType()).isEqualTo(PlatformType.VELOG);
+        assertThat(diagnostic.sanitizedUrl()).isEqualTo("https://velog.io/@user/post");
+    }
+
     private MaterialAiStageContext context() {
         User user = User.create("user@example.com", "user", null, null, null);
         ReflectionTestUtils.setField(user, "id", 1L);
