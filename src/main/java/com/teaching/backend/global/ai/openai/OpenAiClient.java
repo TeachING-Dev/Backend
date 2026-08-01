@@ -21,6 +21,7 @@ import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 
 // OpenAI Embedding/Chat Completion API를 직접 호출하는 클라이언트 (Spring AI 미사용)
@@ -83,12 +84,25 @@ public class OpenAiClient {
         return data.embedding();
     }
 
-    // 여러 텍스트를 한 번의 API 호출로 임베딩한다. OpenAI 응답은 입력 순서를 그대로 보존한다.
+    // 자료 개수가 많은 유저는 한 번에 보낼 텍스트가 많아져 OpenAI 배치 한도/응답 크기가 계속 커질 수 있으므로,
+    // 고정 크기로 나눠 순차 호출한 뒤 입력 순서를 보존해 이어붙인다.
+    private static final int EMBED_BATCH_SIZE = 100;
+
+    // 여러 텍스트를 임베딩한다. OpenAI 응답은 입력 순서를 그대로 보존한다.
     public List<float[]> embedBatch(List<String> texts) {
         if (texts.isEmpty()) {
             return List.of();
         }
 
+        List<float[]> embeddings = new ArrayList<>(texts.size());
+        for (int start = 0; start < texts.size(); start += EMBED_BATCH_SIZE) {
+            int end = Math.min(start + EMBED_BATCH_SIZE, texts.size());
+            embeddings.addAll(embedBatchChunk(texts.subList(start, end)));
+        }
+        return embeddings;
+    }
+
+    private List<float[]> embedBatchChunk(List<String> texts) {
         EmbeddingResponse response = call(webClient.post()
                 .uri("/v1/embeddings")
                 .bodyValue(new EmbeddingRequest(embeddingModel, texts))
