@@ -10,6 +10,7 @@ import com.teaching.backend.domain.chat.entity.ChatMessage;
 import com.teaching.backend.domain.chat.entity.ChatSource;
 import com.teaching.backend.domain.chat.service.AskResult;
 import com.teaching.backend.domain.chat.service.ChatRoomHistoryResult;
+import com.teaching.backend.domain.folder.entity.Folder;
 import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.entity.MaterialChunk;
 
@@ -79,12 +80,13 @@ public class MessageConverter {
     private static ChatSourceResponse toSourceResponse(ChatSource source) {
         MaterialChunk chunk = source.getMaterialChunk();
         Material material = chunk.getMaterial();
+        Folder folder = material.getFolder();
 
         return new ChatSourceResponse(
                 source.getId(),
                 material.getId(),
                 material.getTitle(),
-                material.getFolder().getName(),
+                folder == null ? null : folder.getName(),
                 material.getOriginalUrl(),
                 chunk.getChunkText(),
                 source.getCitedAt(),
