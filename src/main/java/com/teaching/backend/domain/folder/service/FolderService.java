@@ -163,7 +163,7 @@ public class FolderService {
     ) {
         validateFolderId(folderId);
 
-        Folder folder = folderRepository.findByIdAndUser_Id(folderId, userId)
+        Folder folder = folderRepository.findByIdAndUser_IdForUpdate(folderId, userId)
                 .orElseThrow(() -> resolveTrashLookupException(userId, folderId));
 
         folder.delete();
