@@ -21,7 +21,13 @@ public interface FolderRepository extends JpaRepository<Folder, Long> {
             Sort sort
     );
 
-    long countByUser_Id(Long userId);
+    @Query("""
+            SELECT COUNT(f)
+            FROM Folder f
+            WHERE f.user.id = :userId
+              AND f.deletedAt IS NULL
+            """)
+    long countByUser_Id(@Param("userId") Long userId);
 
     @Query("""
             SELECT CASE WHEN COUNT(f) > 0 THEN true ELSE false END

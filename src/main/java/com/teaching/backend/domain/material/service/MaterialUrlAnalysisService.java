@@ -58,7 +58,9 @@ public class MaterialUrlAnalysisService {
         PlatformType platformType = materialPlatformResolver.resolve(null, originalUrl);
 
         if (request.isForceAnalyze()) {
-            return analyzeNewMaterial(userId, originalUrl, platformType);
+            Material existingMaterial = findLatestCompletedMaterial(userId, originalUrl)
+                    .orElse(null);
+            return analyzeNewMaterial(userId, originalUrl, platformType, existingMaterial);
         }
 
         return materialUrlAnalysisConcurrencyGuard.executeSerialized(
@@ -66,14 +68,15 @@ public class MaterialUrlAnalysisService {
                 originalUrl,
                 () -> findLatestCompletedMaterial(userId, originalUrl)
                         .map(this::alreadyAnalyzedResponse),
-                () -> analyzeNewMaterial(userId, originalUrl, platformType)
+                () -> analyzeNewMaterial(userId, originalUrl, platformType, null)
         );
     }
 
     private MaterialAnalyzeResponse analyzeNewMaterial(
             Long userId,
             String originalUrl,
-            PlatformType platformType
+            PlatformType platformType,
+            Material existingMaterial
     ) {
         MaterialAnalysisPreparationResult preparationResult = prepareAnalysis(
                 userId,
@@ -85,7 +88,7 @@ public class MaterialUrlAnalysisService {
         List<MaterialTagResponse> tags = materialTagRepository.findAllByMaterialId(analysisResult.materialId()).stream()
                 .map(MaterialTagResponse::from)
                 .toList();
-        return MaterialAnalyzeResponse.completed(analysisResult,tags);
+        return MaterialAnalyzeResponse.completed(analysisResult, tags, existingMaterial);
     }
 
     private String validateAndNormalizeUrl(MaterialAnalyzeRequest request) {
