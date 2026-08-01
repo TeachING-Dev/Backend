@@ -20,7 +20,8 @@ CREATE PROCEDURE migrate_folders_active_name_unique()
 BEGIN
     DECLARE v_active_duplicate_count INT DEFAULT 0;
     DECLARE v_active_name_column_count INT DEFAULT 0;
-    DECLARE v_active_unique_index_count INT DEFAULT 0;
+    DECLARE v_active_unique_exact_index_count INT DEFAULT 0;
+    DECLARE v_active_unique_wrong_index_count INT DEFAULT 0;
     DECLARE v_legacy_unique_index_count INT DEFAULT 0;
     DECLARE v_legacy_unique_index_name VARCHAR(128);
 
@@ -74,16 +75,53 @@ BEGIN
             ) STORED;
     END IF;
 
-    SELECT COUNT(DISTINCT INDEX_NAME)
-      INTO v_active_unique_index_count
-      FROM INFORMATION_SCHEMA.STATISTICS
-     WHERE TABLE_SCHEMA = DATABASE()
-       AND TABLE_NAME = 'folders'
-       AND INDEX_NAME = 'uk_folders_user_active_name';
+    SELECT
+           COALESCE(SUM(CASE
+               WHEN NON_UNIQUE = 0 AND indexed_columns = 'user_id,active_folder_name' THEN 1
+               ELSE 0
+           END), 0),
+           COALESCE(SUM(CASE
+               WHEN NOT (NON_UNIQUE = 0 AND indexed_columns = 'user_id,active_folder_name') THEN 1
+               ELSE 0
+           END), 0)
+      INTO v_active_unique_exact_index_count, v_active_unique_wrong_index_count
+      FROM (
+          SELECT INDEX_NAME,
+                 MIN(NON_UNIQUE) AS NON_UNIQUE,
+                 GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX SEPARATOR ',') AS indexed_columns
+            FROM INFORMATION_SCHEMA.STATISTICS
+           WHERE TABLE_SCHEMA = DATABASE()
+             AND TABLE_NAME = 'folders'
+             AND INDEX_NAME = 'uk_folders_user_active_name'
+           GROUP BY INDEX_NAME
+      ) active_unique_indexes;
 
-    IF v_active_unique_index_count = 0 THEN
+    IF v_active_unique_wrong_index_count > 0 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'uk_folders_user_active_name exists with unexpected columns or uniqueness';
+    END IF;
+
+    IF v_active_unique_exact_index_count = 0 THEN
         ALTER TABLE folders
             ADD UNIQUE INDEX uk_folders_user_active_name (user_id, active_folder_name);
+    END IF;
+
+    SELECT COUNT(*)
+      INTO v_active_unique_exact_index_count
+      FROM (
+          SELECT INDEX_NAME
+            FROM INFORMATION_SCHEMA.STATISTICS
+           WHERE TABLE_SCHEMA = DATABASE()
+             AND TABLE_NAME = 'folders'
+             AND INDEX_NAME = 'uk_folders_user_active_name'
+             AND NON_UNIQUE = 0
+           GROUP BY INDEX_NAME
+          HAVING GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX SEPARATOR ',') = 'user_id,active_folder_name'
+      ) verified_active_unique_indexes;
+
+    IF v_active_unique_exact_index_count <> 1 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'uk_folders_user_active_name is missing before dropping legacy unique index';
     END IF;
 
     IF v_legacy_unique_index_name IS NOT NULL THEN

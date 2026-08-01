@@ -491,7 +491,7 @@ class MaterialUrlAnalysisServiceTest {
                     return new MaterialAiAnalysisPipelineResult(
                             200L,
                             USER_ID,
-                            null,
+                            FOLDER_ID,
                             "summary",
                             YOUTUBE_URL,
                             PlatformType.YOUTUBE,
@@ -521,6 +521,8 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(captor.getValue().extractedContent().content())
                 .isEqualTo("YouTube transcript text from official captions");
         assertThat(result.platformType()).isEqualTo("YOUTUBE");
+        assertThat(result.existingFolderId()).isNull();
+        assertThat(result.recommendedFolderId()).isEqualTo(RECOMMENDED_FOLDER_ID);
         assertThat(result.tags()).singleElement()
                 .satisfies(tag -> assertThat(tag.tagName()).isEqualTo("YouTube"));
     }
@@ -607,7 +609,7 @@ class MaterialUrlAnalysisServiceTest {
         return new MaterialAiAnalysisPipelineResult(
                 200L,
                 USER_ID,
-                null,
+                FOLDER_ID,
                 "summary",
                 URL,
                 PlatformType.VELOG,
