@@ -2,6 +2,7 @@ package com.teaching.backend.domain.material.dto.response;
 
 import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisPipelineResult;
+import com.teaching.backend.domain.material.entity.MaterialAnalysis;
 import com.teaching.backend.domain.material.enums.MaterialAnalyzeResultType;
 import com.teaching.backend.domain.material.enums.PlatformType;
 
@@ -12,6 +13,8 @@ public record MaterialAnalyzeResponse(
         MaterialAnalyzeResultType resultType,
         Long materialId,
         Long existingMaterialId,
+        Long folderId,
+        String summary,
         String originalUrl,
         String title,
         String platformType,
@@ -24,6 +27,7 @@ public record MaterialAnalyzeResponse(
 
     public static MaterialAnalyzeResponse alreadyAnalyzed(
             Material material,
+            MaterialAnalysis materialAnalysis,
             Long materialAnalysisId,
             Integer chunkCount,
             List<MaterialTagResponse> tags
@@ -35,6 +39,9 @@ public record MaterialAnalyzeResponse(
                 MaterialAnalyzeResultType.ALREADY_ANALYZED,
                 material.getId(),
                 material.getId(),
+                material.getFolderId(),
+
+                materialAnalysis.getSummary(),
                 material.getOriginalUrl(),
                 material.getTitle(),
                 platformType == null ? null : platformType.name(),
@@ -53,6 +60,8 @@ public record MaterialAnalyzeResponse(
         return new MaterialAnalyzeResponse(
                 null,
                 MaterialAnalyzeResultType.ANALYSIS_REQUIRED,
+                null,
+                null,
                 null,
                 null,
                 originalUrl,
@@ -75,6 +84,8 @@ public record MaterialAnalyzeResponse(
                 MaterialAnalyzeResultType.ANALYSIS_COMPLETED,
                 result.materialId(),
                 null,
+result.folderId(),
+result.summary(),
                 result.originalUrl(),
                 title,
                 platformType == null ? null : platformType.name(),
