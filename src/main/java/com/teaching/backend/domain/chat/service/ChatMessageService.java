@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 // 메시지 저장, 벡터 검색(RAG), LLM 답변 생성 및 출처 저장을 담당하는 서비스
@@ -35,6 +36,7 @@ public class ChatMessageService {
     private final MaterialSearchService materialSearchService;
     private final OpenAiClient openAiClient;
     private final ChatAskWriter chatAskWriter;
+    private final AggregateQuestionAnswerer aggregateQuestionAnswerer;
 
     @Transactional(readOnly = true)
     public ChatRoomHistoryResult getMessages(Long chatRoomId, Long userId) {
@@ -63,10 +65,26 @@ public class ChatMessageService {
 
         ChatAskWriter.Reservation reservation = chatAskWriter.reserve(chatRoomId, userId, request.content());
 
+        // 개수/최근 자료 같은 집계형 질문은 특정 청크를 인용할 수 없어 RAG 흐름과 근본적으로 다르므로
+        // 가장 먼저 확인한다. 외부 LLM/벡터 호출 없이 구조화된 DB 조회만으로 즉시 답한다.
+        Optional<String> aggregateAnswer = aggregateQuestionAnswerer.tryAnswer(request.content(), userId);
+        if (aggregateAnswer.isPresent()) {
+            return chatAskWriter.finalizeAnswer(reservation, aggregateAnswer.get(), false, List.of());
+        }
+
         List<MaterialChunk> relevantChunks;
         String answer;
         try {
-            relevantChunks = materialSearchService.searchTopChunks(request.content(), userId);
+            // 1순위: 질문에 언급된 자료 제목/태그를 RDB에서 구조화 조회(메타 질문에 강함).
+            // 2순위: Qdrant 임베딩 유사도 검색(본문 내용 질문에 강함).
+            // 3순위: 자료 제목/태그 자체를 임베딩해 질문과 의미 비교(동의어·우회 표현 메타 질문에 대응).
+            relevantChunks = materialSearchService.searchByMetadata(request.content(), userId);
+            if (relevantChunks.isEmpty()) {
+                relevantChunks = materialSearchService.searchTopChunks(request.content(), userId);
+            }
+            if (relevantChunks.isEmpty()) {
+                relevantChunks = materialSearchService.searchByTitleTagSimilarity(request.content(), userId);
+            }
             String systemPrompt = RagPromptTemplate.buildSystemPrompt(relevantChunks);
             answer = openAiClient.chatComplete(systemPrompt, request.content());
         } catch (RuntimeException e) {
