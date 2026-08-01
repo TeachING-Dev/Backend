@@ -204,6 +204,7 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
                   OR LOCATE(LOWER(m.title), LOWER(:question)) > 0
                   OR LOCATE(LOWER(m.analysisTitle), LOWER(:question)) > 0
               )
+            ORDER BY m.id ASC
             """)
     List<Long> findIdsMentionedInQuestion(
             @Param("userId") Long userId,
