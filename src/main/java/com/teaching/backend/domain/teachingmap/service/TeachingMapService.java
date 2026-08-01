@@ -38,7 +38,9 @@ import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -78,7 +80,7 @@ public class TeachingMapService {
 
     @Transactional(readOnly = true)
     public TeachingMapListResponse getTeachingMaps(Long userId, TeachingMapStatus status,
-                                                   TeachingMapType type, TeachingMapListSort sort) {
+                                                   TeachingMapType type, TeachingMapListSort sort, int page,int size) {
 
         boolean isDraft = (status == TeachingMapStatus.TEMPORARY);
         TeachingMapStatus entityStatus = isDraft ? null : TeachingMapStatus.valueOf(status.name());
@@ -88,7 +90,10 @@ public class TeachingMapService {
                 ? Sort.by(Sort.Direction.ASC, "createdAt")
                 : Sort.by(Sort.Direction.DESC, "createdAt");
 
-        List<TeachingMap> teachingMaps = teachingMapRepository.findAllByFilter(userId, isDraft, entityStatus, entityType, sortOption);
+        Pageable pageable = PageRequest.of(page, size, sortOption);
+
+        Page<TeachingMap> teachingMaps = teachingMapRepository.findAllByFilter(
+                userId, isDraft, entityStatus, entityType, pageable);
 
         List<Long> teachingMapIds = teachingMaps.stream().map(TeachingMap::getId).toList();
         Map<Long, List<PlatformType>> platformTypesByTeachingMapId = stepRepository
@@ -102,7 +107,9 @@ public class TeachingMapService {
                 .map(tm -> toListItem(tm, isDraft, platformTypesByTeachingMapId.getOrDefault(tm.getId(), List.of())))
                 .toList();
 
-        return new TeachingMapListResponse(status.name(), type.name(), sort.name(), items);
+        return new TeachingMapListResponse(status.name(), type.name(), sort.name(), items,teachingMaps.getNumber(), teachingMaps.getSize(),
+                teachingMaps.getTotalPages(), teachingMaps.getTotalElements(),
+                teachingMaps.hasNext());
     }
 
     private TeachingMapListItem toListItem(TeachingMap tm, boolean isDraft,  List<PlatformType> platformTypes) {

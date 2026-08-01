@@ -20,6 +20,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -46,12 +48,16 @@ public class TeachingMapController {
             @RequestParam(defaultValue = "IN_PROGRESS") TeachingMapStatus status,
             @RequestParam(defaultValue = "ALL") TeachingMapType type,
             @RequestParam(defaultValue = "LATEST") TeachingMapListSort sort
+                 , @RequestParam(defaultValue = "0") int page,
+    @RequestParam(defaultValue = "10") int size
     ) {
         TeachingMapListResponse result = teachingMapService.getTeachingMaps(
                 getAuthenticatedUserId(authMember),
                 status,
                 type,
-                sort
+                sort,
+                page,
+                size
         );
         return ApiResponse.onSuccess(TeachingMapSuccessCode.TEACHING_MAP_LIST_SUCCESS, result);
     }

@@ -6,5 +6,10 @@ public record TeachingMapListResponse(
         String currentStatus,
         String currentType,
         String currentSort,
-        List<TeachingMapListItem> teachingMaps
+        List<TeachingMapListItem> teachingMaps,
+        int page,
+        int size,
+        int totalPages,
+        long totalElements,
+        boolean hasNext
 ) {}
