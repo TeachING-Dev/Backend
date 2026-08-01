@@ -41,7 +41,7 @@ public record MaterialAnalyzeResponse(
                 material.getId(),
                 material.getFolderId(),
 
-                materialAnalysis.getSummary(),
+                materialAnalysis  == null ? null : materialAnalysis.getSummary(),
                 material.getOriginalUrl(),
                 material.getTitle(),
                 platformType == null ? null : platformType.name(),
