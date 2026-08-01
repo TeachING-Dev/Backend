@@ -303,6 +303,31 @@ class ExternalHtmlDocumentClientTest {
         assertThat(resolveCount.get()).isEqualTo(1);
     }
 
+    @Test
+    void fetchesHtmlWhenResponseHeaderIsLargerThanDefaultNettyLimit() throws Exception {
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            byte[] response = "<html><body>large response header content</body></html>".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "text/html");
+            exchange.getResponseHeaders().add("Set-Cookie", "c=".repeat(5_000));
+            exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.start();
+        int port = server.getAddress().getPort();
+        ExternalHtmlDocumentClient client = new ExternalHtmlDocumentClient(
+                HttpClient.create(),
+                Duration.ofSeconds(2),
+                false,
+                host -> List.of(InetAddress.getByName("127.0.0.1"))
+        );
+
+        HtmlDocument document = client.fetch("http://public-looking.example:" + port + "/article");
+
+        assertThat(document.body()).contains("large response header content");
+    }
+
     private String startServer(
             int status,
             String contentType,

@@ -152,6 +152,25 @@ class HtmlContentParserTest {
     }
 
     @Test
+    void doesNotRemoveContentContainerJustBecauseClassContainsHiddenAsSubstring() {
+        ParsedHtmlContent result = parser.parse(
+                "https://example.com",
+                """
+                        <html><body>
+                          <main>Generic main</main>
+                          <div class="posthidden-gems">
+                            <p>Article content in a class name that only contains hidden as a substring</p>
+                          </div>
+                        </body></html>
+                        """,
+                List.of("posthidden-gems")
+        );
+
+        assertThat(result.content()).contains("Article content in a class name");
+        assertThat(result.content()).doesNotContain("Generic main");
+    }
+
+    @Test
     void extractsNestedDivContentWithoutStoppingAtInnerClosingTag() {
         ParsedHtmlContent result = parser.parse(
                 "https://example.com",

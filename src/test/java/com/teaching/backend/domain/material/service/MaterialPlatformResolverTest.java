@@ -33,6 +33,10 @@ class MaterialPlatformResolverTest {
                 .isEqualTo(PlatformType.NOTION);
         assertThat(resolver.resolve(null, "https://www.notion.so/page"))
                 .isEqualTo(PlatformType.NOTION);
+        assertThat(resolver.resolve(null, "https://notion.site/page"))
+                .isEqualTo(PlatformType.NOTION);
+        assertThat(resolver.resolve(null, "https://shinmini.notion.site/BE-6b1862e1557a4403a65ffe4df97fb3cc"))
+                .isEqualTo(PlatformType.NOTION);
     }
 
     @Test
@@ -86,6 +90,8 @@ class MaterialPlatformResolverTest {
         assertThat(resolver.resolve(null, "https://youtube.com.evil.com/page"))
                 .isEqualTo(PlatformType.WEB);
         assertThat(resolver.resolve(null, "https://notion.so.evil.com/page"))
+                .isEqualTo(PlatformType.WEB);
+        assertThat(resolver.resolve(null, "https://notion.site.evil.com/page"))
                 .isEqualTo(PlatformType.WEB);
         assertThat(resolver.resolve(null, "https://velog.io.evil.com/page"))
                 .isEqualTo(PlatformType.WEB);
