@@ -46,6 +46,8 @@ application-dev.yml
 application-secret.yaml
 application-prod.yaml
 application-dev.yaml
+*.pem
+*.key
 
 ### Logs ###
 *.log

@@ -42,7 +42,7 @@ class ChatAskWriter {
                 .orElseThrow(() -> new GeneralException(GlobalErrorCode.NOT_FOUND));
 
         if (user.getMembershipType() == MembershipType.FREE
-                && countTodayUserMessages(userId) >= ChatMessageService.FREE_DAILY_QUESTION_LIMIT) {
+                && countTodayRoomMessages(chatRoomId) >= ChatMessageService.FREE_DAILY_QUESTION_LIMIT) {
             throw new ChatException(ChatErrorCode.DAILY_QUESTION_LIMIT_EXCEEDED);
         }
 
@@ -87,16 +87,17 @@ class ChatAskWriter {
         // 프리미엄 회원은 횟수 제한이 없으므로 무제한(null)으로 응답
         Integer remainingCount = null;
         if (chatRoom.getUser().getMembershipType() == MembershipType.FREE) {
-            long todayCount = countTodayUserMessages(reservation.userId());
+            long todayCount = countTodayRoomMessages(reservation.chatRoomId());
             remainingCount = Math.max(0, ChatMessageService.FREE_DAILY_QUESTION_LIMIT - (int) todayCount);
         }
 
         return new AskResult(chatRoom, reservation.userMessage(), aiMessage, aiMessageSources, remainingCount);
     }
 
-    private long countTodayUserMessages(Long userId) {
-        return chatMessageRepository.countByChatRoom_User_IdAndRoleAndCreatedAtGreaterThanEqual(
-                userId, ChatRole.USER, LocalDate.now(ChatMessageService.KST).atStartOfDay());
+    // 채팅방과 무관하게 계정 전체로 세던 이전 방식 대신, 이 채팅방 안에서만 오늘 보낸 질문 수를 센다.
+    private long countTodayRoomMessages(Long chatRoomId) {
+        return chatMessageRepository.countByChatRoom_IdAndRoleAndCreatedAtGreaterThanEqual(
+                chatRoomId, ChatRole.USER, LocalDate.now(ChatMessageService.KST).atStartOfDay());
     }
 
     private String citedAtOf(MaterialChunk chunk) {

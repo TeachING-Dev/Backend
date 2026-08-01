@@ -12,7 +12,7 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
 
     List<ChatMessage> findByChatRoomIdOrderByCreatedAtAsc(Long chatRoomId);
 
-    // 무료 회원 일일 질문 횟수 제한 검증용: 특정 유저가 기준 시각 이후 보낸 유저 메시지 수
-    long countByChatRoom_User_IdAndRoleAndCreatedAtGreaterThanEqual(Long userId, ChatRole role, LocalDateTime createdAt);
+    // 무료 회원 일일 질문 횟수 제한 검증용: 특정 채팅방에서 기준 시각 이후 보낸 유저 메시지 수
+    long countByChatRoom_IdAndRoleAndCreatedAtGreaterThanEqual(Long chatRoomId, ChatRole role, LocalDateTime createdAt);
 }
 
