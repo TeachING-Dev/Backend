@@ -11,6 +11,7 @@ import com.teaching.backend.domain.chat.entity.ChatSource;
 import com.teaching.backend.domain.chat.service.AskResult;
 import com.teaching.backend.domain.chat.service.ChatRoomHistoryResult;
 import com.teaching.backend.domain.material.entity.Material;
+import com.teaching.backend.domain.material.entity.MaterialChunk;
 
 import java.util.List;
 
@@ -76,7 +77,8 @@ public class MessageConverter {
     }
 
     private static ChatSourceResponse toSourceResponse(ChatSource source) {
-        Material material = source.getMaterialChunk().getMaterial();
+        MaterialChunk chunk = source.getMaterialChunk();
+        Material material = chunk.getMaterial();
 
         return new ChatSourceResponse(
                 source.getId(),
@@ -84,8 +86,10 @@ public class MessageConverter {
                 material.getTitle(),
                 material.getFolder().getName(),
                 material.getOriginalUrl(),
-                source.getMaterialChunk().getChunkText(),
-                source.getCitedAt()
+                chunk.getChunkText(),
+                source.getCitedAt(),
+                chunk.getStartLine(),
+                chunk.getEndLine()
         );
     }
 }

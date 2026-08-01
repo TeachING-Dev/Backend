@@ -42,7 +42,7 @@ public class RagPromptTemplate {
         return chunks.stream()
                 .map(chunk -> "[자료명: %s, 출처: %s] %s".formatted(
                         chunk.getMaterial().getTitle(),
-                        chunk.getPosition() != null ? chunk.getPosition() : ("청크 " + chunk.getChunkIndex()),
+                        chunk.displayPosition(),
                         chunk.getChunkText()
                 ))
                 .collect(Collectors.joining("\n\n"));

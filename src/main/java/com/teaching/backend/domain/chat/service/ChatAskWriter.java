@@ -99,9 +99,8 @@ class ChatAskWriter {
                 userId, ChatRole.USER, LocalDate.now(ChatMessageService.KST).atStartOfDay());
     }
 
-    // ChatSource.citedAt은 NOT NULL이라, MaterialChunk에 위치 정보(position)가 아직 없는 경우 대체 값을 채워줌
     private String citedAtOf(MaterialChunk chunk) {
-        return chunk.getPosition() != null ? chunk.getPosition() : ("청크 " + chunk.getChunkIndex());
+        return chunk.displayPosition();
     }
 
     record Reservation(Long chatRoomId, Long userId, ChatMessage userMessage) {

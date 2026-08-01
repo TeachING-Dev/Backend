@@ -622,7 +622,8 @@ class MaterialUrlAnalysisServiceTest {
                 chunkIndex,
                 "chunk " + chunkIndex,
                 "point-" + chunkIndex,
-                "chunk-" + chunkIndex
+                chunkIndex + 1,
+                chunkIndex + 1
         );
     }
 
