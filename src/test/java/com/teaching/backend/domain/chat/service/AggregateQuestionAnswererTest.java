@@ -1,5 +1,7 @@
 package com.teaching.backend.domain.chat.service;
 
+import com.teaching.backend.domain.folder.entity.Folder;
+import com.teaching.backend.domain.folder.repository.FolderRepository;
 import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.enums.PlatformType;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
@@ -9,9 +11,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Sort;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
@@ -23,6 +28,9 @@ class AggregateQuestionAnswererTest {
 
     @Mock
     private MaterialRepository materialRepository;
+
+    @Mock
+    private FolderRepository folderRepository;
 
     @InjectMocks
     private AggregateQuestionAnswerer aggregateQuestionAnswerer;
@@ -72,11 +80,82 @@ class AggregateQuestionAnswererTest {
         assertThat(result).contains("가장 최근에 저장하신 자료는 'JPA 연관관계 매핑 정리'입니다.");
     }
 
+    @Test
+    void tryAnswerListsAllMaterialTitlesWhenNoFolderMentioned() {
+        when(folderRepository.findAllByUser_Id(USER_ID, Sort.unsorted())).thenReturn(List.of());
+        when(materialRepository.findAllByUser_Id(USER_ID, Sort.unsorted())).thenReturn(List.of(
+                material(101L, "Spring Boot REST API 개발 강의"),
+                material(102L, "JPA 연관관계 매핑 정리")
+        ));
+
+        Optional<String> result = aggregateQuestionAnswerer.tryAnswer("내 자료 목록 알려줘", USER_ID);
+
+        assertThat(result).contains("저장하신 자료는 Spring Boot REST API 개발 강의, JPA 연관관계 매핑 정리입니다.");
+    }
+
+    @Test
+    void tryAnswerScopesListToMentionedFolder() {
+        Folder backendFolder = folder(10L, "백엔드 개발");
+        when(folderRepository.findAllByUser_Id(USER_ID, Sort.unsorted())).thenReturn(List.of(backendFolder));
+        when(materialRepository.findAllByFolder_Id(10L)).thenReturn(List.of(
+                material(101L, "Spring Boot REST API 개발 강의")
+        ));
+
+        Optional<String> result = aggregateQuestionAnswerer.tryAnswer("백엔드 개발 폴더에 무슨 자료 있어?", USER_ID);
+
+        assertThat(result).contains("'백엔드 개발' 폴더에 있는 자료는 Spring Boot REST API 개발 강의입니다.");
+    }
+
+    @Test
+    void tryAnswerReportsEmptyFolderMessageWhenMentionedFolderHasNoMaterials() {
+        Folder emptyFolder = folder(20L, "iOS 개발");
+        when(folderRepository.findAllByUser_Id(USER_ID, Sort.unsorted())).thenReturn(List.of(emptyFolder));
+        when(materialRepository.findAllByFolder_Id(20L)).thenReturn(List.of());
+
+        Optional<String> result = aggregateQuestionAnswerer.tryAnswer("iOS 개발 폴더에 어떤 자료 있어?", USER_ID);
+
+        assertThat(result).contains("'iOS 개발' 폴더에는 아직 저장된 자료가 없습니다.");
+    }
+
+    @Test
+    void tryAnswerReportsNoMaterialsMessageWhenListAskedButNoneExist() {
+        when(folderRepository.findAllByUser_Id(USER_ID, Sort.unsorted())).thenReturn(List.of());
+        when(materialRepository.findAllByUser_Id(USER_ID, Sort.unsorted())).thenReturn(List.of());
+
+        Optional<String> result = aggregateQuestionAnswerer.tryAnswer("내 자료 리스트 보여줘", USER_ID);
+
+        assertThat(result).contains("아직 저장하신 자료가 없습니다.");
+    }
+
+    @Test
+    void tryAnswerTruncatesListWhenTooManyMaterials() {
+        when(folderRepository.findAllByUser_Id(USER_ID, Sort.unsorted())).thenReturn(List.of());
+        List<Material> materials = IntStream.rangeClosed(1, 25)
+                .mapToObj(i -> material((long) i, "자료" + i))
+                .toList();
+        when(materialRepository.findAllByUser_Id(USER_ID, Sort.unsorted())).thenReturn(materials);
+
+        Optional<String> result = aggregateQuestionAnswerer.tryAnswer("내 자료 목록 알려줘", USER_ID);
+
+        assertThat(result).get(org.assertj.core.api.InstanceOfAssertFactories.STRING)
+                .contains("자료1, 자료2")
+                .contains("외 5개")
+                .doesNotContain("자료21");
+    }
+
     private Material material(Long materialId, String title) {
         User user = User.create("user1@example.com", "user1", null, null, null);
         ReflectionTestUtils.setField(user, "id", USER_ID);
         Material material = Material.create(user, null, title, "https://example.com", PlatformType.WEB);
         ReflectionTestUtils.setField(material, "id", materialId);
         return material;
+    }
+
+    private Folder folder(Long folderId, String name) {
+        User user = User.create("user1@example.com", "user1", null, null, null);
+        ReflectionTestUtils.setField(user, "id", USER_ID);
+        Folder folder = Folder.create(user, name);
+        ReflectionTestUtils.setField(folder, "id", folderId);
+        return folder;
     }
 }
