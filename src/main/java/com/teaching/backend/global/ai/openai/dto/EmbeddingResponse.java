@@ -8,6 +8,6 @@ import java.util.List;
 public record EmbeddingResponse(List<Data> data) {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Data(float[] embedding) {
+    public record Data(int index, float[] embedding) {
     }
 }

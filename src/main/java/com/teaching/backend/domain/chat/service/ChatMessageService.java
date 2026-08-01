@@ -93,8 +93,11 @@ public class ChatMessageService {
             throw e;
         }
 
-        // isFallback은 LLM 답변 텍스트를 파싱하는 게 아니라 "근거로 삼을 청크가 있었는가"를 구조적으로 반영
-        boolean isFallback = relevantChunks.isEmpty();
+        // 청크가 검색됐어도, LLM이 그 내용으론 답을 못 찾아 프롬프트 규칙대로 FALLBACK_PREFIX로
+        // 답했다면 실질적으로는 fallback이다. 검색 결과 유무만으로 판단하면 관련 없는 자료가
+        // "답변 출처"로 잘못 붙는 문제가 있어, 실제 답변 텍스트도 함께 확인한다.
+        boolean isFallback = relevantChunks.isEmpty()
+                || answer.strip().startsWith(RagPromptTemplate.FALLBACK_PREFIX);
 
         return chatAskWriter.finalizeAnswer(reservation, answer, isFallback, relevantChunks);
     }

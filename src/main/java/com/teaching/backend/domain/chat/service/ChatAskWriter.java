@@ -42,7 +42,7 @@ class ChatAskWriter {
                 .orElseThrow(() -> new GeneralException(GlobalErrorCode.NOT_FOUND));
 
         if (user.getMembershipType() == MembershipType.FREE
-                && countTodayUserMessages(userId) >= ChatMessageService.FREE_DAILY_QUESTION_LIMIT) {
+                && countTodayRoomMessages(chatRoomId) >= ChatMessageService.FREE_DAILY_QUESTION_LIMIT) {
             throw new ChatException(ChatErrorCode.DAILY_QUESTION_LIMIT_EXCEEDED);
         }
 
@@ -69,7 +69,6 @@ class ChatAskWriter {
             chatRoom.updateTitle(chatRoomService.generateTitle(reservation.userMessage().getContent()));
         }
 
-        // isFallback은 LLM 답변 텍스트를 파싱하는 게 아니라 "근거로 삼을 청크가 있었는가"를 구조적으로 반영
         ChatMessage aiMessage = chatMessageRepository.save(
                 isFallback
                         ? ChatMessage.createAiFallbackMessage(chatRoom, answer)
@@ -78,25 +77,29 @@ class ChatAskWriter {
 
         chatRoom.updateLastMessageAt(aiMessage.getCreatedAt());
 
-        List<ChatSource> aiMessageSources = relevantChunks.stream()
-                .map(chunk -> chatSourceRepository.save(
-                        ChatSource.create(chunk, aiMessage, citedAtOf(chunk))
-                ))
-                .toList();
+        // fallback 답변은 검색된 청크를 실제로 근거로 쓰지 않았으므로 출처를 붙이지 않는다.
+        List<ChatSource> aiMessageSources = isFallback
+                ? List.of()
+                : relevantChunks.stream()
+                        .map(chunk -> chatSourceRepository.save(
+                                ChatSource.create(chunk, aiMessage, citedAtOf(chunk))
+                        ))
+                        .toList();
 
         // 프리미엄 회원은 횟수 제한이 없으므로 무제한(null)으로 응답
         Integer remainingCount = null;
         if (chatRoom.getUser().getMembershipType() == MembershipType.FREE) {
-            long todayCount = countTodayUserMessages(reservation.userId());
+            long todayCount = countTodayRoomMessages(reservation.chatRoomId());
             remainingCount = Math.max(0, ChatMessageService.FREE_DAILY_QUESTION_LIMIT - (int) todayCount);
         }
 
         return new AskResult(chatRoom, reservation.userMessage(), aiMessage, aiMessageSources, remainingCount);
     }
 
-    private long countTodayUserMessages(Long userId) {
-        return chatMessageRepository.countByChatRoom_User_IdAndRoleAndCreatedAtGreaterThanEqual(
-                userId, ChatRole.USER, LocalDate.now(ChatMessageService.KST).atStartOfDay());
+    // 채팅방과 무관하게 계정 전체로 세던 이전 방식 대신, 이 채팅방 안에서만 오늘 보낸 질문 수를 센다.
+    private long countTodayRoomMessages(Long chatRoomId) {
+        return chatMessageRepository.countByChatRoom_IdAndRoleAndCreatedAtGreaterThanEqual(
+                chatRoomId, ChatRole.USER, LocalDate.now(ChatMessageService.KST).atStartOfDay());
     }
 
     private String citedAtOf(MaterialChunk chunk) {
