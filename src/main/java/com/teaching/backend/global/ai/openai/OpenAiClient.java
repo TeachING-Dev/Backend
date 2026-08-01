@@ -20,7 +20,11 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,6 +32,12 @@ import java.util.List;
 @Slf4j
 @Component
 public class OpenAiClient {
+
+    // 자료 개수가 많은 유저는 한 번에 보낼 텍스트가 많아져 OpenAI 배치 한도/응답 크기가 계속 커질 수 있으므로,
+    // embedBatch()에서 이 크기로 나눠 순차 호출한다.
+    private static final int EMBED_BATCH_SIZE = 100;
+
+    private static final ObjectMapper ERROR_BODY_MAPPER = new ObjectMapper();
 
     private final WebClient webClient;
     private final String embeddingModel;
@@ -84,36 +94,57 @@ public class OpenAiClient {
         return data.embedding();
     }
 
-    // 자료 개수가 많은 유저는 한 번에 보낼 텍스트가 많아져 OpenAI 배치 한도/응답 크기가 계속 커질 수 있으므로,
-    // 고정 크기로 나눠 순차 호출한 뒤 입력 순서를 보존해 이어붙인다.
-    private static final int EMBED_BATCH_SIZE = 100;
-
     // 여러 텍스트를 임베딩한다. OpenAI 응답은 입력 순서를 그대로 보존한다.
+    // chunk가 여러 개여도 전체 처리 시간이 (chunk 수 x 단건 타임아웃)을 넘지 않도록 하나의 마감 시간을 공유한다.
     public List<float[]> embedBatch(List<String> texts) {
         if (texts.isEmpty()) {
             return List.of();
         }
 
+        int chunkCount = (texts.size() + EMBED_BATCH_SIZE - 1) / EMBED_BATCH_SIZE;
+        Instant deadline = Instant.now().plus(responseTimeout.multipliedBy(chunkCount));
+
         List<float[]> embeddings = new ArrayList<>(texts.size());
         for (int start = 0; start < texts.size(); start += EMBED_BATCH_SIZE) {
             int end = Math.min(start + EMBED_BATCH_SIZE, texts.size());
-            embeddings.addAll(embedBatchChunk(texts.subList(start, end)));
+            embeddings.addAll(embedBatchChunk(texts.subList(start, end), remainingTimeout(deadline)));
         }
         return embeddings;
     }
 
-    private List<float[]> embedBatchChunk(List<String> texts) {
+    // 이미 마감 시간을 넘겼으면 다음 chunk 요청을 보내지 않고 즉시 실패시켜, 앞 chunk들이 지연된 만큼
+    // 뒤 chunk에게 남은 시간만 준다.
+    private Duration remainingTimeout(Instant deadline) {
+        Duration remaining = Duration.between(Instant.now(), deadline);
+        if (remaining.isNegative() || remaining.isZero()) {
+            log.warn("OpenAI embedBatch exceeded overall timeout budget");
+            throw new GeneralException(GlobalErrorCode.INTERNAL_SERVER_ERROR);
+        }
+        return remaining;
+    }
+
+    private List<float[]> embedBatchChunk(List<String> texts, Duration timeout) {
         EmbeddingResponse response = call(webClient.post()
                 .uri("/v1/embeddings")
                 .bodyValue(new EmbeddingRequest(embeddingModel, texts))
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, this::mapError)
-                .bodyToMono(EmbeddingResponse.class));
+                .bodyToMono(EmbeddingResponse.class), timeout);
 
         if (response == null || response.data() == null || response.data().size() != texts.size()) {
             throw new GeneralException(GlobalErrorCode.INTERNAL_SERVER_ERROR);
         }
-        return response.data().stream().map(EmbeddingResponse.Data::embedding).toList();
+
+        // 응답은 입력 순서대로 오는 게 보장되지만, index를 명시적으로 검증/매핑해 순서에 대한
+        // 암묵적 가정 없이 원래 입력 순서로 안전하게 정렬한다.
+        float[][] embeddingsByIndex = new float[texts.size()][];
+        for (EmbeddingResponse.Data data : response.data()) {
+            if (data == null || data.index() < 0 || data.index() >= texts.size() || embeddingsByIndex[data.index()] != null) {
+                throw new GeneralException(GlobalErrorCode.INTERNAL_SERVER_ERROR);
+            }
+            embeddingsByIndex[data.index()] = data.embedding();
+        }
+        return List.of(embeddingsByIndex);
     }
 
     public String chatComplete(String systemPrompt, String userMessage) {
@@ -168,9 +199,25 @@ public class OpenAiClient {
         return response.bodyToMono(String.class)
                 .defaultIfEmpty("")
                 .map(body -> {
-                    log.warn("OpenAI request failed. status={}, body={}", response.statusCode().value(), summarize(body));
+                    log.warn("OpenAI request failed. status={}, error={}", response.statusCode().value(), summarize(errorSummary(body)));
                     return new GeneralException(GlobalErrorCode.INTERNAL_SERVER_ERROR);
                 });
+    }
+
+    // 응답 본문의 error.message에는 사용자가 보낸 질문/자료 원문 일부가 그대로 포함될 수 있어(예: 콘텐츠
+    // 정책 위반 시 문제 텍스트를 인용), 로그에는 원인 파악에 필요한 type/code만 남기고 원문은 남기지 않는다.
+    private String errorSummary(String body) {
+        if (body == null || body.isBlank()) {
+            return "<empty>";
+        }
+        try {
+            JsonNode error = ERROR_BODY_MAPPER.readTree(body).path("error");
+            String type = error.path("type").asText("unknown");
+            String code = error.path("code").asText("unknown");
+            return "type=%s, code=%s".formatted(type, code);
+        } catch (Exception e) {
+            return "<unparseable>";
+        }
     }
 
     private String summarize(String body) {
@@ -185,8 +232,12 @@ public class OpenAiClient {
     // WebClient의 responseTimeout은 커넥션 확보 이후 응답 지연만 커버하므로,
     // block(Duration)으로 전체 대기 시간의 상한을 별도로 강제해 MVC 요청 스레드가 무한정 잡히지 않게 한다.
     private <T> T call(Mono<T> mono) {
+        return call(mono, responseTimeout);
+    }
+
+    private <T> T call(Mono<T> mono, Duration timeout) {
         try {
-            return mono.block(responseTimeout);
+            return mono.block(timeout);
         } catch (GeneralException e) {
             throw e;
         } catch (Exception e) {
