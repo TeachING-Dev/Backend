@@ -7,6 +7,7 @@ import com.teaching.backend.global.ai.openai.dto.EmbeddingResponse;
 import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
 import io.netty.channel.ChannelOption;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
@@ -14,6 +15,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.ClientResponse;
+import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
@@ -22,6 +24,7 @@ import java.time.Duration;
 import java.util.List;
 
 // OpenAI Embedding/Chat Completion API를 직접 호출하는 클라이언트 (Spring AI 미사용)
+@Slf4j
 @Component
 public class OpenAiClient {
 
@@ -44,9 +47,16 @@ public class OpenAiClient {
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeoutMs)
                 .responseTimeout(responseTimeout);
 
+        // 기본 256KB 버퍼 한도로는 자료가 많은 유저의 title/tag 배치 임베딩(embedBatch) 응답이
+        // 잘려서 DataBufferLimitException이 나기 때문에, 임베딩 응답 크기에 맞춰 여유 있게 올려둔다.
+        ExchangeStrategies exchangeStrategies = ExchangeStrategies.builder()
+                .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(10 * 1024 * 1024))
+                .build();
+
         this.webClient = WebClient.builder()
                 .baseUrl(baseUrl)
                 .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .exchangeStrategies(exchangeStrategies)
                 .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .build();
@@ -141,7 +151,20 @@ public class OpenAiClient {
     }
 
     private Mono<Throwable> mapError(ClientResponse response) {
-        return Mono.error(new GeneralException(GlobalErrorCode.INTERNAL_SERVER_ERROR));
+        return response.bodyToMono(String.class)
+                .defaultIfEmpty("")
+                .map(body -> {
+                    log.warn("OpenAI request failed. status={}, body={}", response.statusCode().value(), summarize(body));
+                    return new GeneralException(GlobalErrorCode.INTERNAL_SERVER_ERROR);
+                });
+    }
+
+    private String summarize(String body) {
+        if (body == null || body.isBlank()) {
+            return "<empty>";
+        }
+        String normalized = body.replaceAll("\\s+", " ").strip();
+        return normalized.length() <= 500 ? normalized : normalized.substring(0, 500) + "...";
     }
 
     // OpenAI 응답 실패(HTTP 에러 상태, 네트워크 예외, 타임아웃)를 공통 에러 응답으로 변환.
@@ -153,6 +176,7 @@ public class OpenAiClient {
         } catch (GeneralException e) {
             throw e;
         } catch (Exception e) {
+            log.warn("OpenAI request failed. reason={}, message={}", e.getClass().getSimpleName(), e.getMessage());
             throw new GeneralException(GlobalErrorCode.INTERNAL_SERVER_ERROR);
         }
     }
