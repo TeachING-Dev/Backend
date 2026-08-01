@@ -97,6 +97,8 @@ public class MaterialAiAnalysisOrchestrator {
         return new MaterialAiAnalysisPipelineResult(
                 material.getId(),
                 preparationResult.userId(),
+                preparationResult.folderId(),
+                savedAnalysis == null ? null : savedAnalysis.getSummary(),
                 preparationResult.originalUrl(),
                 preparationResult.platformType(),
                 preparationResult.extractedContent(),

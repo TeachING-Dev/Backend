@@ -118,16 +118,17 @@ public class MaterialUrlAnalysisService {
     }
 
     private MaterialAnalyzeResponse alreadyAnalyzedResponse(Material material) {
-        Long materialAnalysisId = materialAnalysisRepository.findByMaterialId(material.getId())
-                .map(MaterialAnalysis::getId)
+        MaterialAnalysis materialAnalysis = materialAnalysisRepository.findByMaterialId(material.getId())
                 .orElse(null);
+        Long materialAnalysisId = materialAnalysis == null ? null : materialAnalysis.getId();
+
         int chunkCount = materialChunkRepository.findAllByMaterial_IdOrderByChunkIndexAsc(material.getId()).size();
 
         List<MaterialTagResponse> tags = materialTagRepository.findAllByMaterialId(material.getId()).stream()
                 .map(MaterialTagResponse::from)
                 .toList();
 
-        return MaterialAnalyzeResponse.alreadyAnalyzed(material, materialAnalysisId, chunkCount,tags);
+        return MaterialAnalyzeResponse.alreadyAnalyzed(material,materialAnalysis, materialAnalysisId, chunkCount,tags);
     }
 
     MaterialAnalysisPreparationResult prepareAnalysis(

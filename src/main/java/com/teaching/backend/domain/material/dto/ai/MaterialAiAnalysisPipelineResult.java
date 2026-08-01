@@ -8,6 +8,8 @@ import java.util.List;
 public record MaterialAiAnalysisPipelineResult(
         Long materialId,
         Long userId,
+        Long folderId,
+        String summary,
         String originalUrl,
         PlatformType platformType,
         ExtractedMaterialContent extractedContent,
@@ -26,6 +28,8 @@ public record MaterialAiAnalysisPipelineResult(
     public MaterialAiAnalysisPipelineResult(
             Long materialId,
             Long userId,
+            Long folderId,
+            String summary,
             String originalUrl,
             PlatformType platformType,
             ExtractedMaterialContent extractedContent,
@@ -34,6 +38,8 @@ public record MaterialAiAnalysisPipelineResult(
         this(
                 materialId,
                 userId,
+                folderId,
+                summary,
                 originalUrl,
                 platformType,
                 extractedContent,
