@@ -6,7 +6,6 @@ import com.teaching.backend.domain.notification.dto.NotificationReadResponse;
 import com.teaching.backend.domain.notification.dto.NotificationSummaryResponse;
 import com.teaching.backend.domain.notification.entity.Notification;
 import com.teaching.backend.domain.notification.enums.NotificationTargetType;
-import com.teaching.backend.domain.notification.enums.NotificationType;
 import com.teaching.backend.domain.notification.exception.NotificationErrorCode;
 import com.teaching.backend.domain.notification.repository.NotificationRepository;
 import com.teaching.backend.domain.teachingmap.entity.TeachingMap;
@@ -22,12 +21,15 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.TimeZone;
+import java.util.stream.LongStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -41,7 +43,6 @@ import static org.mockito.Mockito.when;
 class NotificationServiceTest {
 
     private static final Long USER_ID = 1L;
-    private static final Long OTHER_USER_ID = 2L;
     private static final Long TEACHING_MAP_ID = 1000L;
 
     @Mock
@@ -49,6 +50,9 @@ class NotificationServiceTest {
 
     @Mock
     private TeachingMapRepository teachingMapRepository;
+
+    @Mock
+    private NotificationReminderCreationService reminderCreationService;
 
     @InjectMocks
     private NotificationService notificationService;
@@ -197,101 +201,113 @@ class NotificationServiceTest {
                 .isInstanceOf(GeneralException.class)
                 .extracting("errorCode")
                 .isEqualTo(NotificationErrorCode.NOTIFICATION_NOT_FOUND);
-        verify(notificationRepository, never()).findByIdAndUser_Id(101L, OTHER_USER_ID);
+        verify(notificationRepository).findByIdAndUser_Id(101L, USER_ID);
+        verify(notificationRepository, never()).save(any(Notification.class));
     }
 
     @Test
-    void createTeachingMapRemindersCreatesShortcutReminderOnFifthDay() {
+    void createTeachingMapRemindersCreatesReminderForDueCandidate() {
         LocalDateTime now = LocalDateTime.of(2026, 8, 10, 9, 0);
         TeachingMap teachingMap = teachingMap(TEACHING_MAP_ID, USER_ID, "Backend", TeachingMapType.SHORTCUT, now.minusDays(5));
         when(teachingMapRepository.findAllByStatusAndIsDraftFalseAndDeletedAtIsNullAndCreatedAtLessThanEqual(
-                TeachingMapStatus.IN_PROGRESS,
-                now.minusDays(5)
-        )).thenReturn(List.of(teachingMap));
-        when(notificationRepository.existsByUser_IdAndTargetTypeAndTargetIdAndNotificationTypeAndCreatedAtGreaterThanEqual(
-                USER_ID,
-                NotificationTargetType.TEACHING_MAP,
-                TEACHING_MAP_ID,
-                NotificationType.SHORT_CUT,
-                now.toLocalDate().atStartOfDay()
-        )).thenReturn(false);
+                eq(TeachingMapStatus.IN_PROGRESS),
+                eq(now.minusDays(5)),
+                any(Pageable.class)
+        )).thenReturn(new PageImpl<>(List.of(teachingMap)));
+        when(reminderCreationService.createReminderIfDue(TEACHING_MAP_ID, now)).thenReturn(true);
 
         int result = notificationService.createTeachingMapReminders(now);
 
-        ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
-        verify(notificationRepository).save(notificationCaptor.capture());
-        Notification saved = notificationCaptor.getValue();
         assertThat(result).isEqualTo(1);
-        assertThat(saved.getNotificationType()).isEqualTo(NotificationType.SHORT_CUT);
-        assertThat(saved.getTitle()).isEqualTo("Short-Cut");
-        assertThat(saved.getContent()).contains("Backend");
-        assertThat(saved.getContent()).hasSizeLessThanOrEqualTo(60);
-        assertThat(saved.getTargetType()).isEqualTo(NotificationTargetType.TEACHING_MAP);
-        assertThat(saved.getTargetId()).isEqualTo(TEACHING_MAP_ID);
+        verify(reminderCreationService).createReminderIfDue(TEACHING_MAP_ID, now);
     }
 
     @Test
-    void createTeachingMapRemindersSkipsShortcutBeforeFifthDay() {
+    void createTeachingMapRemindersReturnsZeroWhenNoCandidateExists() {
         LocalDateTime now = LocalDateTime.of(2026, 8, 10, 9, 0);
         when(teachingMapRepository.findAllByStatusAndIsDraftFalseAndDeletedAtIsNullAndCreatedAtLessThanEqual(
-                TeachingMapStatus.IN_PROGRESS,
-                now.minusDays(5)
-        )).thenReturn(List.of());
+                eq(TeachingMapStatus.IN_PROGRESS),
+                eq(now.minusDays(5)),
+                any(Pageable.class)
+        )).thenReturn(new PageImpl<>(List.of()));
 
         int result = notificationService.createTeachingMapReminders(now);
 
         assertThat(result).isZero();
-        verify(notificationRepository, never()).save(any(Notification.class));
+        verify(reminderCreationService, never()).createReminderIfDue(any(), eq(now));
     }
 
     @Test
-    void createTeachingMapRemindersCreatesDeepDiveReminderOnTenthDay() {
+    void createTeachingMapRemindersContinuesWhenOneCandidateFails() {
         LocalDateTime now = LocalDateTime.of(2026, 8, 10, 9, 0);
-        TeachingMap teachingMap = teachingMap(TEACHING_MAP_ID, USER_ID, "Deep Backend", TeachingMapType.DEEPDIVE, now.minusDays(10));
+        TeachingMap first = teachingMap(1001L, USER_ID, "First", TeachingMapType.SHORTCUT, now.minusDays(5));
+        TeachingMap second = teachingMap(1002L, USER_ID, "Second", TeachingMapType.SHORTCUT, now.minusDays(5));
+        TeachingMap third = teachingMap(1003L, USER_ID, "Third", TeachingMapType.SHORTCUT, now.minusDays(5));
         when(teachingMapRepository.findAllByStatusAndIsDraftFalseAndDeletedAtIsNullAndCreatedAtLessThanEqual(
-                TeachingMapStatus.IN_PROGRESS,
-                now.minusDays(5)
-        )).thenReturn(List.of(teachingMap));
-        when(notificationRepository.existsByUser_IdAndTargetTypeAndTargetIdAndNotificationTypeAndCreatedAtGreaterThanEqual(
-                USER_ID,
-                NotificationTargetType.TEACHING_MAP,
-                TEACHING_MAP_ID,
-                NotificationType.DEEP_DIVE,
-                now.toLocalDate().atStartOfDay()
-        )).thenReturn(false);
+                eq(TeachingMapStatus.IN_PROGRESS),
+                eq(now.minusDays(5)),
+                any(Pageable.class)
+        )).thenReturn(new PageImpl<>(List.of(first, second, third)));
+        when(reminderCreationService.createReminderIfDue(1001L, now)).thenReturn(true);
+        when(reminderCreationService.createReminderIfDue(1002L, now)).thenThrow(new IllegalStateException("boom"));
+        when(reminderCreationService.createReminderIfDue(1003L, now)).thenReturn(true);
 
         int result = notificationService.createTeachingMapReminders(now);
 
-        ArgumentCaptor<Notification> notificationCaptor = ArgumentCaptor.forClass(Notification.class);
-        verify(notificationRepository).save(notificationCaptor.capture());
-        Notification saved = notificationCaptor.getValue();
-        assertThat(result).isEqualTo(1);
-        assertThat(saved.getNotificationType()).isEqualTo(NotificationType.DEEP_DIVE);
-        assertThat(saved.getTitle()).isEqualTo("Deep-Dive");
-        assertThat(saved.getContent()).contains("Deep Backend");
-        assertThat(saved.getContent()).hasSizeLessThanOrEqualTo(60);
+        assertThat(result).isEqualTo(2);
+        verify(reminderCreationService).createReminderIfDue(1001L, now);
+        verify(reminderCreationService).createReminderIfDue(1002L, now);
+        verify(reminderCreationService).createReminderIfDue(1003L, now);
     }
 
     @Test
-    void createTeachingMapRemindersSkipsAlreadyCreatedReminderForToday() {
+    void createTeachingMapRemindersProcessesNextBatch() {
         LocalDateTime now = LocalDateTime.of(2026, 8, 10, 9, 0);
-        TeachingMap teachingMap = teachingMap(TEACHING_MAP_ID, USER_ID, "Backend", TeachingMapType.SHORTCUT, now.minusDays(7));
+        List<TeachingMap> firstBatch = LongStream.rangeClosed(1, 100)
+                .mapToObj(id -> teachingMap(id, USER_ID, "Map " + id, TeachingMapType.SHORTCUT, now.minusDays(5)))
+                .toList();
+        TeachingMap last = teachingMap(101L, USER_ID, "Map 101", TeachingMapType.SHORTCUT, now.minusDays(5));
         when(teachingMapRepository.findAllByStatusAndIsDraftFalseAndDeletedAtIsNullAndCreatedAtLessThanEqual(
-                TeachingMapStatus.IN_PROGRESS,
-                now.minusDays(5)
-        )).thenReturn(List.of(teachingMap));
-        when(notificationRepository.existsByUser_IdAndTargetTypeAndTargetIdAndNotificationTypeAndCreatedAtGreaterThanEqual(
-                USER_ID,
-                NotificationTargetType.TEACHING_MAP,
-                TEACHING_MAP_ID,
-                NotificationType.SHORT_CUT,
-                now.toLocalDate().atStartOfDay()
-        )).thenReturn(true);
+                eq(TeachingMapStatus.IN_PROGRESS),
+                eq(now.minusDays(5)),
+                any(Pageable.class)
+        )).thenReturn(
+                new PageImpl<>(firstBatch, org.springframework.data.domain.PageRequest.of(0, 100), 101),
+                new PageImpl<>(List.of(last), org.springframework.data.domain.PageRequest.of(1, 100), 101)
+        );
+        when(reminderCreationService.createReminderIfDue(any(), eq(now))).thenReturn(true);
 
         int result = notificationService.createTeachingMapReminders(now);
 
-        assertThat(result).isZero();
-        verify(notificationRepository, never()).save(any(Notification.class));
+        assertThat(result).isEqualTo(101);
+        verify(reminderCreationService).createReminderIfDue(1L, now);
+        verify(reminderCreationService).createReminderIfDue(101L, now);
+    }
+
+    @Test
+    void createTeachingMapRemindersUsesKstWhenNowIsNull() {
+        TimeZone original = TimeZone.getDefault();
+        TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
+        try {
+            when(teachingMapRepository.findAllByStatusAndIsDraftFalseAndDeletedAtIsNullAndCreatedAtLessThanEqual(
+                    eq(TeachingMapStatus.IN_PROGRESS),
+                    any(LocalDateTime.class),
+                    any(Pageable.class)
+            )).thenReturn(new PageImpl<>(List.of()));
+
+            notificationService.createTeachingMapReminders(null);
+
+            ArgumentCaptor<LocalDateTime> thresholdCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+            verify(teachingMapRepository).findAllByStatusAndIsDraftFalseAndDeletedAtIsNullAndCreatedAtLessThanEqual(
+                    eq(TeachingMapStatus.IN_PROGRESS),
+                    thresholdCaptor.capture(),
+                    any(Pageable.class)
+            );
+            assertThat(thresholdCaptor.getValue().toLocalDate())
+                    .isEqualTo(LocalDateTime.now(NotificationService.REMINDER_ZONE).minusDays(5).toLocalDate());
+        } finally {
+            TimeZone.setDefault(original);
+        }
     }
 
     private void assertBadRequestThrown(Runnable action) {

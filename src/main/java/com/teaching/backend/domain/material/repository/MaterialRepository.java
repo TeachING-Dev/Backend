@@ -27,6 +27,7 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
             JOIN m.folder f
             WHERE m.user.id = :userId
               AND m.aiStatus = :aiStatus
+              AND m.deletedAt IS NULL
               AND f.deletedAt IS NULL
             """)
     Page<Material> findHomeRecentMaterials(

@@ -109,4 +109,15 @@ public interface TeachingMapRepository extends JpaRepository<TeachingMap, Long> 
             java.time.LocalDateTime createdAt
     );
 
+    Page<TeachingMap> findAllByStatusAndIsDraftFalseAndDeletedAtIsNullAndCreatedAtLessThanEqual(
+            TeachingMapStatus status,
+            java.time.LocalDateTime createdAt,
+            Pageable pageable
+    );
+
+    Optional<TeachingMap> findByIdAndStatusAndIsDraftFalseAndDeletedAtIsNull(
+            Long id,
+            TeachingMapStatus status
+    );
+
 }
