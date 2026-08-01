@@ -69,7 +69,6 @@ class ChatAskWriter {
             chatRoom.updateTitle(chatRoomService.generateTitle(reservation.userMessage().getContent()));
         }
 
-        // isFallback은 LLM 답변 텍스트를 파싱하는 게 아니라 "근거로 삼을 청크가 있었는가"를 구조적으로 반영
         ChatMessage aiMessage = chatMessageRepository.save(
                 isFallback
                         ? ChatMessage.createAiFallbackMessage(chatRoom, answer)
@@ -78,11 +77,14 @@ class ChatAskWriter {
 
         chatRoom.updateLastMessageAt(aiMessage.getCreatedAt());
 
-        List<ChatSource> aiMessageSources = relevantChunks.stream()
-                .map(chunk -> chatSourceRepository.save(
-                        ChatSource.create(chunk, aiMessage, citedAtOf(chunk))
-                ))
-                .toList();
+        // fallback 답변은 검색된 청크를 실제로 근거로 쓰지 않았으므로 출처를 붙이지 않는다.
+        List<ChatSource> aiMessageSources = isFallback
+                ? List.of()
+                : relevantChunks.stream()
+                        .map(chunk -> chatSourceRepository.save(
+                                ChatSource.create(chunk, aiMessage, citedAtOf(chunk))
+                        ))
+                        .toList();
 
         // 프리미엄 회원은 횟수 제한이 없으므로 무제한(null)으로 응답
         Integer remainingCount = null;

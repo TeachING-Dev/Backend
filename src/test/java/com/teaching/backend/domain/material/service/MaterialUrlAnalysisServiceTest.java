@@ -455,6 +455,8 @@ class MaterialUrlAnalysisServiceTest {
                     return new MaterialAiAnalysisPipelineResult(
                             200L,
                             USER_ID,
+                            null,
+                            "Summary",
                             YOUTUBE_URL,
                             PlatformType.YOUTUBE,
                             preparationResult.extractedContent(),
@@ -569,6 +571,8 @@ class MaterialUrlAnalysisServiceTest {
         return new MaterialAiAnalysisPipelineResult(
                 200L,
                 USER_ID,
+                null,
+                "Summary",
                 URL,
                 PlatformType.VELOG,
                 extractedContent,
