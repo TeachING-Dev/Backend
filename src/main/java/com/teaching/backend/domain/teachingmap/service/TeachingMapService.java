@@ -80,24 +80,24 @@ public class TeachingMapService {
 
     @Transactional(readOnly = true)
     public TeachingMapListResponse getTeachingMaps(Long userId, TeachingMapStatus status,
-                                                   TeachingMapType type, TeachingMapListSort sort, int page,int size) {
+                                                   TeachingMapType type, TeachingMapListSort sort, int page) {
 
         boolean isDraft = (status == TeachingMapStatus.TEMPORARY);
         TeachingMapStatus entityStatus = isDraft ? null : TeachingMapStatus.valueOf(status.name());
         TeachingMapType entityType = (type == TeachingMapType.ALL) ? null : TeachingMapType.valueOf(type.name());
 
         Sort sortOption = (sort == TeachingMapListSort.OLDEST)
-                ? Sort.by(Sort.Direction.ASC, "createdAt")
-                : Sort.by(Sort.Direction.DESC, "createdAt");
-
-        Pageable pageable = PageRequest.of(page, size, sortOption);
+                ? Sort.by(Sort.Direction.ASC, "createdAt").and(Sort.by(Sort.Direction.ASC, "id"))
+                : Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.DESC, "id"));
+        Pageable pageable = PageRequest.of(page, 10, sortOption);
 
         Page<TeachingMap> teachingMaps = teachingMapRepository.findAllByFilter(
                 userId, isDraft, entityStatus, entityType, pageable);
 
         List<Long> teachingMapIds = teachingMaps.stream().map(TeachingMap::getId).toList();
-        Map<Long, List<PlatformType>> platformTypesByTeachingMapId = stepRepository
-                .findDistinctPlatformTypesByTeachingMapIdIn(teachingMapIds).stream()
+        Map<Long, List<PlatformType>> platformTypesByTeachingMapId = teachingMapIds.isEmpty()
+                ? Map.of()
+                : stepRepository.findDistinctPlatformTypesByTeachingMapIdIn(teachingMapIds).stream()
                 .collect(Collectors.groupingBy(
                         TeachingMapPlatformProjection::getTeachingMapId,
                         Collectors.mapping(TeachingMapPlatformProjection::getPlatformType, Collectors.toList())
