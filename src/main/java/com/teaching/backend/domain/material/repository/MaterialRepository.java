@@ -191,6 +191,29 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
             @Param("userId") Long userId
     );
 
+    /** 질문 문장 안에 이 사용자의 자료 제목/태그명이 부분 문자열로 언급됐는지 역방향으로 찾는다.
+     *  챗봇 메타 질문("내 자료에 ~있어?")을 벡터 검색보다 먼저 구조화된 조회로 해결하기 위함. */
+    @Query("""
+            SELECT DISTINCT m.id
+            FROM Material m
+            LEFT JOIN MaterialTag mt ON mt.material = m
+            LEFT JOIN mt.tag t
+            WHERE m.user.id = :userId
+              AND (
+                  LOCATE(LOWER(t.name), LOWER(:question)) > 0
+                  OR LOCATE(LOWER(m.title), LOWER(:question)) > 0
+                  OR LOCATE(LOWER(m.analysisTitle), LOWER(:question)) > 0
+              )
+            """)
+    List<Long> findIdsMentionedInQuestion(
+            @Param("userId") Long userId,
+            @Param("question") String question
+    );
+
+    long countByUser_Id(Long userId);
+
+    Optional<Material> findFirstByUser_IdOrderByCreatedAtDesc(Long userId);
+
 }
 
 

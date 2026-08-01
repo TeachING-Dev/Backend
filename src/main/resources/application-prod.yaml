@@ -103,3 +103,4 @@ material:
 rag:
   top-k: ${RAG_TOP_K:5}
   similarity-threshold: ${RAG_SIMILARITY_THRESHOLD:0.3}
+  metadata-similarity-threshold: ${RAG_METADATA_SIMILARITY_THRESHOLD:0.3}

@@ -73,6 +73,25 @@ public class OpenAiClient {
         return data.embedding();
     }
 
+    // 여러 텍스트를 한 번의 API 호출로 임베딩한다. OpenAI 응답은 입력 순서를 그대로 보존한다.
+    public List<float[]> embedBatch(List<String> texts) {
+        if (texts.isEmpty()) {
+            return List.of();
+        }
+
+        EmbeddingResponse response = call(webClient.post()
+                .uri("/v1/embeddings")
+                .bodyValue(new EmbeddingRequest(embeddingModel, texts))
+                .retrieve()
+                .onStatus(HttpStatusCode::isError, this::mapError)
+                .bodyToMono(EmbeddingResponse.class));
+
+        if (response == null || response.data() == null || response.data().size() != texts.size()) {
+            throw new GeneralException(GlobalErrorCode.INTERNAL_SERVER_ERROR);
+        }
+        return response.data().stream().map(EmbeddingResponse.Data::embedding).toList();
+    }
+
     public String chatComplete(String systemPrompt, String userMessage) {
         ChatCompletionRequest request = new ChatCompletionRequest(
                 chatModel,

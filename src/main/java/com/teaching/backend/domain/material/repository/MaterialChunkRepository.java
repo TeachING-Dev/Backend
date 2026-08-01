@@ -12,5 +12,7 @@ public interface MaterialChunkRepository
 
     List<MaterialChunk> findAllByMaterial_IdOrderByChunkIndexAsc(Long materialId);
 
+    List<MaterialChunk> findAllByMaterial_IdInOrderByMaterial_IdAscChunkIndexAsc(List<Long> materialIds);
+
     boolean existsByMaterialId(Long materialId);
 }
