@@ -13,7 +13,7 @@ public record MaterialAnalyzeResponse(
         MaterialAnalyzeResultType resultType,
         Long materialId,
         Long existingMaterialId,
-        Long folderId,
+        Long existingFolderId,
         String summary,
         String originalUrl,
         String title,
@@ -37,7 +37,7 @@ public record MaterialAnalyzeResponse(
         return new MaterialAnalyzeResponse(
                 materialAnalysisId,
                 MaterialAnalyzeResultType.ALREADY_ANALYZED,
-                material.getId(),
+                null,
                 material.getId(),
                 material.getFolderId(),
 
@@ -75,7 +75,10 @@ public record MaterialAnalyzeResponse(
         );
     }
 
-    public static MaterialAnalyzeResponse completed(MaterialAiAnalysisPipelineResult result,List<MaterialTagResponse> tags) {
+    public static MaterialAnalyzeResponse completed(
+            MaterialAiAnalysisPipelineResult result,
+            List<MaterialTagResponse> tags
+    ) {
         PlatformType platformType = result.platformType();
         String title = result.extractedContent() == null ? null : result.extractedContent().title();
 
@@ -84,8 +87,8 @@ public record MaterialAnalyzeResponse(
                 MaterialAnalyzeResultType.ANALYSIS_COMPLETED,
                 result.materialId(),
                 null,
-result.folderId(),
-result.summary(),
+                null,
+                result.summary(),
                 result.originalUrl(),
                 title,
                 platformType == null ? null : platformType.name(),
