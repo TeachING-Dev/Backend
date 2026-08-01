@@ -67,8 +67,13 @@ public class FolderService {
                 folderSort
         );
 
+        Map<Long, Long> materialCountByFolderId = getMaterialCountByFolderId(folders);
+
         return folders.stream()
-                .map(FolderListResponse::from)
+                .map(folder -> FolderListResponse.of(
+                        folder,
+                        materialCountByFolderId.getOrDefault(folder.getId(), 0L)
+                ))
                 .toList();
     }
 
@@ -77,8 +82,25 @@ public class FolderService {
             Long folderId
     ) {
         Folder folder = getOwnedFolder(userId, folderId);
+        long materialCount = materialRepository.countByFolder_Id(folderId);
 
-        return FolderDetailResponse.from(folder);
+        return FolderDetailResponse.of(folder, materialCount);
+    }
+
+    private Map<Long, Long> getMaterialCountByFolderId(List<Folder> folders) {
+        if (folders.isEmpty()) {
+            return Map.of();
+        }
+
+        List<Long> folderIds = folders.stream()
+                .map(Folder::getId)
+                .toList();
+
+        return materialRepository.countGroupedByFolderIds(folderIds).stream()
+                .collect(Collectors.toMap(
+                        row -> (Long) row[0],
+                        row -> (Long) row[1]
+                ));
     }
 
     public FolderMaterialListResponse getFolderMaterials(

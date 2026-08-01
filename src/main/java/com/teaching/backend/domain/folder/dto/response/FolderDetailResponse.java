@@ -11,18 +11,12 @@ public record FolderDetailResponse(
         LocalDateTime updatedAt
 ) {
 
-    public static FolderDetailResponse from(Folder folder) {
+    public static FolderDetailResponse of(Folder folder, long materialCount) {
         return new FolderDetailResponse(
                 folder.getId(),
                 folder.getName(),
-                convertToLong(folder.getItemCount()),
+                materialCount,
                 folder.getUpdatedAt()
         );
-    }
-
-    private static Long convertToLong(Integer itemCount) {
-        return itemCount == null
-                ? 0L
-                : itemCount.longValue();
     }
 }

@@ -113,8 +113,7 @@ class MaterialUrlAnalysisServiceTest {
 
         assertThat(result.resultType()).isEqualTo(MaterialAnalyzeResultType.ALREADY_ANALYZED);
         assertThat(result.existingMaterialId()).isEqualTo(101L);
-        assertThat(result.materialId()).isNull();
-        assertThat(result.existingFolderId()).isEqualTo(FOLDER_ID);
+        assertThat(result.materialId()).isEqualTo(101L);
         assertThat(result.title()).isEqualTo("Completed");
         assertThat(result.originalUrl()).isEqualTo(URL);
         assertThat(result.platformType()).isEqualTo("VELOG");
@@ -147,8 +146,7 @@ class MaterialUrlAnalysisServiceTest {
 
         assertThat(result.resultType()).isEqualTo(MaterialAnalyzeResultType.ALREADY_ANALYZED);
         assertThat(result.existingMaterialId()).isEqualTo(101L);
-        assertThat(result.materialId()).isNull();
-        assertThat(result.existingFolderId()).isEqualTo(FOLDER_ID);
+        assertThat(result.materialId()).isEqualTo(101L);
         assertThat(result.materialAnalysisId()).isNull();
         assertThat(result.chunkCount()).isZero();
         assertThat(result.tags()).isEmpty();
@@ -173,8 +171,7 @@ class MaterialUrlAnalysisServiceTest {
         );
 
         assertThat(result.existingMaterialId()).isEqualTo(102L);
-        assertThat(result.materialId()).isNull();
-        assertThat(result.existingFolderId()).isEqualTo(FOLDER_ID);
+        assertThat(result.materialId()).isEqualTo(102L);
         assertThat(result.title()).isEqualTo("Newer");
         verify(materialContentExtractorRegistry, never()).extract(any(), anyString());
         verify(materialAiAnalysisOrchestrator, never()).analyze(any());
@@ -183,8 +180,6 @@ class MaterialUrlAnalysisServiceTest {
     @Test
     void forceAnalyzeTrueRunsNewPipelineWithoutUsingConcurrencyGuard() {
         givenValidRequest();
-        when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
-                .thenReturn(List.of());
         givenSuccessfulExtraction();
         givenSuccessfulPipeline();
         when(materialTagRepository.findAllByMaterialId(200L))
@@ -197,7 +192,6 @@ class MaterialUrlAnalysisServiceTest {
 
         assertThat(result.resultType()).isEqualTo(MaterialAnalyzeResultType.ANALYSIS_COMPLETED);
         assertThat(result.existingMaterialId()).isNull();
-        assertThat(result.existingFolderId()).isNull();
         assertThat(result.materialId()).isEqualTo(200L);
         assertThat(result.materialAnalysisId()).isEqualTo(300L);
         assertThat(result.originalUrl()).isEqualTo(URL);
@@ -208,34 +202,6 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(result.recommendedFolderName()).isEqualTo("Backend");
         assertThat(result.tags()).singleElement()
                 .satisfies(tag -> assertThat(tag.tagName()).isEqualTo("Spring"));
-        verify(materialUrlAnalysisConcurrencyGuard, never()).executeSerialized(any(), anyString(), any(), any());
-        verify(materialRepository).findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL);
-        verify(materialContentExtractorRegistry).extract(PlatformType.VELOG, URL);
-        verify(materialAiAnalysisOrchestrator).analyze(any(MaterialAnalysisPreparationResult.class));
-    }
-
-    @Test
-    void forceAnalyzeTrueReturnsExistingMaterialReferenceWhenCompletedMaterialExists() {
-        Material existingCompleted = material(101L, "Existing", URL, PlatformType.VELOG, AiStatus.COMPLETED, createdAt(1));
-        givenValidRequest();
-        when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
-                .thenReturn(List.of(existingCompleted));
-        givenSuccessfulExtraction();
-        givenSuccessfulPipeline();
-        when(materialTagRepository.findAllByMaterialId(200L))
-                .thenReturn(List.of(materialTag(null, 501L, "Spring")));
-
-        MaterialAnalyzeResponse result = materialUrlAnalysisService.analyze(
-                USER_ID,
-                new MaterialAnalyzeRequest(URL, true)
-        );
-
-        assertThat(result.resultType()).isEqualTo(MaterialAnalyzeResultType.ANALYSIS_COMPLETED);
-        assertThat(result.materialId()).isEqualTo(200L);
-        assertThat(result.existingMaterialId()).isEqualTo(101L);
-        assertThat(result.existingFolderId()).isEqualTo(FOLDER_ID);
-        assertThat(result.recommendedFolderId()).isEqualTo(RECOMMENDED_FOLDER_ID);
-        assertThat(result.recommendedFolderName()).isEqualTo("Backend");
         verify(materialUrlAnalysisConcurrencyGuard, never()).executeSerialized(any(), anyString(), any(), any());
         verify(materialContentExtractorRegistry).extract(PlatformType.VELOG, URL);
         verify(materialAiAnalysisOrchestrator).analyze(any(MaterialAnalysisPreparationResult.class));
@@ -259,7 +225,6 @@ class MaterialUrlAnalysisServiceTest {
 
         assertThat(result.resultType()).isEqualTo(MaterialAnalyzeResultType.ANALYSIS_COMPLETED);
         assertThat(result.existingMaterialId()).isNull();
-        assertThat(result.existingFolderId()).isNull();
         assertThat(result.materialId()).isEqualTo(200L);
         assertThat(result.materialAnalysisId()).isEqualTo(300L);
         assertThat(result.status()).isEqualTo("COMPLETED");
@@ -313,8 +278,7 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(first.resultType()).isEqualTo(MaterialAnalyzeResultType.ANALYSIS_COMPLETED);
         assertThat(second.resultType()).isEqualTo(MaterialAnalyzeResultType.ALREADY_ANALYZED);
         assertThat(second.existingMaterialId()).isEqualTo(200L);
-        assertThat(second.materialId()).isNull();
-        assertThat(second.existingFolderId()).isEqualTo(FOLDER_ID);
+        assertThat(second.materialId()).isEqualTo(200L);
         assertThat(second.materialAnalysisId()).isEqualTo(300L);
         assertThat(second.chunkCount()).isEqualTo(2);
         assertThat(second.tags()).singleElement()
@@ -491,8 +455,8 @@ class MaterialUrlAnalysisServiceTest {
                     return new MaterialAiAnalysisPipelineResult(
                             200L,
                             USER_ID,
-                            FOLDER_ID,
-                            "summary",
+                            null,
+                            "Summary",
                             YOUTUBE_URL,
                             PlatformType.YOUTUBE,
                             preparationResult.extractedContent(),
@@ -521,8 +485,6 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(captor.getValue().extractedContent().content())
                 .isEqualTo("YouTube transcript text from official captions");
         assertThat(result.platformType()).isEqualTo("YOUTUBE");
-        assertThat(result.existingFolderId()).isNull();
-        assertThat(result.recommendedFolderId()).isEqualTo(RECOMMENDED_FOLDER_ID);
         assertThat(result.tags()).singleElement()
                 .satisfies(tag -> assertThat(tag.tagName()).isEqualTo("YouTube"));
     }
@@ -609,8 +571,8 @@ class MaterialUrlAnalysisServiceTest {
         return new MaterialAiAnalysisPipelineResult(
                 200L,
                 USER_ID,
-                FOLDER_ID,
-                "summary",
+                null,
+                "Summary",
                 URL,
                 PlatformType.VELOG,
                 extractedContent,

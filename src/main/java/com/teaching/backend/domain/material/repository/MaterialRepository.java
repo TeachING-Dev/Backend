@@ -215,6 +215,11 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
 
     Optional<Material> findFirstByUser_IdOrderByCreatedAtDesc(Long userId);
 
+    long countByFolder_Id(Long folderId);
+
+    @Query("SELECT m.folder.id, COUNT(m) FROM Material m WHERE m.folder.id IN :folderIds GROUP BY m.folder.id")
+    List<Object[]> countGroupedByFolderIds(@Param("folderIds") List<Long> folderIds);
+
 }
 
 
