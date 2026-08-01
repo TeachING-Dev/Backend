@@ -79,6 +79,14 @@ public record MaterialAnalyzeResponse(
             MaterialAiAnalysisPipelineResult result,
             List<MaterialTagResponse> tags
     ) {
+        return completed(result, tags, null);
+    }
+
+    public static MaterialAnalyzeResponse completed(
+            MaterialAiAnalysisPipelineResult result,
+            List<MaterialTagResponse> tags,
+            Material existingMaterial
+    ) {
         PlatformType platformType = result.platformType();
         String title = result.extractedContent() == null ? null : result.extractedContent().title();
 
@@ -86,8 +94,8 @@ public record MaterialAnalyzeResponse(
                 result.materialAnalysisId(),
                 MaterialAnalyzeResultType.ANALYSIS_COMPLETED,
                 result.materialId(),
-                null,
-                null,
+                existingMaterial == null ? null : existingMaterial.getId(),
+                existingMaterial == null ? null : existingMaterial.getFolderId(),
                 result.summary(),
                 result.originalUrl(),
                 title,

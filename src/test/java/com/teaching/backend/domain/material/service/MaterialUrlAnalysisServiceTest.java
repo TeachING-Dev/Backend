@@ -183,6 +183,8 @@ class MaterialUrlAnalysisServiceTest {
     @Test
     void forceAnalyzeTrueRunsNewPipelineWithoutUsingConcurrencyGuard() {
         givenValidRequest();
+        when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
+                .thenReturn(List.of());
         givenSuccessfulExtraction();
         givenSuccessfulPipeline();
         when(materialTagRepository.findAllByMaterialId(200L))
@@ -206,6 +208,34 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(result.recommendedFolderName()).isEqualTo("Backend");
         assertThat(result.tags()).singleElement()
                 .satisfies(tag -> assertThat(tag.tagName()).isEqualTo("Spring"));
+        verify(materialUrlAnalysisConcurrencyGuard, never()).executeSerialized(any(), anyString(), any(), any());
+        verify(materialRepository).findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL);
+        verify(materialContentExtractorRegistry).extract(PlatformType.VELOG, URL);
+        verify(materialAiAnalysisOrchestrator).analyze(any(MaterialAnalysisPreparationResult.class));
+    }
+
+    @Test
+    void forceAnalyzeTrueReturnsExistingMaterialReferenceWhenCompletedMaterialExists() {
+        Material existingCompleted = material(101L, "Existing", URL, PlatformType.VELOG, AiStatus.COMPLETED, createdAt(1));
+        givenValidRequest();
+        when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
+                .thenReturn(List.of(existingCompleted));
+        givenSuccessfulExtraction();
+        givenSuccessfulPipeline();
+        when(materialTagRepository.findAllByMaterialId(200L))
+                .thenReturn(List.of(materialTag(null, 501L, "Spring")));
+
+        MaterialAnalyzeResponse result = materialUrlAnalysisService.analyze(
+                USER_ID,
+                new MaterialAnalyzeRequest(URL, true)
+        );
+
+        assertThat(result.resultType()).isEqualTo(MaterialAnalyzeResultType.ANALYSIS_COMPLETED);
+        assertThat(result.materialId()).isEqualTo(200L);
+        assertThat(result.existingMaterialId()).isEqualTo(101L);
+        assertThat(result.existingFolderId()).isEqualTo(FOLDER_ID);
+        assertThat(result.recommendedFolderId()).isEqualTo(RECOMMENDED_FOLDER_ID);
+        assertThat(result.recommendedFolderName()).isEqualTo("Backend");
         verify(materialUrlAnalysisConcurrencyGuard, never()).executeSerialized(any(), anyString(), any(), any());
         verify(materialContentExtractorRegistry).extract(PlatformType.VELOG, URL);
         verify(materialAiAnalysisOrchestrator).analyze(any(MaterialAnalysisPreparationResult.class));
