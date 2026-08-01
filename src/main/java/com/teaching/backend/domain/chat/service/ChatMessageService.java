@@ -93,11 +93,12 @@ public class ChatMessageService {
             throw e;
         }
 
-        // 청크가 검색됐어도, LLM이 그 내용으론 답을 못 찾아 프롬프트 규칙대로 FALLBACK_PREFIX로
+        // 청크가 검색됐어도, LLM이 그 내용으론 답을 못 찾아 프롬프트 규칙대로 fallback 문구로
         // 답했다면 실질적으로는 fallback이다. 검색 결과 유무만으로 판단하면 관련 없는 자료가
         // "답변 출처"로 잘못 붙는 문제가 있어, 실제 답변 텍스트도 함께 확인한다.
+        // FALLBACK_PREFIX 전체가 아니라 짧은 FALLBACK_MARKER로 비교하는 이유는 RagPromptTemplate 참고.
         boolean isFallback = relevantChunks.isEmpty()
-                || answer.strip().startsWith(RagPromptTemplate.FALLBACK_PREFIX);
+                || answer.strip().startsWith(RagPromptTemplate.FALLBACK_MARKER);
 
         return chatAskWriter.finalizeAnswer(reservation, answer, isFallback, relevantChunks);
     }

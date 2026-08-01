@@ -13,6 +13,11 @@ public class RagPromptTemplate {
 
     public static final String FALLBACK_PREFIX = "내 자료에는 없지만, 일반적인 지식에 따르면...";
 
+    // LLM이 FALLBACK_PREFIX 전체를 토씨/말줄임표까지 그대로 재현한다고 보장할 수 없어(자연스럽게
+    // 다음 문장으로 이어가며 "..."를 생략하는 경우가 흔함), fallback 여부를 판단할 때는 항상
+    // 안정적으로 재현되는 이 짧은 접두어만 사용한다.
+    public static final String FALLBACK_MARKER = "내 자료에는 없지만";
+
     private static final String TEMPLATE = """
             System Role:
             당신은 사용자가 저장한 지식 베이스만을 바탕으로 답변하는 '지식 전문가'입니다. 반드시 제공된 [참조 자료] 내에서만 근거를 찾아 답변하십시오.
