@@ -167,6 +167,7 @@ public class FolderService {
                 .orElseThrow(() -> resolveTrashLookupException(userId, folderId));
 
         folder.delete();
+        materialRepository.trashMaterialsByFolder(folderId, userId);
 
         return FolderTrashResponse.from(folder);
     }

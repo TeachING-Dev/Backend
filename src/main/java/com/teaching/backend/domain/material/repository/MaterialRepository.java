@@ -62,16 +62,44 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
             @Param("userId") Long userId
     );
 
+    /** 자료 자신이 휴지통 상태이면서, 상위 폴더는 휴지통이 아닌(또는 폴더가 없는) 것만 노출한다.
+     *  폴더 삭제로 함께 휴지통 처리된 자료는 폴더 휴지통 목록에만 나타나야 하므로 여기서 제외한다. */
     @Query(
-            value = "SELECT * FROM materials WHERE user_id = :userId AND deleted_at IS NOT NULL ORDER BY deleted_at DESC, id DESC",
-            countQuery = "SELECT COUNT(*) FROM materials WHERE user_id = :userId AND deleted_at IS NOT NULL",
+            value = """
+                    SELECT m.* FROM materials m
+                    LEFT JOIN folders f ON f.id = m.folder_id
+                    WHERE m.user_id = :userId
+                      AND m.deleted_at IS NOT NULL
+                      AND (m.folder_id IS NULL OR f.deleted_at IS NULL)
+                    ORDER BY m.deleted_at DESC, m.id DESC
+                    """,
+            countQuery = """
+                    SELECT COUNT(*) FROM materials m
+                    LEFT JOIN folders f ON f.id = m.folder_id
+                    WHERE m.user_id = :userId
+                      AND m.deleted_at IS NOT NULL
+                      AND (m.folder_id IS NULL OR f.deleted_at IS NULL)
+                    """,
             nativeQuery = true
     )
     Page<Material> findTrashedByUserIdOrderByDeletedAtDesc(@Param("userId") Long userId, Pageable pageable);
 
     @Query(
-            value = "SELECT * FROM materials WHERE user_id = :userId AND deleted_at IS NOT NULL ORDER BY deleted_at ASC, id ASC",
-            countQuery = "SELECT COUNT(*) FROM materials WHERE user_id = :userId AND deleted_at IS NOT NULL",
+            value = """
+                    SELECT m.* FROM materials m
+                    LEFT JOIN folders f ON f.id = m.folder_id
+                    WHERE m.user_id = :userId
+                      AND m.deleted_at IS NOT NULL
+                      AND (m.folder_id IS NULL OR f.deleted_at IS NULL)
+                    ORDER BY m.deleted_at ASC, m.id ASC
+                    """,
+            countQuery = """
+                    SELECT COUNT(*) FROM materials m
+                    LEFT JOIN folders f ON f.id = m.folder_id
+                    WHERE m.user_id = :userId
+                      AND m.deleted_at IS NOT NULL
+                      AND (m.folder_id IS NULL OR f.deleted_at IS NULL)
+                    """,
             nativeQuery = true
     )
     Page<Material> findTrashedByUserIdOrderByDeletedAtAsc(@Param("userId") Long userId, Pageable pageable);
@@ -144,6 +172,24 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
     );
 
     List<Material> findAllByFolder_Id(Long folderId);
+
+    /** 폴더 삭제 시 그 폴더에 속한(아직 활성 상태인) 자료를 전부 휴지통 상태로 전환한다. */
+    @Modifying
+    @Query(
+            value = """
+                    UPDATE materials
+                    SET deleted_at = CURRENT_TIMESTAMP,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE folder_id = :folderId
+                      AND user_id = :userId
+                      AND deleted_at IS NULL
+                    """,
+            nativeQuery = true
+    )
+    int trashMaterialsByFolder(
+            @Param("folderId") Long folderId,
+            @Param("userId") Long userId
+    );
 
 }
 
