@@ -238,7 +238,7 @@ class MaterialServiceTest {
         Material material = materialWithoutFolder(101L, USER_ID, "Material", PlatformType.WEB, AiStatus.COMPLETED, createdAt(1));
         Folder finalFolder = folder(USER_ID, 20L);
         when(materialRepository.findByIdAndUser_Id(101L, USER_ID)).thenReturn(Optional.of(material));
-        when(folderRepository.findByIdAndUser_Id(20L, USER_ID)).thenReturn(Optional.of(finalFolder));
+        when(folderRepository.findByIdAndUser_IdForUpdate(20L, USER_ID)).thenReturn(Optional.of(finalFolder));
         when(materialTagRepository.findAllWithTagByMaterialIds(List.of(101L))).thenReturn(List.of());
 
         TransactionSynchronizationManager.initSynchronization();
@@ -267,7 +267,7 @@ class MaterialServiceTest {
     void finalizeMaterialRejectsMissingFolder() {
         Material material = materialWithoutFolder(101L, USER_ID, "Material", PlatformType.WEB, AiStatus.COMPLETED, createdAt(1));
         when(materialRepository.findByIdAndUser_Id(101L, USER_ID)).thenReturn(Optional.of(material));
-        when(folderRepository.findByIdAndUser_Id(20L, USER_ID)).thenReturn(Optional.empty());
+        when(folderRepository.findByIdAndUser_IdForUpdate(20L, USER_ID)).thenReturn(Optional.empty());
         when(folderRepository.existsById(20L)).thenReturn(false);
 
         assertFolderExceptionThrown(
@@ -287,7 +287,7 @@ class MaterialServiceTest {
     void finalizeMaterialRejectsOtherUsersFolder() {
         Material material = materialWithoutFolder(101L, USER_ID, "Material", PlatformType.WEB, AiStatus.COMPLETED, createdAt(1));
         when(materialRepository.findByIdAndUser_Id(101L, USER_ID)).thenReturn(Optional.of(material));
-        when(folderRepository.findByIdAndUser_Id(20L, USER_ID)).thenReturn(Optional.empty());
+        when(folderRepository.findByIdAndUser_IdForUpdate(20L, USER_ID)).thenReturn(Optional.empty());
         when(folderRepository.existsById(20L)).thenReturn(true);
 
         assertFolderExceptionThrown(
@@ -355,7 +355,7 @@ class MaterialServiceTest {
         MaterialTag second = materialTagWithTagId(material, 1002L, "b");
         MaterialTag third = materialTagWithTagId(material, 1003L, "c");
         when(materialRepository.findByIdAndUser_Id(101L, USER_ID)).thenReturn(Optional.of(material));
-        when(folderRepository.findByIdAndUser_Id(20L, USER_ID)).thenReturn(Optional.of(finalFolder));
+        when(folderRepository.findByIdAndUser_IdForUpdate(20L, USER_ID)).thenReturn(Optional.of(finalFolder));
         when(materialTagRepository.findAllWithTagByMaterialIds(List.of(101L))).thenReturn(List.of(first, second, third));
         when(tagRepository.findAllById(List.of(1001L, 1003L))).thenReturn(List.of(first.getTag(), third.getTag()));
 
@@ -392,7 +392,7 @@ class MaterialServiceTest {
         Folder finalFolder = folder(USER_ID, 20L);
         MaterialTag first = materialTagWithTagId(material, 1001L, "a");
         when(materialRepository.findByIdAndUser_Id(101L, USER_ID)).thenReturn(Optional.of(material));
-        when(folderRepository.findByIdAndUser_Id(20L, USER_ID)).thenReturn(Optional.of(finalFolder));
+        when(folderRepository.findByIdAndUser_IdForUpdate(20L, USER_ID)).thenReturn(Optional.of(finalFolder));
         when(materialTagRepository.findAllWithTagByMaterialIds(List.of(101L))).thenReturn(List.of(first));
         when(tagRepository.findAllById(List.of(1001L))).thenReturn(List.of(first.getTag()));
 
@@ -423,7 +423,7 @@ class MaterialServiceTest {
         Folder finalFolder = folder(USER_ID, 20L);
         MaterialTag first = materialTagWithTagId(material, 1001L, "a");
         when(materialRepository.findByIdAndUser_Id(101L, USER_ID)).thenReturn(Optional.of(material));
-        when(folderRepository.findByIdAndUser_Id(20L, USER_ID)).thenReturn(Optional.of(finalFolder));
+        when(folderRepository.findByIdAndUser_IdForUpdate(20L, USER_ID)).thenReturn(Optional.of(finalFolder));
         when(materialTagRepository.findAllWithTagByMaterialIds(List.of(101L))).thenReturn(List.of(first));
         when(tagRepository.findAllById(List.of(1001L))).thenReturn(List.of(first.getTag()));
 
@@ -452,7 +452,7 @@ class MaterialServiceTest {
         Folder sameFolder = material.getFolder();
         MaterialTag first = materialTagWithTagId(material, 1001L, "a");
         when(materialRepository.findByIdAndUser_Id(101L, USER_ID)).thenReturn(Optional.of(material));
-        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(sameFolder));
+        when(folderRepository.findByIdAndUser_IdForUpdate(FOLDER_ID, USER_ID)).thenReturn(Optional.of(sameFolder));
         when(materialTagRepository.findAllWithTagByMaterialIds(List.of(101L))).thenReturn(List.of(first));
         when(tagRepository.findAllById(List.of(1001L))).thenReturn(List.of(first.getTag()));
 
@@ -478,7 +478,7 @@ class MaterialServiceTest {
         Folder finalFolder = folder(USER_ID, 20L);
         MaterialTag first = materialTagWithTagId(material, 1001L, "a");
         when(materialRepository.findByIdAndUser_Id(101L, USER_ID)).thenReturn(Optional.of(material));
-        when(folderRepository.findByIdAndUser_Id(20L, USER_ID)).thenReturn(Optional.of(finalFolder));
+        when(folderRepository.findByIdAndUser_IdForUpdate(20L, USER_ID)).thenReturn(Optional.of(finalFolder));
         when(materialTagRepository.findAllWithTagByMaterialIds(List.of(101L))).thenReturn(List.of(first));
         when(tagRepository.findAllById(List.of(1001L))).thenReturn(List.of(first.getTag()));
 
@@ -502,7 +502,7 @@ class MaterialServiceTest {
         Folder finalFolder = folder(USER_ID, 20L);
         MaterialTag first = materialTagWithTagId(material, 1001L, "a");
         when(materialRepository.findByIdAndUser_Id(101L, USER_ID)).thenReturn(Optional.of(material));
-        when(folderRepository.findByIdAndUser_Id(20L, USER_ID)).thenReturn(Optional.of(finalFolder));
+        when(folderRepository.findByIdAndUser_IdForUpdate(20L, USER_ID)).thenReturn(Optional.of(finalFolder));
         when(materialTagRepository.findAllWithTagByMaterialIds(List.of(101L))).thenReturn(List.of(first));
         when(tagRepository.findAllById(List.of(1001L))).thenReturn(List.of(first.getTag()));
         doThrow(new RuntimeException("qdrant down"))
@@ -534,7 +534,7 @@ class MaterialServiceTest {
         Folder sameFolder = material.getFolder();
         MaterialTag first = materialTagWithTagId(material, 1001L, "a");
         when(materialRepository.findByIdAndUser_Id(101L, USER_ID)).thenReturn(Optional.of(material));
-        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(sameFolder));
+        when(folderRepository.findByIdAndUser_IdForUpdate(FOLDER_ID, USER_ID)).thenReturn(Optional.of(sameFolder));
         when(materialTagRepository.findAllWithTagByMaterialIds(List.of(101L))).thenReturn(List.of(first));
 
         MaterialFinalizeResponse response = materialService.finalizeMaterial(
@@ -558,7 +558,7 @@ class MaterialServiceTest {
         MaterialTag collaboration = materialTagWithTagId(material, 68L, "협업");
         Tag api = tag(56L, "API");
         when(materialRepository.findByIdAndUser_Id(327L, USER_ID)).thenReturn(Optional.of(material));
-        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(sameFolder));
+        when(folderRepository.findByIdAndUser_IdForUpdate(FOLDER_ID, USER_ID)).thenReturn(Optional.of(sameFolder));
         when(materialTagRepository.findAllWithTagByMaterialIds(List.of(327L)))
                 .thenReturn(List.of(spec, endpoint, social, collaboration));
         when(tagRepository.findAllById(List.of(56L, 65L, 66L, 67L, 68L)))
@@ -596,7 +596,7 @@ class MaterialServiceTest {
         MaterialTag otherRelation = MaterialTag.create(otherMaterial, sharedApi);
         MaterialTag keptRelation = materialTagWithTagId(material, 65L, "명세서");
         when(materialRepository.findByIdAndUser_Id(327L, USER_ID)).thenReturn(Optional.of(material));
-        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(sameFolder));
+        when(folderRepository.findByIdAndUser_IdForUpdate(FOLDER_ID, USER_ID)).thenReturn(Optional.of(sameFolder));
         when(materialTagRepository.findAllWithTagByMaterialIds(List.of(327L)))
                 .thenReturn(List.of(currentRelation, keptRelation));
         when(tagRepository.findAllById(List.of(65L))).thenReturn(List.of(keptRelation.getTag()));
@@ -619,7 +619,7 @@ class MaterialServiceTest {
         Folder finalFolder = folder(USER_ID, 20L);
         MaterialTag first = materialTagWithTagId(material, 1001L, "a");
         when(materialRepository.findByIdAndUser_Id(101L, USER_ID)).thenReturn(Optional.of(material));
-        when(folderRepository.findByIdAndUser_Id(20L, USER_ID)).thenReturn(Optional.of(finalFolder));
+        when(folderRepository.findByIdAndUser_IdForUpdate(20L, USER_ID)).thenReturn(Optional.of(finalFolder));
         when(materialTagRepository.findAllWithTagByMaterialIds(List.of(101L))).thenReturn(List.of(first));
         when(tagRepository.findAllById(List.of(9999L))).thenReturn(List.of());
 

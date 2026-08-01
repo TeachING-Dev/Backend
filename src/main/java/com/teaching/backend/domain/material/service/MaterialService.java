@@ -153,7 +153,7 @@ public class MaterialService {
 
         Material material = materialRepository.findByIdAndUser_Id(materialId, userId)
                 .orElseThrow(() -> resolveMaterialLookupException(materialId));
-        Folder finalFolder = folderRepository.findByIdAndUser_Id(finalFolderId, userId)
+        Folder finalFolder = folderRepository.findByIdAndUser_IdForUpdate(finalFolderId, userId)
                 .orElseThrow(() -> resolveFolderLookupException(finalFolderId));
         List<MaterialTag> currentTags = materialTagRepository.findAllWithTagByMaterialIds(List.of(materialId));
         List<Long> finalTagIds = normalizeFinalTagIds(request == null ? null : request.tagIds());

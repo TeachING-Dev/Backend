@@ -1,10 +1,12 @@
 package com.teaching.backend.domain.folder.repository;
 
 import com.teaching.backend.domain.folder.entity.Folder;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -36,6 +38,15 @@ public interface FolderRepository extends JpaRepository<Folder, Long> {
     Optional<Folder> findByIdAndUser_Id(
             Long folderId,
             Long userId
+    );
+
+    /** 폴더 삭제(trash)와 그 폴더로의 자료 배치(finalize/move)가 동시에 일어나 활성 자료가
+     *  이미 삭제된 폴더에 남는 경쟁 조건을 막기 위해, 두 흐름이 같은 폴더 행을 잠그고 순서대로 처리하게 한다. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT f FROM Folder f WHERE f.id = :folderId AND f.user.id = :userId")
+    Optional<Folder> findByIdAndUser_IdForUpdate(
+            @Param("folderId") Long folderId,
+            @Param("userId") Long userId
     );
 
     Optional<Folder> findByUser_IdAndName(
