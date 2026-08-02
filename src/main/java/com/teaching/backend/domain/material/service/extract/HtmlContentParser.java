@@ -135,7 +135,30 @@ public class HtmlContentParser {
 
     private boolean hasNoiseSignal(Element element) {
         String value = (element.className() + " " + element.id()).toLowerCase(Locale.ROOT);
-        return NOISE_SIGNALS.stream().anyMatch(value::contains);
+        return NOISE_SIGNALS.stream().anyMatch(signal -> hasNoiseSignal(value, signal));
+    }
+
+    private boolean hasNoiseSignal(String value, String signal) {
+        if (signal.endsWith("-") || signal.endsWith("_")) {
+            return value.contains(signal);
+        }
+        if (signal.equals("advertisement")
+                || signal.equals("banner")
+                || signal.equals("sponsor")
+                || signal.equals("sidebar")
+                || signal.equals("recommend")
+                || signal.equals("related")
+                || signal.equals("pagination")) {
+            return value.contains(signal);
+        }
+
+        String[] tokens = value.split("[^a-z0-9]+");
+        for (String token : tokens) {
+            if (token.equals(signal) || token.equals(signal + "s")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Optional<String> metaContent(Document document, String attributeName, String attributeValue) {

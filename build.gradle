@@ -53,6 +53,7 @@ dependencies {
     implementation 'io.projectreactor.netty:reactor-netty-http'
     implementation 'org.jsoup:jsoup:1.18.3'
     implementation 'io.github.thoroldvix:youtube-transcript-api:0.4.0'
+    implementation 'org.seleniumhq.selenium:selenium-java:4.27.0'
 
     // AWS S3 (프로필 이미지 업로드) - 배포에 이미 쓰는 AWS 계정/리전 그대로 사용
     implementation 'software.amazon.awssdk:s3:2.29.31'

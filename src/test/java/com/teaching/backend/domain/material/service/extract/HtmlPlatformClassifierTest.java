@@ -30,9 +30,8 @@ class HtmlPlatformClassifierTest {
                 """
                         <html><body>
                           <main class="board">
-                            <div>작성자 teacher</div>
-                            <div>작성일 2026-07-24</div>
-                            <section>댓글 목록</section>
+                            <div data-clubid="1" data-articleid="123">community post</div>
+                            <section>reply list</section>
                           </main>
                         </body></html>
                         """
@@ -50,7 +49,7 @@ class HtmlPlatformClassifierTest {
     @Test
     void doesNotClassifyWhenSignalsAreInsufficient() {
         assertThat(classifier.classify(
-                "https://example.com/article-like",
+                "https://example.com/page-like",
                 "<html><body><article>Only article tag</article></body></html>"
         )).isEmpty();
     }
@@ -65,5 +64,23 @@ class HtmlPlatformClassifierTest {
                 "https://cafe.naver.com/example/1",
                 "<html></html>"
         )).contains(PlatformType.CAFE);
+    }
+
+    @Test
+    void doesNotClassifyGeneralArticleMetadataAsCafe() {
+        assertThat(classifier.classify(
+                "https://www.hanbit.co.kr/channel/view.html?cmscode=CMS7876574876",
+                """
+                        <html><head>
+                          <meta name="author" content="writer">
+                          <meta property="article:published_time" content="2026-07-24T10:00:00+09:00">
+                        </head><body>
+                          <main>
+                            <article>General article body with comments and reply section metadata.</article>
+                            <section class="comments">comments</section>
+                          </main>
+                        </body></html>
+                        """
+        )).isEmpty();
     }
 }

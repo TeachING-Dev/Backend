@@ -33,6 +33,10 @@ class MaterialPlatformResolverTest {
                 .isEqualTo(PlatformType.NOTION);
         assertThat(resolver.resolve(null, "https://www.notion.so/page"))
                 .isEqualTo(PlatformType.NOTION);
+        assertThat(resolver.resolve(null, "https://notion.site/page"))
+                .isEqualTo(PlatformType.NOTION);
+        assertThat(resolver.resolve(null, "https://shinmini.notion.site/BE-6b1862e1557a4403a65ffe4df97fb3cc"))
+                .isEqualTo(PlatformType.NOTION);
     }
 
     @Test
@@ -52,11 +56,11 @@ class MaterialPlatformResolverTest {
     }
 
     @Test
-    void resolvesRepresentativeCafeUrl() {
+    void resolvesRepresentativeCafeUrlAsWebForNewAnalysisPolicy() {
         assertThat(resolver.resolve(null, "https://cafe.naver.com/example/1"))
-                .isEqualTo(PlatformType.CAFE);
+                .isEqualTo(PlatformType.WEB);
         assertThat(resolver.resolve(null, "https://cafe.daum.net/example/1"))
-                .isEqualTo(PlatformType.CAFE);
+                .isEqualTo(PlatformType.WEB);
     }
 
     @Test
@@ -86,6 +90,8 @@ class MaterialPlatformResolverTest {
         assertThat(resolver.resolve(null, "https://youtube.com.evil.com/page"))
                 .isEqualTo(PlatformType.WEB);
         assertThat(resolver.resolve(null, "https://notion.so.evil.com/page"))
+                .isEqualTo(PlatformType.WEB);
+        assertThat(resolver.resolve(null, "https://notion.site.evil.com/page"))
                 .isEqualTo(PlatformType.WEB);
         assertThat(resolver.resolve(null, "https://velog.io.evil.com/page"))
                 .isEqualTo(PlatformType.WEB);

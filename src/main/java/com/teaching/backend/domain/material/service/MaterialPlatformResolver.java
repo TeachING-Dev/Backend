@@ -34,11 +34,12 @@ public class MaterialPlatformResolver {
         if (isDomainOrSubdomain(normalizedHost, "velog.io")) {
             return PlatformType.VELOG;
         }
-        if (isDomainOrSubdomain(normalizedHost, "notion.so")) {
+        if (isDomainOrSubdomain(normalizedHost, "notion.so")
+                || isDomainOrSubdomain(normalizedHost, "notion.site")) {
             return PlatformType.NOTION;
         }
         if (isCafeHost(normalizedHost)) {
-            return PlatformType.CAFE;
+            return PlatformType.WEB;
         }
         if (isBlogHost(normalizedHost)) {
             return PlatformType.BLOG;

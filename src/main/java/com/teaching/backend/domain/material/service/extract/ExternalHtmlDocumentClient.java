@@ -34,6 +34,7 @@ import java.util.Locale;
 public class ExternalHtmlDocumentClient {
 
     private static final int MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+    static final int MAX_RESPONSE_HEADER_BYTES = 64 * 1024;
     private static final int ERROR_BODY_LOG_LIMIT = 500;
 
     private final WebClient webClient;
@@ -50,7 +51,7 @@ public class ExternalHtmlDocumentClient {
     ) {
         this.hostAddressResolver = hostAddressResolver;
         this.responseTimeout = Duration.ofMillis(responseTimeoutMs);
-        this.httpClient = HttpClient.create()
+        this.httpClient = configureExtractionHttpClient(HttpClient.create())
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeoutMs)
                 .responseTimeout(responseTimeout);
 
@@ -111,7 +112,8 @@ public class ExternalHtmlDocumentClient {
                                             host,
                                             statusCode,
                                             body,
-                                            null
+                                            null,
+                                            isRecoverableStatus(statusCode)
                                     ));
                         }
 
@@ -124,7 +126,8 @@ public class ExternalHtmlDocumentClient {
                                             host,
                                             statusCode,
                                             body,
-                                            null
+                                            null,
+                                            false
                                     ));
                         }
 
@@ -136,31 +139,38 @@ public class ExternalHtmlDocumentClient {
                                             host,
                                             statusCode,
                                             "contentLength=" + contentLength,
-                                            null
+                                            null,
+                                            false
                                     ));
                         }
 
                         return response.bodyToMono(String.class)
                                 .map(body -> {
                                     if (body == null || body.isBlank()) {
-                                        throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EMPTY);
+                                        throw new HtmlFetchException(
+                                                MaterialErrorCode.MATERIAL_CONTENT_EMPTY,
+                                                true
+                                        );
                                     }
                                     if (body.length() > MAX_RESPONSE_BYTES) {
-                                        throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
+                                        throw new HtmlFetchException(
+                                                MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED,
+                                                false
+                                        );
                                     }
                                     return new HtmlDocument(originalUrl, body, contentType.toString());
                                 });
                     })
                     .block(responseTimeout);
             if (document == null) {
-                throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EMPTY);
+                throw new HtmlFetchException(MaterialErrorCode.MATERIAL_CONTENT_EMPTY, true);
             }
             return document;
         } catch (MaterialException e) {
             throw e;
         } catch (RuntimeException e) {
             logExtractionFailure("fetch", host, null, null, e);
-            throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED, e);
+            throw new HtmlFetchException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED, e, true);
         }
     }
 
@@ -173,17 +183,17 @@ public class ExternalHtmlDocumentClient {
         try {
             uri = URI.create(originalUrl);
         } catch (IllegalArgumentException e) {
-            throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED, e);
+            throw new HtmlFetchException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED, e, false);
         }
 
         String scheme = uri.getScheme();
         if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) {
-            throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
+            throw new HtmlFetchException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED, false);
         }
 
         String host = uri.getHost();
         if (host == null || host.isBlank() || (blockPrivateNetwork && isBlockedHost(host))) {
-            throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
+            throw new HtmlFetchException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED, false);
         }
 
         List<InetAddress> addresses = List.of();
@@ -229,13 +239,13 @@ public class ExternalHtmlDocumentClient {
         try {
             return List.copyOf(hostAddressResolver.resolve(host));
         } catch (UnknownHostException e) {
-            throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED, e);
+            throw new HtmlFetchException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED, e, false);
         }
     }
 
     private void validateResolvedAddresses(List<InetAddress> addresses) {
         if (addresses.isEmpty() || addresses.stream().anyMatch(this::isBlockedAddress)) {
-            throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
+            throw new HtmlFetchException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED, false);
         }
     }
 
@@ -283,6 +293,7 @@ public class ExternalHtmlDocumentClient {
                     new PinnedHostAddressResolverGroup(target.host(), target.addresses())
             );
         }
+        requestHttpClient = configureExtractionHttpClient(requestHttpClient);
 
         return WebClient.builder()
                 .exchangeStrategies(ExchangeStrategies.builder()
@@ -290,6 +301,14 @@ public class ExternalHtmlDocumentClient {
                         .build())
                 .clientConnector(new ReactorClientHttpConnector(requestHttpClient))
                 .build();
+    }
+
+    private HttpClient configureExtractionHttpClient(HttpClient baseHttpClient) {
+        return baseHttpClient.httpResponseDecoder(decoder -> decoder.maxHeaderSize(MAX_RESPONSE_HEADER_BYTES));
+    }
+
+    private boolean isRecoverableStatus(HttpStatusCode statusCode) {
+        return statusCode != null && statusCode.is5xxServerError();
     }
 
     private String normalizeHost(String host) {
@@ -308,13 +327,21 @@ public class ExternalHtmlDocumentClient {
             String host,
             HttpStatusCode statusCode,
             String responseBody,
-            Throwable cause
+            Throwable cause,
+            boolean renderedFallbackAllowed
     ) {
         logExtractionFailure(operation, host, statusCode, responseBody, cause);
         if (cause == null) {
-            return Mono.error(new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED));
+            return Mono.error(new HtmlFetchException(
+                    MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED,
+                    renderedFallbackAllowed
+            ));
         }
-        return Mono.error(new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED, cause));
+        return Mono.error(new HtmlFetchException(
+                MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED,
+                cause,
+                renderedFallbackAllowed
+        ));
     }
 
     private void logExtractionFailure(
