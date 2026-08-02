@@ -29,6 +29,20 @@ public interface TeachingMapStepRepository extends JpaRepository<TeachingMapStep
                 @Param("teachingMapIds") List<Long> teachingMapIds
         );
 
+        @Query("""
+        SELECT s.teachingMap.id AS teachingMapId, s.material.platformType AS platformType
+        FROM TeachingMapStep s
+        WHERE s.teachingMap.id IN :teachingMapIds
+          AND s.teachingMap.user.id = :userId
+          AND s.deletedAt IS NULL
+          AND s.material.deletedAt IS NULL
+        ORDER BY s.teachingMap.id ASC, s.stepOrder ASC, s.id ASC
+    """)
+        List<TeachingMapPlatformProjection> findActivePlatformTypesByTeachingMapIdIn(
+                @Param("teachingMapIds") List<Long> teachingMapIds,
+                @Param("userId") Long userId
+        );
+
         Optional<TeachingMapStep> findByIdAndTeachingMapId(Long id, Long teachingMapId);
 
         List<TeachingMapStep> findByTeachingMapIdAndDeletedAtIsNullOrderByStepOrder(Long teachingMapId);

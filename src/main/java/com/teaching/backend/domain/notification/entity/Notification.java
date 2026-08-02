@@ -2,6 +2,7 @@ package com.teaching.backend.domain.notification.entity;
 
 import com.teaching.backend.global.common.BaseSoftDeleteEntity;
 import com.teaching.backend.domain.notification.enums.NotificationTargetType;
+import com.teaching.backend.domain.notification.enums.NotificationType;
 import com.teaching.backend.domain.user.entity.User;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -37,17 +38,22 @@ public class Notification extends BaseSoftDeleteEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(length = 20)
+    private NotificationType notificationType;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
     private NotificationTargetType targetType;
 
     private Long targetId;
 
     @Builder(access = AccessLevel.PRIVATE)
-    private Notification(User user, String title, String content,
+    private Notification(User user, String title, String content, NotificationType notificationType,
                          NotificationTargetType targetType, Long targetId) {
         this.user = user;
         this.title = title;
         this.content = content;
         this.isRead = false;
+        this.notificationType = notificationType;
         this.targetType = targetType;
         this.targetId = targetId;
     }
@@ -58,6 +64,19 @@ public class Notification extends BaseSoftDeleteEntity {
                 .user(user)
                 .title(title)
                 .content(content)
+                .notificationType(null)
+                .targetType(targetType)
+                .targetId(targetId)
+                .build();
+    }
+
+    public static Notification createReminder(User user, NotificationType notificationType, String content,
+                                              NotificationTargetType targetType, Long targetId) {
+        return Notification.builder()
+                .user(user)
+                .title(notificationType.getLabel())
+                .content(content)
+                .notificationType(notificationType)
                 .targetType(targetType)
                 .targetId(targetId)
                 .build();
@@ -68,6 +87,7 @@ public class Notification extends BaseSoftDeleteEntity {
                 .user(user)
                 .title(title)
                 .content(content)
+                .notificationType(null)
                 .build();
     }
 

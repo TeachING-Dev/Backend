@@ -14,9 +14,12 @@ import com.teaching.backend.domain.material.repository.MaterialAnalysisRepositor
 import com.teaching.backend.domain.material.repository.MaterialRepository;
 import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
 import com.teaching.backend.domain.user.entity.User;
+import com.teaching.backend.domain.user.enums.MembershipType;
 import com.teaching.backend.domain.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -63,6 +66,85 @@ class FolderServiceTest {
 
     @InjectMocks
     private FolderService folderService;
+
+    @Test
+    void createFolderAllowsKoreanEnglishAndMixedNames() {
+        when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(user(USER_ID)));
+        when(folderRepository.existsActiveByUserIdAndName(eq(USER_ID), any())).thenReturn(false);
+        when(folderRepository.saveAndFlush(any(Folder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThatCode(() -> folderService.createFolder(USER_ID, new FolderCreateRequest("백엔드")))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> folderService.createFolder(USER_ID, new FolderCreateRequest("Backend")))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> folderService.createFolder(USER_ID, new FolderCreateRequest("백엔드Backend")))
+                .doesNotThrowAnyException();
+        assertThatCode(() -> folderService.createFolder(USER_ID, new FolderCreateRequest("가나다라마바사아자차")))
+                .doesNotThrowAnyException();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"123", "백엔드1", "백엔드!", "백 엔드", "$^%^$%", "ㄱ", "ㅏ", " backend", "backend "})
+    void createFolderRejectsInvalidNameFormat(String folderName) {
+        assertFolderExceptionThrown(
+                () -> folderService.createFolder(USER_ID, new FolderCreateRequest(folderName)),
+                FolderErrorCode.INVALID_FOLDER_NAME_FORMAT
+        );
+        verify(folderRepository, never()).saveAndFlush(any(Folder.class));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"123", "백엔드1", "백엔드!", "백 엔드", "$^%^$%", "ㄱ", "ㅏ", " backend", "backend "})
+    void renameFolderRejectsInvalidNameFormat(String folderName) {
+        assertFolderExceptionThrown(
+                () -> folderService.renameFolder(USER_ID, FOLDER_ID, new FolderRenameRequest(folderName)),
+                FolderErrorCode.INVALID_FOLDER_NAME_FORMAT
+        );
+        verify(folderRepository, never()).findByIdAndUser_Id(any(), any());
+    }
+
+    @Test
+    void createFolderRejectsNameLongerThanTenCharacters() {
+        assertFolderExceptionThrown(
+                () -> folderService.createFolder(USER_ID, new FolderCreateRequest("열한글자폴더이름테스트")),
+                FolderErrorCode.FOLDER_NAME_TOO_LONG
+        );
+        verify(folderRepository, never()).saveAndFlush(any(Folder.class));
+    }
+
+    @Test
+    void createFolderAllowsSixthActiveFolderForFreeUser() {
+        when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(user(USER_ID)));
+        when(folderRepository.countByUser_Id(USER_ID)).thenReturn(5L);
+        when(folderRepository.existsActiveByUserIdAndName(USER_ID, "Backend")).thenReturn(false);
+        when(folderRepository.saveAndFlush(any(Folder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThatCode(() -> folderService.createFolder(USER_ID, new FolderCreateRequest("Backend")))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void createFolderFailsWhenActiveFolderLimitExceeded() {
+        when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(user(USER_ID)));
+        when(folderRepository.countByUser_Id(USER_ID)).thenReturn(6L);
+
+        assertFolderExceptionThrown(
+                () -> folderService.createFolder(USER_ID, new FolderCreateRequest("Backend")),
+                FolderErrorCode.FOLDER_LIMIT_EXCEEDED
+        );
+        verify(folderRepository, never()).saveAndFlush(any(Folder.class));
+    }
+
+    @Test
+    void createFolderDoesNotApplyFreeLimitToPremiumUser() {
+        when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(user(USER_ID, MembershipType.PREMIUM)));
+        when(folderRepository.existsActiveByUserIdAndName(USER_ID, "Backend")).thenReturn(false);
+        when(folderRepository.saveAndFlush(any(Folder.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThatCode(() -> folderService.createFolder(USER_ID, new FolderCreateRequest("Backend")))
+                .doesNotThrowAnyException();
+        verify(folderRepository, never()).countByUser_Id(USER_ID);
+    }
 
     @Test
     void createFolderFailsWhenSameUserHasActiveFolderWithSameName() {
@@ -238,8 +320,13 @@ class FolderServiceTest {
     }
 
     private User user(Long userId) {
+        return user(userId, MembershipType.FREE);
+    }
+
+    private User user(Long userId, MembershipType membershipType) {
         User user = User.create("user" + userId + "@example.com", "user" + userId, null, null, null);
         ReflectionTestUtils.setField(user, "id", userId);
+        ReflectionTestUtils.setField(user, "membershipType", membershipType);
         return user;
     }
 

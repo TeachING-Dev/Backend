@@ -3,11 +3,13 @@ package com.teaching.backend.domain.material.repository;
 import com.teaching.backend.domain.folder.entity.Folder;
 import com.teaching.backend.domain.folder.repository.FolderRepository;
 import com.teaching.backend.domain.material.entity.Material;
+import com.teaching.backend.domain.material.enums.AiStatus;
 import com.teaching.backend.domain.material.enums.PlatformType;
 import com.teaching.backend.domain.user.entity.User;
 import com.teaching.backend.domain.user.repository.UserRepository;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
@@ -110,6 +112,27 @@ class MaterialRepositoryTest {
         );
 
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    void findHomeRecentMaterialsExcludesDeletedMaterials() {
+        User user = userRepository.save(user("home-owner"));
+        Folder folder = folderRepository.save(Folder.create(user, "HomeFolder"));
+        Material active = materialRepository.save(material(user, folder, "https://example.com/active"));
+        active.markAnalysisCompleted();
+        Material deleted = materialRepository.save(material(user, folder, "https://example.com/deleted"));
+        deleted.markAnalysisCompleted();
+        deleted.delete();
+        flushAndClear();
+
+        List<Material> result = materialRepository.findHomeRecentMaterials(
+                user.getId(),
+                AiStatus.COMPLETED,
+                PageRequest.of(0, 5)
+        ).getContent();
+
+        assertThat(result).extracting(Material::getId)
+                .containsExactly(active.getId());
     }
 
     private User user(String suffix) {

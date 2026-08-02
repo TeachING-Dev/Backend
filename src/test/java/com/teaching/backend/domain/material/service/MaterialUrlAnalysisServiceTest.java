@@ -113,7 +113,8 @@ class MaterialUrlAnalysisServiceTest {
 
         assertThat(result.resultType()).isEqualTo(MaterialAnalyzeResultType.ALREADY_ANALYZED);
         assertThat(result.existingMaterialId()).isEqualTo(101L);
-        assertThat(result.materialId()).isEqualTo(101L);
+        assertThat(result.existingFolderId()).isEqualTo(FOLDER_ID);
+        assertThat(result.materialId()).isNull();
         assertThat(result.title()).isEqualTo("Completed");
         assertThat(result.originalUrl()).isEqualTo(URL);
         assertThat(result.platformType()).isEqualTo("VELOG");
@@ -146,7 +147,8 @@ class MaterialUrlAnalysisServiceTest {
 
         assertThat(result.resultType()).isEqualTo(MaterialAnalyzeResultType.ALREADY_ANALYZED);
         assertThat(result.existingMaterialId()).isEqualTo(101L);
-        assertThat(result.materialId()).isEqualTo(101L);
+        assertThat(result.existingFolderId()).isEqualTo(FOLDER_ID);
+        assertThat(result.materialId()).isNull();
         assertThat(result.materialAnalysisId()).isNull();
         assertThat(result.chunkCount()).isZero();
         assertThat(result.tags()).isEmpty();
@@ -171,7 +173,8 @@ class MaterialUrlAnalysisServiceTest {
         );
 
         assertThat(result.existingMaterialId()).isEqualTo(102L);
-        assertThat(result.materialId()).isEqualTo(102L);
+        assertThat(result.existingFolderId()).isEqualTo(FOLDER_ID);
+        assertThat(result.materialId()).isNull();
         assertThat(result.title()).isEqualTo("Newer");
         verify(materialContentExtractorRegistry, never()).extract(any(), anyString());
         verify(materialAiAnalysisOrchestrator, never()).analyze(any());
@@ -278,7 +281,8 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(first.resultType()).isEqualTo(MaterialAnalyzeResultType.ANALYSIS_COMPLETED);
         assertThat(second.resultType()).isEqualTo(MaterialAnalyzeResultType.ALREADY_ANALYZED);
         assertThat(second.existingMaterialId()).isEqualTo(200L);
-        assertThat(second.materialId()).isEqualTo(200L);
+        assertThat(second.existingFolderId()).isEqualTo(FOLDER_ID);
+        assertThat(second.materialId()).isNull();
         assertThat(second.materialAnalysisId()).isEqualTo(300L);
         assertThat(second.chunkCount()).isEqualTo(2);
         assertThat(second.tags()).singleElement()
