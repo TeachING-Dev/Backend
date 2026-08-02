@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -85,10 +86,15 @@ public class MaterialSearchService {
                 .collect(Collectors.toMap(MaterialChunk::getId, Function.identity()));
 
         // Qdrant가 score 내림차순으로 반환하므로 chunkIds 순서를 그대로 보존해서 재정렬
-        return chunkIds.stream()
+        List<MaterialChunk> chunks = chunkIds.stream()
                 .map(chunksById::get)
                 .filter(chunk -> chunk != null)
                 .toList();
+
+        // Qdrant 벡터는 MySQL의 자료 삭제와 자동으로 동기화되지 않아, 자료가 삭제된 뒤에도 그 자료의
+        // 청크가 검색에 걸릴 수 있다(고아 청크). 그대로 두면 프롬프트 구성 시 Material 지연 로딩에서
+        // EntityNotFoundException이 터져 챗봇 전체가 500으로 죽으므로 여기서 걸러낸다.
+        return filterChunksWithExistingMaterial(chunks);
     }
 
     // 자료 제목/태그 자체를 배치 임베딩해 질문과 코사인 유사도로 비교한다(캐싱 없음, 매 호출마다 계산).
@@ -140,8 +146,32 @@ public class MaterialSearchService {
                         Collectors.toList()
                 ));
 
-        return materialIds.stream()
+        List<MaterialChunk> orderedChunks = materialIds.stream()
                 .flatMap(materialId -> chunksByMaterialId.getOrDefault(materialId, List.of()).stream())
+                .toList();
+
+        // materialIds는 이 메서드 호출 시점에는 존재가 확인된 자료들이지만, 자료 삭제 시
+        // material_chunks가 함께 정리되지 않는 경우가 있어 방어적으로 한 번 더 걸러낸다.
+        return filterChunksWithExistingMaterial(orderedChunks);
+    }
+
+    // chunk.getMaterial().getId()는 프록시의 FK 컬럼만 읽는 것이라 DB 조회 없이 안전하다.
+    // material.getTitle() 등 다른 필드에 접근할 때만 지연 로딩이 실행되는데, 그 시점에 자료가 이미
+    // 삭제되어 있으면 EntityNotFoundException이 터진다. 그 전에 실제 존재하는 자료인지 배치로 확인한다.
+    private List<MaterialChunk> filterChunksWithExistingMaterial(List<MaterialChunk> chunks) {
+        if (chunks.isEmpty()) {
+            return chunks;
+        }
+
+        Set<Long> referencedMaterialIds = chunks.stream()
+                .map(chunk -> chunk.getMaterial().getId())
+                .collect(Collectors.toSet());
+        Set<Long> existingMaterialIds = materialRepository.findAllById(referencedMaterialIds).stream()
+                .map(Material::getId)
+                .collect(Collectors.toSet());
+
+        return chunks.stream()
+                .filter(chunk -> existingMaterialIds.contains(chunk.getMaterial().getId()))
                 .toList();
     }
 
