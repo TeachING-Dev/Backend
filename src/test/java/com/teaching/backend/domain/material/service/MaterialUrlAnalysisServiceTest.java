@@ -527,6 +527,8 @@ class MaterialUrlAnalysisServiceTest {
                     return new MaterialAiAnalysisPipelineResult(
                             201L,
                             USER_ID,
+                            preparationResult.folderId(),
+                            "Summary",
                             WEB_URL,
                             preparationResult.platformType(),
                             preparationResult.extractedContent(),
