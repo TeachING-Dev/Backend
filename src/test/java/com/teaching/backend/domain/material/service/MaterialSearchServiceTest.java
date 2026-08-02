@@ -76,7 +76,7 @@ class MaterialSearchServiceTest {
     }
 
     @Test
-    void searchByMetadataReturnsOneRepresentativeChunkPerMentionedMaterial() {
+    void searchByMetadataReturnsAllChunksOfMentionedMaterial() {
         materialSearchService = newService();
         Material material = material(101L, "Spring Boot REST API 개발 강의");
         MaterialChunk firstChunk = chunk(1L, material, 0, "Spring Boot 소개");
@@ -88,7 +88,8 @@ class MaterialSearchServiceTest {
 
         List<MaterialChunk> result = materialSearchService.searchByMetadata("내 자료에 백엔드 관련 자료 있어?", USER_ID);
 
-        assertThat(result).containsExactly(firstChunk);
+        // 대표 청크 1개만 넘기면 실제 답이 다른 청크에 있을 때 놓치므로, 매칭된 자료의 청크를 전부 반환해야 한다.
+        assertThat(result).containsExactly(firstChunk, secondChunk);
     }
 
     @Test
@@ -152,6 +153,34 @@ class MaterialSearchServiceTest {
         assertThat(result).containsExactly(backendChunk);
         verify(materialChunkRepository, never())
                 .findAllByMaterial_IdInOrderByMaterial_IdAscChunkIndexAsc(List.of(101L, 102L));
+    }
+
+    @Test
+    void searchByTitleTagSimilarityPreservesSimilarityRankOverMaterialIdOrder() {
+        materialSearchService = newService();
+        // id는 낮지만 유사도가 더 높은 자료와, id는 높지만 유사도가 더 낮은 자료를 섞어서
+        // "material_id 오름차순"이 아니라 "유사도 내림차순"으로 청크가 반환되는지 검증한다.
+        Material lowIdHighSimilarity = material(101L, "Spring Boot REST API 개발 강의");
+        Material highIdLowSimilarity = material(202L, "SwiftUI 화면 구성 방법");
+        MaterialChunk lowIdChunk = chunk(11L, lowIdHighSimilarity, 0, "백엔드 소개");
+        MaterialChunk highIdChunk = chunk(22L, highIdLowSimilarity, 0, "iOS 소개");
+        when(materialRepository.findAllByUser_Id(USER_ID, Sort.unsorted()))
+                .thenReturn(List.of(lowIdHighSimilarity, highIdLowSimilarity));
+        when(materialTagRepository.findAllWithTagByMaterialIds(List.of(101L, 202L))).thenReturn(List.of());
+        when(openAiClient.embed("서버 쪽 자료 있어?")).thenReturn(new float[]{1f, 0f});
+        when(openAiClient.embedBatch(List.of("Spring Boot REST API 개발 강의", "SwiftUI 화면 구성 방법")))
+                .thenReturn(List.of(
+                        new float[]{0.8f, 0.6f}, // id 101: 유사도는 더 낮지만 id는 더 작음
+                        new float[]{1f, 0f}      // id 202: 유사도는 더 높지만 id는 더 큼 (질문과 완전히 동일 방향 -> 1.0)
+                ));
+        // 실제 레포지토리는 material_id 오름차순으로 반환하므로(101 -> 202), 그 순서 그대로 스텁한다.
+        when(materialChunkRepository.findAllByMaterial_IdInOrderByMaterial_IdAscChunkIndexAsc(List.of(202L, 101L)))
+                .thenReturn(List.of(lowIdChunk, highIdChunk));
+
+        List<MaterialChunk> result = materialSearchService.searchByTitleTagSimilarity("서버 쪽 자료 있어?", USER_ID);
+
+        // material_id 순서(101, 202)가 아니라 유사도 순서(202가 더 높음)대로 202의 청크가 먼저 와야 한다.
+        assertThat(result).containsExactly(highIdChunk, lowIdChunk);
     }
 
     @Test

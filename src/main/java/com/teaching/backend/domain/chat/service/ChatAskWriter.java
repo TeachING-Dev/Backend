@@ -34,12 +34,15 @@ class ChatAskWriter {
 
     // 외부 호출(검색/LLM) 전에 유저 행을 잠그고 quota를 원자적으로 예약한다.
     // 유저 메시지를 곧바로 저장해 예약 상태로 삼으므로, 이 시점 이후의 동시 요청은 늘어난 카운트를 보고 즉시 거절된다.
+    // MySQL(REPEATABLE READ)은 트랜잭션의 첫 "락 없는" 조회 시점에 스냅샷을 고정하고, 그 뒤의 락 없는
+    // 조회는 계속 그 스냅샷을 본다. 락 거는 조회(FOR UPDATE)만 항상 최신 데이터를 보므로, quota
+    // 카운트 조회가 그 최신 상태를 보게 하려면 반드시 findByIdForUpdate를 트랜잭션의 첫 조회로 실행해야 한다.
     @Transactional
     Reservation reserve(Long chatRoomId, Long userId, String content) {
-        ChatRoom chatRoom = chatRoomService.getChatRoom(chatRoomId, userId);
-
         User user = userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new GeneralException(GlobalErrorCode.NOT_FOUND));
+
+        ChatRoom chatRoom = chatRoomService.getChatRoom(chatRoomId, userId);
 
         if (user.getMembershipType() == MembershipType.FREE
                 && countTodayRoomMessages(chatRoomId) >= ChatMessageService.FREE_DAILY_QUESTION_LIMIT) {
