@@ -13,6 +13,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,12 +25,22 @@ import java.util.stream.IntStream;
 
 // 채팅 질문에 대해 사용자 소유 자료 중 관련 있는 MaterialChunk를 찾는 서비스.
 // 1순위: 질문 문장에 언급된 자료 제목/태그를 RDB에서 직접 조회(searchByMetadata) — 존재 여부를 묻는
-// 메타 질문에 강함. 2순위: Qdrant 임베딩 유사도 검색(searchTopChunks) — 본문 내용 질문에 강함.
-// 3순위: 자료 제목/태그 자체를 임베딩해 질문과 의미 비교(searchByTitleTagSimilarity) — 1·2순위가
-// 문자 그대로/본문 내용 기준으로 못 잡는 동의어·우회 표현 메타 질문에 대응.
+// 메타 질문에 강함. 2순위: 질문에서 뽑은 키워드가 청크 본문에 그대로 있는지 조회(searchByContentKeyword)
+// — 본문에 단어가 실제로 있는데도 임베딩 유사도가 임계값을 못 넘어 놓치는 경우를 막는다. 3순위: Qdrant
+// 임베딩 유사도 검색(searchTopChunks) — 단어가 그대로 없는 의미/맥락 질문에 강함. 4순위: 자료 제목/태그
+// 자체를 임베딩해 질문과 의미 비교(searchByTitleTagSimilarity) — 앞 순위가 전부 못 잡는 동의어·우회
+// 표현 메타 질문에 대응.
 @Service
 @Transactional(readOnly = true)
 public class MaterialSearchService {
+
+    // 조사 오탐을 줄이려고 긴 조사부터 먼저 비교(예: "에서"를 "서"보다 먼저 떼어내야 함).
+    private static final List<String> TRAILING_PARTICLES = List.of(
+            "에서", "에게", "한테", "부터", "까지", "이나",
+            "은", "는", "이", "가", "을", "를", "과", "와", "도", "의", "나", "만"
+    );
+    private static final int MIN_KEYWORD_LENGTH = 2;
+    private static final int MAX_KEYWORDS = 5;
 
     private final OpenAiClient openAiClient;
     private final QdrantClient qdrantClient;
@@ -67,6 +79,50 @@ public class MaterialSearchService {
         }
 
         return chunksForMaterials(materialIds.stream().limit(topK).toList());
+    }
+
+    // 질문에서 뽑은 키워드가 청크 본문에 문자 그대로 있는지 확인한다. 임베딩 유사도는 "의미"가 가까운지를
+    // 보는 것이라, 본문에 단어가 정확히 있어도 문장 전체 벡터 유사도가 임계값을 못 넘으면 놓칠 수 있다.
+    // 그 사각지대를 메우기 위한 직접 매칭 단계.
+    public List<MaterialChunk> searchByContentKeyword(String question, Long userId) {
+        List<String> keywords = extractKeywords(question);
+        if (keywords.isEmpty()) {
+            return List.of();
+        }
+
+        Map<Long, MaterialChunk> matchedChunks = new LinkedHashMap<>();
+        for (String keyword : keywords) {
+            for (MaterialChunk chunk : materialChunkRepository.findByUserIdAndChunkTextContaining(userId, keyword)) {
+                matchedChunks.putIfAbsent(chunk.getId(), chunk);
+            }
+            if (matchedChunks.size() >= topK) {
+                break;
+            }
+        }
+
+        return matchedChunks.values().stream().limit(topK).toList();
+    }
+
+    // 공백/문장부호로 어절을 나누고, 너무 짧은 토큰은 버린 뒤, 흔한 조사를 떼어낸다. 형태소 분석기 없이
+    // 하는 휴리스틱이라 완벽하진 않지만("먹었어요"처럼 어미가 붙은 동사는 못 잡음), 명사형 키워드
+    // 질문에는 충분히 잘 맞는다. 긴 토큰일수록 더 구체적인 키워드일 가능성이 높아 우선 검색한다.
+    private List<String> extractKeywords(String question) {
+        return Arrays.stream(question.split("[\\s,.?!()\\[\\]{}:;\"'~`]+"))
+                .map(this::stripTrailingParticle)
+                .filter(token -> token.length() >= MIN_KEYWORD_LENGTH)
+                .distinct()
+                .sorted(Comparator.comparingInt(String::length).reversed())
+                .limit(MAX_KEYWORDS)
+                .toList();
+    }
+
+    private String stripTrailingParticle(String token) {
+        for (String particle : TRAILING_PARTICLES) {
+            if (token.length() > particle.length() && token.endsWith(particle)) {
+                return token.substring(0, token.length() - particle.length());
+            }
+        }
+        return token;
     }
 
     public List<MaterialChunk> searchTopChunks(String query, Long userId) {

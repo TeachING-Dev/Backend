@@ -76,9 +76,14 @@ public class ChatMessageService {
         String answer;
         try {
             // 1순위: 질문에 언급된 자료 제목/태그를 RDB에서 구조화 조회(메타 질문에 강함).
-            // 2순위: Qdrant 임베딩 유사도 검색(본문 내용 질문에 강함).
-            // 3순위: 자료 제목/태그 자체를 임베딩해 질문과 의미 비교(동의어·우회 표현 메타 질문에 대응).
+            // 2순위: 질문의 키워드가 청크 본문에 그대로 있는지 직접 조회(임베딩 유사도가 임계값을
+            //        못 넘어 놓치는, 단어는 있는데 못 찾는 사각지대를 메움).
+            // 3순위: Qdrant 임베딩 유사도 검색(단어 자체는 없는 의미/맥락 질문에 강함).
+            // 4순위: 자료 제목/태그 자체를 임베딩해 질문과 의미 비교(동의어·우회 표현 메타 질문에 대응).
             relevantChunks = materialSearchService.searchByMetadata(request.content(), userId);
+            if (relevantChunks.isEmpty()) {
+                relevantChunks = materialSearchService.searchByContentKeyword(request.content(), userId);
+            }
             if (relevantChunks.isEmpty()) {
                 relevantChunks = materialSearchService.searchTopChunks(request.content(), userId);
             }

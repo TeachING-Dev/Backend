@@ -25,6 +25,7 @@ import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -120,6 +121,47 @@ class MaterialSearchServiceTest {
         materialSearchService.searchByMetadata("질문", USER_ID);
 
         verify(materialChunkRepository).findAllByMaterial_IdInOrderByMaterial_IdAscChunkIndexAsc(cappedIds);
+    }
+
+    @Test
+    void searchByContentKeywordReturnsEmptyWithoutQueryingWhenNoKeywordExtracted() {
+        materialSearchService = newService();
+
+        // "음"은 1글자라 MIN_KEYWORD_LENGTH 미만으로 걸러져 검색할 키워드가 하나도 없다.
+        List<MaterialChunk> result = materialSearchService.searchByContentKeyword("음...", USER_ID);
+
+        assertThat(result).isEmpty();
+        verify(materialChunkRepository, never()).findByUserIdAndChunkTextContaining(anyLong(), anyString());
+    }
+
+    @Test
+    void searchByContentKeywordStripsTrailingParticleAndFindsChunkContainingKeyword() {
+        materialSearchService = newService();
+        Material material = material(101L, "백엔드 강의");
+        MaterialChunk chunk = chunk(11L, material, 0, "노드제이에스는 서버 런타임이다");
+        // "노드제이에스는"에서 조사 "는"을 뗀 "노드제이에스"로 본문을 검색해야 한다.
+        when(materialChunkRepository.findByUserIdAndChunkTextContaining(USER_ID, "노드제이에스"))
+                .thenReturn(List.of(chunk));
+
+        List<MaterialChunk> result = materialSearchService.searchByContentKeyword("노드제이에스는 뭐야?", USER_ID);
+
+        assertThat(result).containsExactly(chunk);
+    }
+
+    @Test
+    void searchByContentKeywordDeduplicatesChunkMatchedByMultipleKeywords() {
+        materialSearchService = newService();
+        Material material = material(101L, "백엔드 강의");
+        MaterialChunk sharedChunk = chunk(11L, material, 0, "스프링부트와 자바로 만든 강의");
+        when(materialChunkRepository.findByUserIdAndChunkTextContaining(USER_ID, "스프링부트"))
+                .thenReturn(List.of(sharedChunk));
+        when(materialChunkRepository.findByUserIdAndChunkTextContaining(USER_ID, "자바"))
+                .thenReturn(List.of(sharedChunk));
+
+        // "스프링부트"와 "자바" 둘 다 같은 청크를 걸러내더라도 결과에는 한 번만 담겨야 한다.
+        List<MaterialChunk> result = materialSearchService.searchByContentKeyword("스프링부트와 자바 강의 있어?", USER_ID);
+
+        assertThat(result).containsExactly(sharedChunk);
     }
 
     @Test
