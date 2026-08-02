@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 @SpringBootTest
 @Transactional
@@ -133,6 +134,44 @@ class MaterialRepositoryTest {
 
         assertThat(result).extracting(Material::getId)
                 .containsExactly(active.getId());
+    }
+
+    @Test
+    void findFolderNamesByIdsReturnsFolderNameForEachRequestedMaterial() {
+        User user = userRepository.save(user("folder-names"));
+        Folder folderA = folderRepository.save(Folder.create(user, "Folder A"));
+        Folder folderB = folderRepository.save(Folder.create(user, "Folder B"));
+        Material materialInA = materialRepository.save(material(user, folderA, "https://example.com/a"));
+        Material materialInB = materialRepository.save(material(user, folderB, "https://example.com/b"));
+        flushAndClear();
+
+        List<MaterialFolderNameProjection> result = materialRepository.findFolderNamesByIds(
+                List.of(materialInA.getId(), materialInB.getId()),
+                user.getId()
+        );
+
+        assertThat(result)
+                .extracting(MaterialFolderNameProjection::getMaterialId, MaterialFolderNameProjection::getFolderName)
+                .containsExactlyInAnyOrder(
+                        tuple(materialInA.getId(), "Folder A"),
+                        tuple(materialInB.getId(), "Folder B")
+                );
+    }
+
+    @Test
+    void findFolderNamesByIdsExcludesMaterialsOwnedByOtherUsers() {
+        User owner = userRepository.save(user("folder-names-owner"));
+        User other = userRepository.save(user("folder-names-other"));
+        Folder folder = folderRepository.save(Folder.create(owner, "Owner Folder"));
+        Material material = materialRepository.save(material(owner, folder, "https://example.com/owned"));
+        flushAndClear();
+
+        List<MaterialFolderNameProjection> result = materialRepository.findFolderNamesByIds(
+                List.of(material.getId()),
+                other.getId()
+        );
+
+        assertThat(result).isEmpty();
     }
 
     private User user(String suffix) {
