@@ -153,6 +153,22 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
             @Param("userId") Long userId
     );
 
+    /** 복구 결과 토스트에 "어느 폴더로 복구됐는지" 표시하기 위해, 자료가 소속된(원래) 폴더명을 함께 조회한다. */
+    @Query(
+            value = """
+                    SELECT m.id AS materialId, f.name AS folderName
+                    FROM materials m
+                    JOIN folders f ON f.id = m.folder_id
+                    WHERE m.id IN (:materialIds)
+                      AND m.user_id = :userId
+                    """,
+            nativeQuery = true
+    )
+    List<MaterialFolderNameProjection> findFolderNamesByIds(
+            @Param("materialIds") List<Long> materialIds,
+            @Param("userId") Long userId
+    );
+
     @Query(
             value = """
                     SELECT DISTINCT m
