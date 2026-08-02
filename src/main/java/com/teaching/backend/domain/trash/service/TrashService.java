@@ -9,15 +9,21 @@ import com.teaching.backend.domain.folder.repository.FolderRepository;
 import com.teaching.backend.domain.material.dto.MaterialRestoreResponse;
 import com.teaching.backend.domain.material.dto.request.MaterialIdsRequest;
 import com.teaching.backend.domain.material.entity.Material;
+import com.teaching.backend.domain.material.entity.MaterialAnalysis;
 import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.exception.MaterialException;
+import com.teaching.backend.domain.material.enums.PlatformType;
+import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
 import com.teaching.backend.domain.teachingmap.dto.request.TeachingMapIdsRequest;
+import com.teaching.backend.domain.teachingmap.dto.response.SourcePlatform;
 import com.teaching.backend.domain.teachingmap.dto.response.TeachingMapRestoreResponse;
 import com.teaching.backend.domain.teachingmap.entity.TeachingMap;
 import com.teaching.backend.domain.teachingmap.exception.TeachingMapErrorCode;
 import com.teaching.backend.domain.teachingmap.exception.TeachingMapException;
+import com.teaching.backend.domain.teachingmap.repository.TeachingMapPlatformProjection;
 import com.teaching.backend.domain.teachingmap.repository.TeachingMapRepository;
+import com.teaching.backend.domain.teachingmap.repository.TeachingMapStepRepository;
 import com.teaching.backend.domain.trash.dto.response.TrashFolderItemResponse;
 import com.teaching.backend.domain.trash.dto.response.TrashFolderListResponse;
 import com.teaching.backend.domain.trash.dto.response.TrashMaterialItemResponse;
@@ -27,6 +33,7 @@ import com.teaching.backend.domain.trash.dto.response.TrashTeachingMapListRespon
 import com.teaching.backend.domain.trash.exception.TrashErrorCode;
 import com.teaching.backend.domain.trash.exception.TrashException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -35,6 +42,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 휴지통 도메인 서비스.
@@ -57,7 +66,12 @@ public class TrashService {
 
     private final FolderRepository folderRepository;
     private final MaterialRepository materialRepository;
+    private final MaterialAnalysisRepository materialAnalysisRepository;
     private final TeachingMapRepository teachingMapRepository;
+    private final TeachingMapStepRepository teachingMapStepRepository;
+
+    @Value("${app.icon-base-url}")
+    private String iconBaseUrl;
 
     public TrashFolderListResponse getTrashedFolders(Long userId, String sort, Integer page) {
         PageRequest pageRequest = PageRequest.of(resolvePage(page), FOLDER_PAGE_SIZE);
@@ -74,7 +88,18 @@ public class TrashService {
                 ? materialRepository.findTrashedByUserIdOrderByDeletedAtAsc(userId, pageRequest)
                 : materialRepository.findTrashedByUserIdOrderByDeletedAtDesc(userId, pageRequest);
 
-        return TrashMaterialListResponse.of(materials.map(TrashMaterialItemResponse::from));
+        List<Long> materialIds = materials.map(Material::getId).toList();
+        Map<Long, String> summaryByMaterialId = materialIds.isEmpty()
+                ? Map.of()
+                : materialAnalysisRepository.findAllActiveByMaterialIds(materialIds).stream()
+                .collect(Collectors.toMap(
+                        ma -> ma.getMaterial().getId(),
+                        MaterialAnalysis::getSummary
+                ));
+
+        return TrashMaterialListResponse.of(materials.map(m ->
+                TrashMaterialItemResponse.from(m, summaryByMaterialId.get(m.getId()))
+        ));
     }
 
     public TrashTeachingMapListResponse getTrashedTeachingMaps(Long userId, String sort, Integer page) {
@@ -83,7 +108,32 @@ public class TrashService {
                 ? teachingMapRepository.findTrashedByUserIdOrderByDeletedAtAsc(userId, pageRequest)
                 : teachingMapRepository.findTrashedByUserIdOrderByDeletedAtDesc(userId, pageRequest);
 
-        return TrashTeachingMapListResponse.of(teachingMaps.map(TrashTeachingMapItemResponse::from));
+        List<Long> teachingMapIds = teachingMaps.map(TeachingMap::getId).toList();
+        // findActivePlatformTypesByTeachingMapIdIn 은 스텝 단위 조회라 같은 플랫폼이 여러 번 나올 수 있어,
+        // LinkedHashSet 으로 순서를 유지하면서 중복을 제거한다.
+        Map<Long, List<PlatformType>> platformTypesByTeachingMapId = teachingMapIds.isEmpty()
+                ? Map.of()
+                : teachingMapStepRepository.findActivePlatformTypesByTeachingMapIdIn(teachingMapIds, userId).stream()
+                .collect(Collectors.groupingBy(
+                        TeachingMapPlatformProjection::getTeachingMapId,
+                        Collectors.mapping(
+                                TeachingMapPlatformProjection::getPlatformType,
+                                Collectors.collectingAndThen(Collectors.toCollection(LinkedHashSet::new), ArrayList::new)
+                        )
+                ));
+
+        return TrashTeachingMapListResponse.of(teachingMaps.map(tm ->
+                TrashTeachingMapItemResponse.from(
+                        tm,
+                        platformTypesByTeachingMapId.getOrDefault(tm.getId(), List.of()).stream()
+                                .map(this::toSourcePlatform)
+                                .toList()
+                )
+        ));
+    }
+
+    private SourcePlatform toSourcePlatform(PlatformType platformType) {
+        return new SourcePlatform(platformType.name(), iconBaseUrl + "/" + platformType.getIconPath());
     }
 
     /**
@@ -95,11 +145,17 @@ public class TrashService {
         List<Long> requestedIds = requireMaterialIds(request);
 
         List<Long> restorableIds = materialRepository.findRestorableTrashedIds(requestedIds, userId);
+        List<MaterialRestoreResponse.RestoredMaterial> restored = List.of();
         if (!restorableIds.isEmpty()) {
             materialRepository.restoreTrashedMaterials(restorableIds, userId);
+            // 자료는 원래 소속 폴더로 그대로 복구되므로(folder_id 변경 없음), 복구 직후 그 폴더명을 조회해
+            // 프론트가 "OO 폴더로 복구되었습니다" 토스트를 표시할 수 있게 한다.
+            restored = materialRepository.findFolderNamesByIds(restorableIds, userId).stream()
+                    .map(p -> new MaterialRestoreResponse.RestoredMaterial(p.getMaterialId(), p.getFolderName()))
+                    .toList();
         }
 
-        return MaterialRestoreResponse.of(restorableIds, failedIds(requestedIds, restorableIds));
+        return MaterialRestoreResponse.of(restored, failedIds(requestedIds, restorableIds));
     }
 
     @Transactional
