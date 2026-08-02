@@ -125,10 +125,7 @@ class HtmlMaterialContentExtractorTest {
                   <body><article><p>Generic public blog article content for analysis</p></article></body>
                 </html>
                 """);
-        GenericWebMaterialContentExtractor extractor = new GenericWebMaterialContentExtractor(
-                client,
-                new HtmlPlatformClassifier()
-        );
+        GenericWebMaterialContentExtractor extractor = new GenericWebMaterialContentExtractor(client);
 
         ExtractedMaterialContent result = extractor.extract(URL);
 
@@ -147,10 +144,7 @@ class HtmlMaterialContentExtractorTest {
                   </main>
                 </body></html>
                 """);
-        GenericWebMaterialContentExtractor extractor = new GenericWebMaterialContentExtractor(
-                client,
-                new HtmlPlatformClassifier()
-        );
+        GenericWebMaterialContentExtractor extractor = new GenericWebMaterialContentExtractor(client);
 
         ExtractedMaterialContent result = extractor.extract(URL);
 
@@ -163,10 +157,7 @@ class HtmlMaterialContentExtractorTest {
         ExternalHtmlDocumentClient client = client("""
                 <html><body><main><h1>Product</h1><p>Landing page copy with no article signals.</p></main></body></html>
                 """);
-        GenericWebMaterialContentExtractor extractor = new GenericWebMaterialContentExtractor(
-                client,
-                new HtmlPlatformClassifier()
-        );
+        GenericWebMaterialContentExtractor extractor = new GenericWebMaterialContentExtractor(client);
 
         ExtractedMaterialContent result = extractor.extract(URL);
 
@@ -183,11 +174,7 @@ class HtmlMaterialContentExtractorTest {
                 "<html><body><article>Rendered generic web content with enough text</article></body></html>",
                 "text/html"
         )));
-        GenericWebMaterialContentExtractor extractor = new GenericWebMaterialContentExtractor(
-                client,
-                new HtmlPlatformClassifier(),
-                renderedClient
-        );
+        GenericWebMaterialContentExtractor extractor = new GenericWebMaterialContentExtractor(client, renderedClient);
 
         ExtractedMaterialContent result = extractor.extract(URL);
 
@@ -210,11 +197,7 @@ class HtmlMaterialContentExtractorTest {
                 "<html><body><article>Rendered web content after static fetch failure</article></body></html>",
                 "text/html"
         )));
-        GenericWebMaterialContentExtractor extractor = new GenericWebMaterialContentExtractor(
-                client,
-                new HtmlPlatformClassifier(),
-                renderedClient
-        );
+        GenericWebMaterialContentExtractor extractor = new GenericWebMaterialContentExtractor(client, renderedClient);
 
         ExtractedMaterialContent result = extractor.extract(URL);
 
@@ -235,11 +218,7 @@ class HtmlMaterialContentExtractorTest {
         when(client.fetch(URL)).thenThrow(staticFailure);
         RenderedHtmlDocumentClient renderedClient = mock(RenderedHtmlDocumentClient.class);
         when(renderedClient.render(URL)).thenReturn(Optional.empty());
-        GenericWebMaterialContentExtractor extractor = new GenericWebMaterialContentExtractor(
-                client,
-                new HtmlPlatformClassifier(),
-                renderedClient
-        );
+        GenericWebMaterialContentExtractor extractor = new GenericWebMaterialContentExtractor(client, renderedClient);
 
         assertThatThrownBy(() -> extractor.extract(URL))
                 .isInstanceOf(MaterialException.class)
@@ -440,6 +419,40 @@ class HtmlMaterialContentExtractorTest {
     @Test
     void cafeExtractorRejectsLoginRequiredPage() {
         ExternalHtmlDocumentClient client = client("<html><body>로그인 후 카페 회원 권한이 필요합니다.</body></html>");
+        CafeMaterialContentExtractor extractor = new CafeMaterialContentExtractor(client);
+
+        assertThatThrownBy(() -> extractor.extract(URL))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
+    }
+
+    @Test
+    void cafeExtractorTreatsNullBodyAsEmptyContent() {
+        ExternalHtmlDocumentClient client = mock(ExternalHtmlDocumentClient.class);
+        when(client.fetch(URL)).thenReturn(new HtmlDocument(URL, null, "text/html"));
+        CafeMaterialContentExtractor extractor = new CafeMaterialContentExtractor(client);
+
+        assertThatThrownBy(() -> extractor.extract(URL))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_CONTENT_EMPTY);
+    }
+
+    @Test
+    void cafeExtractorTreatsBlankBodyAsEmptyContent() {
+        ExternalHtmlDocumentClient client = client("");
+        CafeMaterialContentExtractor extractor = new CafeMaterialContentExtractor(client);
+
+        assertThatThrownBy(() -> extractor.extract(URL))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_CONTENT_EMPTY);
+    }
+
+    @Test
+    void cafeExtractorRejectsAccessLimitedPage() {
+        ExternalHtmlDocumentClient client = client("<html><body>\uB85C\uADF8\uC778 \uCE74\uD398 \uD68C\uC6D0 \uAD8C\uD55C</body></html>");
         CafeMaterialContentExtractor extractor = new CafeMaterialContentExtractor(client);
 
         assertThatThrownBy(() -> extractor.extract(URL))

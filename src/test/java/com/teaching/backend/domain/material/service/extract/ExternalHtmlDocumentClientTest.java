@@ -170,6 +170,24 @@ class ExternalHtmlDocumentClientTest {
     }
 
     @Test
+    void blocksLocalhostNameInProductionMode() {
+        ExternalHtmlDocumentClient client = new ExternalHtmlDocumentClient(
+                WebClient.builder().build(),
+                Duration.ofSeconds(1),
+                true
+        );
+
+        assertExtractionFailed(() -> client.fetch("http://localhost:8080"));
+    }
+
+    @Test
+    void blocksUnsupportedSchemeDuringTargetValidation() {
+        ExternalHtmlDocumentClient client = productionLikeClient(host -> List.of());
+
+        assertExtractionFailed(() -> client.validateFetchTarget("file:///etc/passwd"));
+    }
+
+    @Test
     void blocksMetadataIpLiteralInProductionMode() {
         ExternalHtmlDocumentClient client = new ExternalHtmlDocumentClient(
                 WebClient.builder().build(),

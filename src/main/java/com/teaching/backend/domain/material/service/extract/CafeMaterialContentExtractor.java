@@ -34,6 +34,9 @@ public class CafeMaterialContentExtractor extends AbstractHtmlMaterialContentExt
     @Override
     protected void validateDocument(HtmlDocument document) {
         String body = document.body();
+        if (body == null || body.isBlank()) {
+            return;
+        }
         if (body.contains("\uB85C\uADF8\uC778")
                 && (body.contains("\uAD8C\uD55C") || body.contains("\uCE74\uD398 \uD68C\uC6D0"))) {
             log.warn(

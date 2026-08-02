@@ -15,26 +15,20 @@ public class GenericWebMaterialContentExtractor implements MaterialContentExtrac
     private static final int MIN_CONTENT_LENGTH = 20;
 
     private final ExternalHtmlDocumentClient htmlDocumentClient;
-    private final HtmlPlatformClassifier htmlPlatformClassifier;
     private final RenderedHtmlDocumentClient renderedHtmlDocumentClient;
     private final HtmlContentParser htmlContentParser = new HtmlContentParser();
 
     @Autowired
     public GenericWebMaterialContentExtractor(
             ExternalHtmlDocumentClient htmlDocumentClient,
-            HtmlPlatformClassifier htmlPlatformClassifier,
             RenderedHtmlDocumentClient renderedHtmlDocumentClient
     ) {
         this.htmlDocumentClient = htmlDocumentClient;
-        this.htmlPlatformClassifier = htmlPlatformClassifier;
         this.renderedHtmlDocumentClient = renderedHtmlDocumentClient;
     }
 
-    public GenericWebMaterialContentExtractor(
-            ExternalHtmlDocumentClient htmlDocumentClient,
-            HtmlPlatformClassifier htmlPlatformClassifier
-    ) {
-        this(htmlDocumentClient, htmlPlatformClassifier, null);
+    public GenericWebMaterialContentExtractor(ExternalHtmlDocumentClient htmlDocumentClient) {
+        this(htmlDocumentClient, null);
     }
 
     @Override
@@ -56,7 +50,6 @@ public class GenericWebMaterialContentExtractor implements MaterialContentExtrac
             return content(originalUrl, renderedParsed);
         }
 
-        htmlPlatformClassifier.classify(originalUrl, document.body());
         ParsedHtmlContent parsed = parse(originalUrl, document);
 
         if (!hasSufficientContent(parsed)) {
