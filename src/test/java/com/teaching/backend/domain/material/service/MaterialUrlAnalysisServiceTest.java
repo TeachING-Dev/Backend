@@ -57,6 +57,7 @@ class MaterialUrlAnalysisServiceTest {
     private static final Long RECOMMENDED_FOLDER_ID = 20L;
     private static final String URL = "https://velog.io/@example/spring";
     private static final String YOUTUBE_URL = "https://www.youtube.com/watch?v=video";
+    private static final String WEB_URL = "https://www.hanbit.co.kr/channel/view.html?cmscode=CMS7876574876";
 
     @Mock
     private MaterialRepository materialRepository;
@@ -491,6 +492,67 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(result.platformType()).isEqualTo("YOUTUBE");
         assertThat(result.tags()).singleElement()
                 .satisfies(tag -> assertThat(tag.tagName()).isEqualTo("YouTube"));
+    }
+
+    @Test
+    void keepsGenericWebPlatformTypeFromExtractionThroughResponse() {
+        ExtractedMaterialContent webContent = new ExtractedMaterialContent(
+                WEB_URL,
+                PlatformType.WEB,
+                "Hanbit Article",
+                "Generic web article content for downstream analysis",
+                null,
+                "author",
+                createdAt(1)
+        );
+        when(materialUrlValidator.isValidHttpUrl(WEB_URL)).thenReturn(true);
+        when(materialPlatformResolver.resolve(null, WEB_URL)).thenReturn(PlatformType.WEB);
+        when(materialUrlAnalysisConcurrencyGuard.executeSerialized(eq(USER_ID), eq(WEB_URL), any(), any()))
+                .thenAnswer(invocation -> {
+                    Optional<?> completed = (Optional<?>) invocation.getArgument(2, Supplier.class).get();
+                    if (completed.isPresent()) {
+                        return completed.get();
+                    }
+                    return invocation.getArgument(3, Supplier.class).get();
+                });
+        when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, WEB_URL))
+                .thenReturn(List.of());
+        when(materialContentExtractorRegistry.extract(PlatformType.WEB, WEB_URL)).thenReturn(webContent);
+        when(materialAiAnalysisOrchestrator.analyze(any(MaterialAnalysisPreparationResult.class)))
+                .thenAnswer(invocation -> {
+                    MaterialAnalysisPreparationResult preparationResult = invocation.getArgument(
+                            0,
+                            MaterialAnalysisPreparationResult.class
+                    );
+                    return new MaterialAiAnalysisPipelineResult(
+                            201L,
+                            USER_ID,
+                            WEB_URL,
+                            preparationResult.platformType(),
+                            preparationResult.extractedContent(),
+                            301L,
+                            1,
+                            List.of(),
+                            null,
+                            null,
+                            List.of("Web")
+                    );
+                });
+        when(materialTagRepository.findAllByMaterialId(201L))
+                .thenReturn(List.of(materialTag(null, 601L, "Web")));
+
+        MaterialAnalyzeResponse result = materialUrlAnalysisService.analyze(
+                USER_ID,
+                new MaterialAnalyzeRequest(WEB_URL, false)
+        );
+
+        ArgumentCaptor<MaterialAnalysisPreparationResult> captor =
+                ArgumentCaptor.forClass(MaterialAnalysisPreparationResult.class);
+        verify(materialContentExtractorRegistry).extract(PlatformType.WEB, WEB_URL);
+        verify(materialAiAnalysisOrchestrator).analyze(captor.capture());
+        assertThat(captor.getValue().platformType()).isEqualTo(PlatformType.WEB);
+        assertThat(captor.getValue().extractedContent().platformType()).isEqualTo(PlatformType.WEB);
+        assertThat(result.platformType()).isEqualTo("WEB");
     }
 
     @Test

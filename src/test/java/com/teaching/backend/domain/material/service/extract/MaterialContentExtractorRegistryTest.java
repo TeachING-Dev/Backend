@@ -53,6 +53,18 @@ class MaterialContentExtractorRegistryTest {
     }
 
     @Test
+    void failsWhenPdfHasNoHtmlExtractor() {
+        MaterialContentExtractorRegistry registry = new MaterialContentExtractorRegistry(List.of(
+                extractor(PlatformType.WEB, content(PlatformType.WEB))
+        ));
+
+        assertThatThrownBy(() -> registry.extract(PlatformType.PDF, "https://example.com/file.pdf"))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.UNSUPPORTED_MATERIAL_PLATFORM);
+    }
+
+    @Test
     void detectsDuplicateExtractorsForSamePlatform() {
         MaterialContentExtractor first = extractor(PlatformType.VELOG, content(PlatformType.VELOG));
         MaterialContentExtractor second = extractor(PlatformType.VELOG, content(PlatformType.VELOG));

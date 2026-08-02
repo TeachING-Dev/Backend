@@ -3,6 +3,7 @@ package com.teaching.backend.domain.material.service.extract;
 import com.sun.net.httpserver.HttpServer;
 import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.exception.MaterialException;
+import io.netty.handler.codec.http.TooLongHttpHeaderException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -124,6 +125,14 @@ class ExternalHtmlDocumentClientTest {
     @Test
     void failsWhenContentTypeIsNotHtml() throws IOException {
         String url = startServer(200, "application/json", "{\"ok\":true}", 0);
+        ExternalHtmlDocumentClient client = testClient(Duration.ofSeconds(2));
+
+        assertExtractionFailed(() -> client.fetch(url));
+    }
+
+    @Test
+    void failsWhenContentTypeIsPdf() throws IOException {
+        String url = startServer(200, "application/pdf", "%PDF-1.7", 0);
         ExternalHtmlDocumentClient client = testClient(Duration.ofSeconds(2));
 
         assertExtractionFailed(() -> client.fetch(url));
@@ -326,6 +335,33 @@ class ExternalHtmlDocumentClientTest {
         HtmlDocument document = client.fetch("http://public-looking.example:" + port + "/article");
 
         assertThat(document.body()).contains("large response header content");
+    }
+
+    @Test
+    void failsAndPreservesCauseWhenResponseHeaderExceedsConfiguredLimit() throws Exception {
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            byte[] response = "<html><body>oversized header content</body></html>".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "text/html");
+            exchange.getResponseHeaders().add("Set-Cookie", "c=".repeat(40_000));
+            exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.start();
+        int port = server.getAddress().getPort();
+        ExternalHtmlDocumentClient client = new ExternalHtmlDocumentClient(
+                HttpClient.create(),
+                Duration.ofSeconds(2),
+                false,
+                host -> List.of(InetAddress.getByName("127.0.0.1"))
+        );
+
+        assertThatThrownBy(() -> client.fetch("http://public-looking.example:" + port + "/article"))
+                .isInstanceOf(MaterialException.class)
+                .hasRootCauseInstanceOf(TooLongHttpHeaderException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
     }
 
     private String startServer(

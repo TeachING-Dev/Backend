@@ -114,7 +114,7 @@ class HtmlMaterialContentExtractorTest {
     }
 
     @Test
-    void genericWebExtractorClassifiesPublicBlogAndExtractsContent() {
+    void genericWebExtractorKeepsWebPlatformForPublicBlogSignals() {
         ExternalHtmlDocumentClient client = client("""
                 <html>
                   <head>
@@ -132,8 +132,30 @@ class HtmlMaterialContentExtractorTest {
 
         ExtractedMaterialContent result = extractor.extract(URL);
 
-        assertThat(result.platformType()).isEqualTo(PlatformType.BLOG);
+        assertThat(result.platformType()).isEqualTo(PlatformType.WEB);
         assertThat(result.content()).contains("Generic public blog article content");
+    }
+
+    @Test
+    void genericWebExtractorKeepsWebPlatformForCafeLikeKeywords() {
+        ExternalHtmlDocumentClient client = client("""
+                <html><body>
+                  <main class="community board">
+                    <article data-clubid="1" data-articleid="2">
+                      General company article content with comments and reply sections.
+                    </article>
+                  </main>
+                </body></html>
+                """);
+        GenericWebMaterialContentExtractor extractor = new GenericWebMaterialContentExtractor(
+                client,
+                new HtmlPlatformClassifier()
+        );
+
+        ExtractedMaterialContent result = extractor.extract(URL);
+
+        assertThat(result.platformType()).isEqualTo(PlatformType.WEB);
+        assertThat(result.content()).contains("General company article content");
     }
 
     @Test
@@ -172,6 +194,59 @@ class HtmlMaterialContentExtractorTest {
         assertThat(result.platformType()).isEqualTo(PlatformType.WEB);
         assertThat(result.content()).contains("Rendered generic web content");
         verify(renderedClient).render(URL);
+    }
+
+    @Test
+    void genericWebExtractorUsesRenderedFallbackWhenStaticFetchFailsRecoverably() {
+        ExternalHtmlDocumentClient client = mock(ExternalHtmlDocumentClient.class);
+        when(client.fetch(URL)).thenThrow(new HtmlFetchException(
+                MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED,
+                new IllegalStateException("decoder failed"),
+                true
+        ));
+        RenderedHtmlDocumentClient renderedClient = mock(RenderedHtmlDocumentClient.class);
+        when(renderedClient.render(URL)).thenReturn(Optional.of(new HtmlDocument(
+                URL,
+                "<html><body><article>Rendered web content after static fetch failure</article></body></html>",
+                "text/html"
+        )));
+        GenericWebMaterialContentExtractor extractor = new GenericWebMaterialContentExtractor(
+                client,
+                new HtmlPlatformClassifier(),
+                renderedClient
+        );
+
+        ExtractedMaterialContent result = extractor.extract(URL);
+
+        assertThat(result.platformType()).isEqualTo(PlatformType.WEB);
+        assertThat(result.content()).contains("Rendered web content");
+        verify(renderedClient).render(URL);
+    }
+
+    @Test
+    void genericWebExtractorPreservesStaticFetchCauseWhenRenderedFallbackFails() {
+        IllegalStateException rootCause = new IllegalStateException("decoder failed");
+        HtmlFetchException staticFailure = new HtmlFetchException(
+                MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED,
+                rootCause,
+                true
+        );
+        ExternalHtmlDocumentClient client = mock(ExternalHtmlDocumentClient.class);
+        when(client.fetch(URL)).thenThrow(staticFailure);
+        RenderedHtmlDocumentClient renderedClient = mock(RenderedHtmlDocumentClient.class);
+        when(renderedClient.render(URL)).thenReturn(Optional.empty());
+        GenericWebMaterialContentExtractor extractor = new GenericWebMaterialContentExtractor(
+                client,
+                new HtmlPlatformClassifier(),
+                renderedClient
+        );
+
+        assertThatThrownBy(() -> extractor.extract(URL))
+                .isInstanceOf(MaterialException.class)
+                .hasCause(staticFailure)
+                .satisfies(exception -> assertThat(exception.getSuppressed()).hasSize(1))
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
     }
 
     @Test
@@ -216,6 +291,31 @@ class HtmlMaterialContentExtractorTest {
     }
 
     @Test
+    void blogExtractorResolvesRelativeNaverBlogFrameUrl() {
+        String outerUrl = "https://blog.naver.com/writer/123";
+        String frameUrl = "https://blog.naver.com/PostView.naver?blogId=writer&logNo=123";
+        ExternalHtmlDocumentClient client = mock(ExternalHtmlDocumentClient.class);
+        when(client.fetch(outerUrl)).thenReturn(new HtmlDocument(
+                outerUrl,
+                "<html><body><iframe name=\"mainFrame\" src=\"/PostView.naver?blogId=writer&logNo=123\"></iframe></body></html>",
+                "text/html"
+        ));
+        when(client.fetch(frameUrl)).thenReturn(new HtmlDocument(
+                frameUrl,
+                "<html><body><div class=\"se-main-container\">Relative iframe content with enough body text</div></body></html>",
+                "text/html"
+        ));
+        RenderedHtmlDocumentClient renderedClient = mock(RenderedHtmlDocumentClient.class);
+        BlogMaterialContentExtractor extractor = new BlogMaterialContentExtractor(client, renderedClient);
+
+        ExtractedMaterialContent result = extractor.extract(outerUrl);
+
+        assertThat(result.content()).contains("Relative iframe content");
+        verify(client).fetch(frameUrl);
+        verify(renderedClient, never()).render(outerUrl);
+    }
+
+    @Test
     void blogExtractorUsesRenderedFallbackWhenStaticAndIframeExtractionFail() {
         String blogUrl = "https://blog.naver.com/writer/123";
         ExternalHtmlDocumentClient client = mock(ExternalHtmlDocumentClient.class);
@@ -236,6 +336,105 @@ class HtmlMaterialContentExtractorTest {
 
         assertThat(result.content()).contains("Rendered naver blog content");
         verify(renderedClient).render(blogUrl);
+    }
+
+    @Test
+    void blogExtractorUsesRenderedFallbackWhenIframeFetchFails() {
+        String outerUrl = "https://blog.naver.com/writer/123";
+        String frameUrl = "https://blog.naver.com/PostView.naver?blogId=writer&logNo=123";
+        ExternalHtmlDocumentClient client = mock(ExternalHtmlDocumentClient.class);
+        when(client.fetch(outerUrl)).thenReturn(new HtmlDocument(
+                outerUrl,
+                "<html><body><iframe id=\"mainFrame\" src=\"/PostView.naver?blogId=writer&logNo=123\"></iframe></body></html>",
+                "text/html"
+        ));
+        when(client.fetch(frameUrl)).thenThrow(new HtmlFetchException(
+                MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED,
+                new IllegalStateException("iframe failed"),
+                true
+        ));
+        RenderedHtmlDocumentClient renderedClient = mock(RenderedHtmlDocumentClient.class);
+        when(renderedClient.render(outerUrl)).thenReturn(Optional.of(new HtmlDocument(
+                outerUrl,
+                "<html><body><article>Rendered naver blog content after iframe fetch failure</article></body></html>",
+                "text/html"
+        )));
+        BlogMaterialContentExtractor extractor = new BlogMaterialContentExtractor(client, renderedClient);
+
+        ExtractedMaterialContent result = extractor.extract(outerUrl);
+
+        assertThat(result.content()).contains("Rendered naver blog content");
+        verify(renderedClient).render(outerUrl);
+    }
+
+    @Test
+    void blogExtractorUsesRenderedFallbackWhenStaticFetchFailsRecoverably() {
+        String blogUrl = "https://blog.naver.com/writer/123";
+        ExternalHtmlDocumentClient client = mock(ExternalHtmlDocumentClient.class);
+        when(client.fetch(blogUrl)).thenThrow(new HtmlFetchException(
+                MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED,
+                new IllegalStateException("header too long"),
+                true
+        ));
+        RenderedHtmlDocumentClient renderedClient = mock(RenderedHtmlDocumentClient.class);
+        when(renderedClient.render(blogUrl)).thenReturn(Optional.of(new HtmlDocument(
+                blogUrl,
+                "<html><body><article>Rendered blog content after outer fetch failure</article></body></html>",
+                "text/html"
+        )));
+        BlogMaterialContentExtractor extractor = new BlogMaterialContentExtractor(client, renderedClient);
+
+        ExtractedMaterialContent result = extractor.extract(blogUrl);
+
+        assertThat(result.content()).contains("Rendered blog content");
+        verify(renderedClient).render(blogUrl);
+    }
+
+    @Test
+    void blogExtractorDoesNotUseRenderedFallbackForBlockedFetchFailure() {
+        ExternalHtmlDocumentClient client = mock(ExternalHtmlDocumentClient.class);
+        when(client.fetch(URL)).thenThrow(new HtmlFetchException(
+                MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED,
+                false
+        ));
+        RenderedHtmlDocumentClient renderedClient = mock(RenderedHtmlDocumentClient.class);
+        BlogMaterialContentExtractor extractor = new BlogMaterialContentExtractor(client, renderedClient);
+
+        assertThatThrownBy(() -> extractor.extract(URL))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
+        verify(renderedClient, never()).render(URL);
+    }
+
+    @Test
+    void blogExtractorFailsWhenIframeAndRenderedContentAreEmpty() {
+        String outerUrl = "https://blog.naver.com/writer/123";
+        String frameUrl = "https://blog.naver.com/PostView.naver?blogId=writer&logNo=123";
+        ExternalHtmlDocumentClient client = mock(ExternalHtmlDocumentClient.class);
+        when(client.fetch(outerUrl)).thenReturn(new HtmlDocument(
+                outerUrl,
+                "<html><body><iframe id=\"mainFrame\" src=\"/PostView.naver?blogId=writer&logNo=123\"></iframe></body></html>",
+                "text/html"
+        ));
+        when(client.fetch(frameUrl)).thenReturn(new HtmlDocument(
+                frameUrl,
+                "<html><body><div class=\"se-main-container\">short</div></body></html>",
+                "text/html"
+        ));
+        RenderedHtmlDocumentClient renderedClient = mock(RenderedHtmlDocumentClient.class);
+        when(renderedClient.render(outerUrl)).thenReturn(Optional.of(new HtmlDocument(
+                outerUrl,
+                "<html><body><article>   </article></body></html>",
+                "text/html"
+        )));
+        BlogMaterialContentExtractor extractor = new BlogMaterialContentExtractor(client, renderedClient);
+
+        assertThatThrownBy(() -> extractor.extract(outerUrl))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_CONTENT_EMPTY);
+        verify(renderedClient).render(outerUrl);
     }
 
     @Test
@@ -297,6 +496,29 @@ class HtmlMaterialContentExtractorTest {
         when(renderedClient.render(notionUrl)).thenReturn(Optional.of(new HtmlDocument(
                 notionUrl,
                 "<html><body><div class=\"notion-page-content\">Rendered Notion content with enough public text</div></body></html>",
+                "text/html"
+        )));
+        NotionMaterialContentExtractor extractor = new NotionMaterialContentExtractor(client, renderedClient);
+
+        ExtractedMaterialContent result = extractor.extract(notionUrl);
+
+        assertThat(result.content()).contains("Rendered Notion content");
+        verify(renderedClient).render(notionUrl);
+    }
+
+    @Test
+    void notionExtractorUsesRenderedFallbackWhenStaticFetchFailsRecoverably() {
+        String notionUrl = "https://example.notion.site/page";
+        ExternalHtmlDocumentClient client = mock(ExternalHtmlDocumentClient.class);
+        when(client.fetch(notionUrl)).thenThrow(new HtmlFetchException(
+                MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED,
+                new IllegalStateException("response header too long"),
+                true
+        ));
+        RenderedHtmlDocumentClient renderedClient = mock(RenderedHtmlDocumentClient.class);
+        when(renderedClient.render(notionUrl)).thenReturn(Optional.of(new HtmlDocument(
+                notionUrl,
+                "<html><body><div class=\"notion-page-content\">Rendered Notion content after fetch failure</div></body></html>",
                 "text/html"
         )));
         NotionMaterialContentExtractor extractor = new NotionMaterialContentExtractor(client, renderedClient);

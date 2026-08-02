@@ -44,26 +44,33 @@ public class GenericWebMaterialContentExtractor implements MaterialContentExtrac
 
     @Override
     public ExtractedMaterialContent extract(String originalUrl) {
-        HtmlDocument document = htmlDocumentClient.fetch(originalUrl);
-        PlatformType classifiedPlatformType = htmlPlatformClassifier.classify(originalUrl, document.body())
-                .orElse(PlatformType.WEB);
+        HtmlDocument document;
+        try {
+            document = htmlDocumentClient.fetch(originalUrl);
+        } catch (MaterialException e) {
+            if (!isRenderedFallbackAllowed(e)) {
+                throw e;
+            }
+            ParsedHtmlContent renderedParsed = parseRenderedFallback(originalUrl);
+            validateContent(renderedParsed, e);
+            return content(originalUrl, renderedParsed);
+        }
+
+        htmlPlatformClassifier.classify(originalUrl, document.body());
         ParsedHtmlContent parsed = parse(originalUrl, document);
 
         if (!hasSufficientContent(parsed)) {
-            parsed = renderedHtmlDocumentClient == null
-                    ? emptyParsed(originalUrl)
-                    : renderedHtmlDocumentClient.render(originalUrl)
-                    .map(renderedDocument -> parse(originalUrl, renderedDocument))
-                    .orElseGet(() -> emptyParsed(originalUrl));
+            parsed = parseRenderedFallback(originalUrl);
         }
 
-        if (!hasSufficientContent(parsed)) {
-            throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EMPTY);
-        }
+        validateContent(parsed, null);
+        return content(originalUrl, parsed);
+    }
 
+    private ExtractedMaterialContent content(String originalUrl, ParsedHtmlContent parsed) {
         return new ExtractedMaterialContent(
                 originalUrl,
-                classifiedPlatformType,
+                PlatformType.WEB,
                 parsed.title(),
                 parsed.content(),
                 parsed.thumbnailUrl(),
@@ -93,5 +100,34 @@ public class GenericWebMaterialContentExtractor implements MaterialContentExtrac
 
     private ParsedHtmlContent emptyParsed(String originalUrl) {
         return new ParsedHtmlContent(originalUrl, null, "", null, null, null);
+    }
+
+    private ParsedHtmlContent parseRenderedFallback(String originalUrl) {
+        return renderedHtmlDocumentClient == null
+                ? emptyParsed(originalUrl)
+                : renderedHtmlDocumentClient.render(originalUrl)
+                .map(renderedDocument -> parse(originalUrl, renderedDocument))
+                .orElseGet(() -> emptyParsed(originalUrl));
+    }
+
+    private void validateContent(ParsedHtmlContent parsed, MaterialException staticFetchFailure) {
+        if (hasSufficientContent(parsed)) {
+            return;
+        }
+        if (staticFetchFailure == null) {
+            throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EMPTY);
+        }
+        MaterialException exception = new MaterialException(
+                MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED,
+                staticFetchFailure
+        );
+        exception.addSuppressed(new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EMPTY));
+        throw exception;
+    }
+
+    private boolean isRenderedFallbackAllowed(MaterialException exception) {
+        return exception instanceof HtmlFetchException htmlFetchException
+                && htmlFetchException.isRenderedFallbackAllowed()
+                && renderedHtmlDocumentClient != null;
     }
 }

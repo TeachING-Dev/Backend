@@ -39,7 +39,7 @@ public class MaterialPlatformResolver {
             return PlatformType.NOTION;
         }
         if (isCafeHost(normalizedHost)) {
-            return PlatformType.CAFE;
+            return PlatformType.WEB;
         }
         if (isBlogHost(normalizedHost)) {
             return PlatformType.BLOG;

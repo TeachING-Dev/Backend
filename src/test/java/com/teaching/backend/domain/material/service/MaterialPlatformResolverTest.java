@@ -56,11 +56,11 @@ class MaterialPlatformResolverTest {
     }
 
     @Test
-    void resolvesRepresentativeCafeUrl() {
+    void resolvesRepresentativeCafeUrlAsWebForNewAnalysisPolicy() {
         assertThat(resolver.resolve(null, "https://cafe.naver.com/example/1"))
-                .isEqualTo(PlatformType.CAFE);
+                .isEqualTo(PlatformType.WEB);
         assertThat(resolver.resolve(null, "https://cafe.daum.net/example/1"))
-                .isEqualTo(PlatformType.CAFE);
+                .isEqualTo(PlatformType.WEB);
     }
 
     @Test

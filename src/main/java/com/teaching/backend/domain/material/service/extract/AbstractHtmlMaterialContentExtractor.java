@@ -44,7 +44,34 @@ public abstract class AbstractHtmlMaterialContentExtractor implements MaterialCo
 
     @Override
     public ExtractedMaterialContent extract(String originalUrl) {
-        HtmlDocument document = htmlDocumentClient.fetch(originalUrl);
+        MaterialException staticFetchFailure = null;
+        HtmlDocument document;
+        try {
+            document = htmlDocumentClient.fetch(originalUrl);
+        } catch (MaterialException e) {
+            if (!isRenderedFallbackAllowed(e)) {
+                throw e;
+            }
+            staticFetchFailure = e;
+            log.info(
+                    "Static HTML fetch failed; trying rendered HTML fallback. platformType={}, url={}, errorCode={}, cause={}",
+                    platformType,
+                    safeUrl(originalUrl),
+                    e.getErrorCode() == null ? null : e.getErrorCode().getCode(),
+                    rootCauseClassName(e)
+            );
+            ParsedHtmlContent renderedParsed = parseRenderedFallback(originalUrl);
+            validateContent(renderedParsed, staticFetchFailure);
+            return new ExtractedMaterialContent(
+                    originalUrl,
+                    platformType,
+                    renderedParsed.title(),
+                    renderedParsed.content(),
+                    renderedParsed.thumbnailUrl(),
+                    renderedParsed.author(),
+                    renderedParsed.publishedAt()
+            );
+        }
         validateDocument(document);
 
         ParsedHtmlContent parsed = parseDocument(originalUrl, document);
@@ -59,7 +86,7 @@ public abstract class AbstractHtmlMaterialContentExtractor implements MaterialCo
                     .filter(this::hasSufficientContent)
                     .orElseGet(() -> parseRenderedFallback(originalUrl));
         }
-        validateContent(parsed);
+        validateContent(parsed, staticFetchFailure);
 
         return new ExtractedMaterialContent(
                 originalUrl,
@@ -163,10 +190,32 @@ public abstract class AbstractHtmlMaterialContentExtractor implements MaterialCo
         return new ParsedHtmlContent(originalUrl, null, "", null, null, null);
     }
 
-    private void validateContent(ParsedHtmlContent parsed) {
+    private void validateContent(ParsedHtmlContent parsed, MaterialException staticFetchFailure) {
         if (!hasSufficientContent(parsed)) {
-            throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EMPTY);
+            if (staticFetchFailure == null) {
+                throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EMPTY);
+            }
+            MaterialException exception = new MaterialException(
+                    MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED,
+                    staticFetchFailure
+            );
+            exception.addSuppressed(new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EMPTY));
+            throw exception;
         }
+    }
+
+    private boolean isRenderedFallbackAllowed(MaterialException exception) {
+        return exception instanceof HtmlFetchException htmlFetchException
+                && htmlFetchException.isRenderedFallbackAllowed()
+                && renderedHtmlDocumentClient != null;
+    }
+
+    private String rootCauseClassName(Throwable exception) {
+        Throwable current = exception;
+        while (current != null && current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        return current == null ? null : current.getClass().getName();
     }
 
     private String safeUrl(String originalUrl) {
