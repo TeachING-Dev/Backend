@@ -95,7 +95,10 @@ material:
     chunk-overlap: ${MATERIAL_INDEXING_CHUNK_OVERLAP:150}
 
 rag:
-  top-k: ${RAG_TOP_K:5}
+  # 자료당 대표 청크 1개만 넘기던 제한을 없애면서(청크 검색은 그대로 topK개 청크, 메타/제목-태그
+  # 검색은 topK개 "자료"의 모든 청크) 후보 자료 수가 부족하면 실제 답이 있는 자료가 아예 후보에서
+  # 빠질 수 있어, 자료 22개 이상 보유한 유저 기준으로 여유를 두고 5 -> 8로 상향 (2026-08-02)
+  top-k: ${RAG_TOP_K:8}
   # text-embedding-3-small 기준 실측: 관련 질문-청크 쌍 0.558, 무관한 질문 0.085 (2026-07-16 실측)
   similarity-threshold: ${RAG_SIMILARITY_THRESHOLD:0.3}
   # 자료 제목/태그 임베딩과 질문 간 유사도 임계값(3순위 메타 검색용). 본문 청크 임계값과 분포가 다를 수 있어 별도 설정.

@@ -65,7 +65,7 @@ public class MaterialSearchService {
             return List.of();
         }
 
-        return representativeChunksFor(materialIds.stream().limit(topK).toList());
+        return chunksForMaterials(materialIds.stream().limit(topK).toList());
     }
 
     public List<MaterialChunk> searchTopChunks(String query, Long userId) {
@@ -115,27 +115,18 @@ public class MaterialSearchService {
                 .map(Map.Entry::getKey)
                 .toList();
 
-        return representativeChunksFor(matchedMaterialIds);
+        return chunksForMaterials(matchedMaterialIds);
     }
 
-    // 자료당 대표 청크(가장 앞 chunkIndex) 1개만 골라 반환한다. 색인된 청크가 없는 자료는 결과에서 빠진다.
-    private List<MaterialChunk> representativeChunksFor(List<Long> materialIds) {
+    // 매칭된 자료들의 청크를 전부 반환한다. 예전에는 자료당 대표 청크 1개(가장 앞 chunkIndex)만 골라서,
+    // 자료는 제목/태그로 맞게 찾아놓고도 실제 답이 담긴 청크가 대표 청크가 아니면 LLM이 그 내용을 아예
+    // 못 보고 fallback으로 새는 문제가 있었다. 색인된 청크가 없는 자료는 결과에서 빠진다.
+    private List<MaterialChunk> chunksForMaterials(List<Long> materialIds) {
         if (materialIds.isEmpty()) {
             return List.of();
         }
 
-        List<MaterialChunk> chunks = materialChunkRepository
-                .findAllByMaterial_IdInOrderByMaterial_IdAscChunkIndexAsc(materialIds);
-
-        Map<Long, MaterialChunk> representativeChunkByMaterialId = chunks.stream()
-                .collect(Collectors.toMap(
-                        chunk -> chunk.getMaterial().getId(),
-                        Function.identity(),
-                        (first, ignored) -> first,
-                        LinkedHashMap::new
-                ));
-
-        return List.copyOf(representativeChunkByMaterialId.values());
+        return materialChunkRepository.findAllByMaterial_IdInOrderByMaterial_IdAscChunkIndexAsc(materialIds);
     }
 
     private Map<Long, List<String>> groupTagNamesByMaterialId(List<Material> materials) {

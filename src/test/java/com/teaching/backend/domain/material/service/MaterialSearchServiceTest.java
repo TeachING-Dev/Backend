@@ -76,7 +76,7 @@ class MaterialSearchServiceTest {
     }
 
     @Test
-    void searchByMetadataReturnsOneRepresentativeChunkPerMentionedMaterial() {
+    void searchByMetadataReturnsAllChunksOfMentionedMaterial() {
         materialSearchService = newService();
         Material material = material(101L, "Spring Boot REST API 개발 강의");
         MaterialChunk firstChunk = chunk(1L, material, 0, "Spring Boot 소개");
@@ -88,7 +88,8 @@ class MaterialSearchServiceTest {
 
         List<MaterialChunk> result = materialSearchService.searchByMetadata("내 자료에 백엔드 관련 자료 있어?", USER_ID);
 
-        assertThat(result).containsExactly(firstChunk);
+        // 대표 청크 1개만 넘기면 실제 답이 다른 청크에 있을 때 놓치므로, 매칭된 자료의 청크를 전부 반환해야 한다.
+        assertThat(result).containsExactly(firstChunk, secondChunk);
     }
 
     @Test
