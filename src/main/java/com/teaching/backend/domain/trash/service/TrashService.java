@@ -13,8 +13,10 @@ import com.teaching.backend.domain.material.entity.MaterialAnalysis;
 import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.exception.MaterialException;
 import com.teaching.backend.domain.material.enums.PlatformType;
+import com.teaching.backend.domain.material.dto.response.MaterialTagResponse;
 import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
+import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
 import com.teaching.backend.domain.teachingmap.dto.request.TeachingMapIdsRequest;
 import com.teaching.backend.domain.teachingmap.dto.response.SourcePlatform;
 import com.teaching.backend.domain.teachingmap.dto.response.TeachingMapRestoreResponse;
@@ -67,6 +69,7 @@ public class TrashService {
     private final FolderRepository folderRepository;
     private final MaterialRepository materialRepository;
     private final MaterialAnalysisRepository materialAnalysisRepository;
+    private final MaterialTagRepository materialTagRepository;
     private final TeachingMapRepository teachingMapRepository;
     private final TeachingMapStepRepository teachingMapStepRepository;
 
@@ -96,9 +99,20 @@ public class TrashService {
                         ma -> ma.getMaterial().getId(),
                         MaterialAnalysis::getSummary
                 ));
+        Map<Long, List<MaterialTagResponse>> tagsByMaterialId = materialIds.isEmpty()
+                ? Map.of()
+                : materialTagRepository.findAllWithTagByMaterialIds(materialIds).stream()
+                .collect(Collectors.groupingBy(
+                        mt -> mt.getMaterial().getId(),
+                        Collectors.mapping(MaterialTagResponse::from, Collectors.toList())
+                ));
 
         return TrashMaterialListResponse.of(materials.map(m ->
-                TrashMaterialItemResponse.from(m, summaryByMaterialId.get(m.getId()))
+                TrashMaterialItemResponse.from(
+                        m,
+                        summaryByMaterialId.get(m.getId()),
+                        tagsByMaterialId.getOrDefault(m.getId(), List.of())
+                )
         ));
     }
 
