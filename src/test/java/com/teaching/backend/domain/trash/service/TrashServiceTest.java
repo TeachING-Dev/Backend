@@ -14,6 +14,7 @@ import com.teaching.backend.domain.trash.dto.response.TrashMaterialItemResponse;
 import com.teaching.backend.domain.trash.dto.response.TrashMaterialListResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -67,6 +68,7 @@ class TrashServiceTest {
         when(materialAnalysisRepository.findAllActiveByMaterialIds(anyList())).thenReturn(List.of());
         when(materialTagRepository.findAllWithTagByMaterialIds(anyList())).thenReturn(List.of(
                 materialTag(materialA, tag(1L, "Spring")),
+                materialTag(materialA, tag(3L, "JPA")),
                 materialTag(materialB, tag(2L, "백엔드"))
         ));
 
@@ -74,7 +76,10 @@ class TrashServiceTest {
 
         TrashMaterialItemResponse itemA = findById(response, 10L);
         TrashMaterialItemResponse itemB = findById(response, 20L);
-        assertThat(itemA.tags()).extracting("tagName").containsExactly("Spring");
+        assertThat(itemA.tags()).hasSize(2);
+        assertThat(itemA.tags()).extracting("tagId").containsExactlyInAnyOrder(1L, 3L);
+        assertThat(itemA.tags()).extracting("tagName").containsExactlyInAnyOrder("Spring", "JPA");
+        assertThat(itemB.tags()).extracting("tagId").containsExactly(2L);
         assertThat(itemB.tags()).extracting("tagName").containsExactly("백엔드");
     }
 
@@ -112,7 +117,9 @@ class TrashServiceTest {
 
         trashService.getTrashedMaterials(USER_ID, null, 0);
 
-        verify(materialTagRepository, times(1)).findAllWithTagByMaterialIds(anyList());
+        ArgumentCaptor<List<Long>> materialIdsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(materialTagRepository, times(1)).findAllWithTagByMaterialIds(materialIdsCaptor.capture());
+        assertThat(materialIdsCaptor.getValue()).containsExactlyInAnyOrder(10L, 20L);
     }
 
     private TrashMaterialItemResponse findById(TrashMaterialListResponse response, Long materialId) {
