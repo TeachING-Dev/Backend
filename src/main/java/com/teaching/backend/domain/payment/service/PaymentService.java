@@ -5,6 +5,7 @@ import com.teaching.backend.domain.payment.client.dto.KakaoPayApproveResponse;
 import com.teaching.backend.domain.payment.client.dto.KakaoPayReadyResponse;
 import com.teaching.backend.domain.payment.dto.response.PaymentReadyResponse;
 import com.teaching.backend.domain.payment.entity.Payment;
+import com.teaching.backend.domain.payment.enums.PaymentStatus;
 import com.teaching.backend.domain.payment.exception.PaymentErrorCode;
 import com.teaching.backend.domain.payment.exception.PaymentException;
 import com.teaching.backend.domain.payment.repository.PaymentRepository;
@@ -75,6 +76,10 @@ public class PaymentService {
     public String approvePayment(String orderId, String pgToken) {
         Payment payment = getPaymentByOrderId(orderId);
 
+        if (payment.getStatus() != PaymentStatus.READY) {
+            return frontendBaseUrl + "/subscribe/complete";
+        }
+
         KakaoPayApproveResponse approveResponse = kakaoPayClient.approve(
                 payment.getTid(),
                 orderId,
@@ -90,13 +95,19 @@ public class PaymentService {
 
     @Transactional
     public String cancelPayment(String orderId) {
-        getPaymentByOrderId(orderId).cancel();
+        Payment payment = getPaymentByOrderId(orderId);
+        if (payment.getStatus() == PaymentStatus.READY) {
+            payment.cancel();
+        }
         return frontendBaseUrl + "/subscribe?toast=canceled";
     }
 
     @Transactional
     public String failPayment(String orderId) {
-        getPaymentByOrderId(orderId).fail();
+        Payment payment = getPaymentByOrderId(orderId);
+        if (payment.getStatus() == PaymentStatus.READY) {
+            payment.fail();
+        }
         return frontendBaseUrl + "/subscribe?toast=failed";
     }
 
