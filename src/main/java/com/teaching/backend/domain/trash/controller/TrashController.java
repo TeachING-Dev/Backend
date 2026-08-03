@@ -11,6 +11,7 @@ import com.teaching.backend.domain.teachingmap.dto.request.TeachingMapIdsRequest
 import com.teaching.backend.domain.teachingmap.dto.response.TeachingMapRestoreResponse;
 import com.teaching.backend.domain.trash.code.TrashSuccessCode;
 import com.teaching.backend.domain.trash.dto.response.TrashFolderListResponse;
+import com.teaching.backend.domain.trash.dto.response.TrashFolderMaterialListResponse;
 import com.teaching.backend.domain.trash.dto.response.TrashMaterialListResponse;
 import com.teaching.backend.domain.trash.dto.response.TrashTeachingMapListResponse;
 import com.teaching.backend.domain.trash.service.TrashService;
@@ -22,6 +23,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -61,6 +63,21 @@ public class TrashController {
     ) {
         TrashMaterialListResponse result = trashService.getTrashedMaterials(authMember.getUserId(), sort, page);
         return ApiResponse.onSuccess(TrashSuccessCode.TRASH_MATERIAL_LIST_SUCCESS, result);
+    }
+
+    @Operation(
+            summary = "휴지통 폴더 상세(내부 자료) 조회",
+            description = "휴지통에 있는 폴더 안에 함께 삭제됐던 자료 목록을 정렬 기준(latest/oldest)에 따라 10개씩 페이지네이션하여 조회합니다."
+    )
+    @GetMapping("/folders/{folderId}/materials")
+    public ApiResponse<TrashFolderMaterialListResponse> getTrashedFolderMaterials(
+            @AuthenticationPrincipal AuthMember authMember,
+            @PathVariable Long folderId,
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false) Integer page
+    ) {
+        TrashFolderMaterialListResponse result = trashService.getTrashedFolderMaterials(authMember.getUserId(), folderId, sort, page);
+        return ApiResponse.onSuccess(TrashSuccessCode.TRASH_FOLDER_MATERIAL_LIST_SUCCESS, result);
     }
 
     @Operation(

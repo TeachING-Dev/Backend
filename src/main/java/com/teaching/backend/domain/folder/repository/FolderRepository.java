@@ -117,6 +117,16 @@ public interface FolderRepository extends JpaRepository<Folder, Long> {
             @Param("userId") Long userId
     );
 
+    /** 휴지통 폴더 상세(내부 자료) 조회용: 휴지통에 있는 폴더 1개를 조회한다. */
+    @Query(
+            value = "SELECT * FROM folders WHERE id = :folderId AND user_id = :userId AND deleted_at IS NOT NULL",
+            nativeQuery = true
+    )
+    Optional<Folder> findTrashedByIdAndUserId(
+            @Param("folderId") Long folderId,
+            @Param("userId") Long userId
+    );
+
     @Query(
             value = """
                     SELECT COUNT(*)
