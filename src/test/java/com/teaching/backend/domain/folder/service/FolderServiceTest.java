@@ -192,6 +192,38 @@ class FolderServiceTest {
     }
 
     @Test
+    void restoreFolderAlsoRestoresMaterialsTrashedTogetherWithFolder() {
+        when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(user(USER_ID)));
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.empty());
+        when(folderRepository.countByIdIncludingDeleted(FOLDER_ID)).thenReturn(1L);
+        when(folderRepository.countByIdAndUserIdIncludingDeleted(FOLDER_ID, USER_ID)).thenReturn(1L);
+        when(folderRepository.countDeletedByIdAndUserId(FOLDER_ID, USER_ID)).thenReturn(1L);
+        when(folderRepository.countActiveNameConflictForRestore(FOLDER_ID, USER_ID)).thenReturn(0L);
+        when(folderRepository.restoreDeletedFolder(FOLDER_ID, USER_ID)).thenReturn(1);
+
+        folderService.restoreFolder(USER_ID, FOLDER_ID);
+
+        verify(materialRepository).restoreTrashedMaterialsByFolder(FOLDER_ID, USER_ID);
+    }
+
+    @Test
+    void restoreFolderDoesNotRestoreMaterialsWhenFolderRestoreFails() {
+        when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(user(USER_ID)));
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.empty());
+        when(folderRepository.countByIdIncludingDeleted(FOLDER_ID)).thenReturn(1L);
+        when(folderRepository.countByIdAndUserIdIncludingDeleted(FOLDER_ID, USER_ID)).thenReturn(1L);
+        when(folderRepository.countDeletedByIdAndUserId(FOLDER_ID, USER_ID)).thenReturn(1L);
+        when(folderRepository.countActiveNameConflictForRestore(FOLDER_ID, USER_ID)).thenReturn(0L);
+        when(folderRepository.restoreDeletedFolder(FOLDER_ID, USER_ID)).thenReturn(0);
+
+        assertFolderExceptionThrown(
+                () -> folderService.restoreFolder(USER_ID, FOLDER_ID),
+                FolderErrorCode.FOLDER_NOT_FOUND
+        );
+        verify(materialRepository, never()).restoreTrashedMaterialsByFolder(any(), any());
+    }
+
+    @Test
     void renameFolderAllowsNameUsedOnlyByDeletedFolder() {
         Folder folder = folder(USER_ID, FOLDER_ID, "Java");
         when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(user(USER_ID)));

@@ -28,6 +28,7 @@ import com.teaching.backend.domain.teachingmap.repository.TeachingMapRepository;
 import com.teaching.backend.domain.teachingmap.repository.TeachingMapStepRepository;
 import com.teaching.backend.domain.trash.dto.response.TrashFolderItemResponse;
 import com.teaching.backend.domain.trash.dto.response.TrashFolderListResponse;
+import com.teaching.backend.domain.trash.dto.response.TrashFolderMaterialListResponse;
 import com.teaching.backend.domain.trash.dto.response.TrashMaterialItemResponse;
 import com.teaching.backend.domain.trash.dto.response.TrashMaterialListResponse;
 import com.teaching.backend.domain.trash.dto.response.TrashTeachingMapItemResponse;
@@ -45,6 +46,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -91,7 +93,36 @@ public class TrashService {
                 ? materialRepository.findTrashedByUserIdOrderByDeletedAtAsc(userId, pageRequest)
                 : materialRepository.findTrashedByUserIdOrderByDeletedAtDesc(userId, pageRequest);
 
-        List<Long> materialIds = materials.map(Material::getId).toList();
+        return TrashMaterialListResponse.of(materials.map(toTrashMaterialItem(materials.getContent())));
+    }
+
+    /**
+     * 휴지통 폴더 상세 조회. 폴더 삭제 시 함께 휴지통으로 이동했던 내부 자료 목록을 페이지네이션하여 보여준다.
+     */
+    public TrashFolderMaterialListResponse getTrashedFolderMaterials(Long userId, Long folderId, String sort, Integer page) {
+        Folder folder = getTrashedFolder(userId, folderId);
+
+        PageRequest pageRequest = PageRequest.of(resolvePage(page), MATERIAL_PAGE_SIZE);
+        Page<Material> materials = isOldest(sort)
+                ? materialRepository.findTrashedByFolderIdOrderByDeletedAtAsc(folderId, userId, pageRequest)
+                : materialRepository.findTrashedByFolderIdOrderByDeletedAtDesc(folderId, userId, pageRequest);
+
+        return TrashFolderMaterialListResponse.of(folder, materials.map(toTrashMaterialItem(materials.getContent())));
+    }
+
+    private Folder getTrashedFolder(Long userId, Long folderId) {
+        if (folderRepository.countByIdIncludingDeleted(folderId) == 0) {
+            throw new FolderException(FolderErrorCode.FOLDER_NOT_FOUND);
+        }
+        if (folderRepository.countByIdAndUserIdIncludingDeleted(folderId, userId) == 0) {
+            throw new FolderException(FolderErrorCode.FOLDER_ACCESS_DENIED);
+        }
+        return folderRepository.findTrashedByIdAndUserId(folderId, userId)
+                .orElseThrow(() -> new FolderException(FolderErrorCode.FOLDER_NOT_FOUND));
+    }
+
+    private Function<Material, TrashMaterialItemResponse> toTrashMaterialItem(List<Material> materials) {
+        List<Long> materialIds = materials.stream().map(Material::getId).toList();
         Map<Long, String> summaryByMaterialId = materialIds.isEmpty()
                 ? Map.of()
                 : materialAnalysisRepository.findAllActiveByMaterialIds(materialIds).stream()
@@ -107,13 +138,11 @@ public class TrashService {
                         Collectors.mapping(MaterialTagResponse::from, Collectors.toList())
                 ));
 
-        return TrashMaterialListResponse.of(materials.map(m ->
-                TrashMaterialItemResponse.from(
-                        m,
-                        summaryByMaterialId.get(m.getId()),
-                        tagsByMaterialId.getOrDefault(m.getId(), List.of())
-                )
-        ));
+        return m -> TrashMaterialItemResponse.from(
+                m,
+                summaryByMaterialId.get(m.getId()),
+                tagsByMaterialId.getOrDefault(m.getId(), List.of())
+        );
     }
 
     public TrashTeachingMapListResponse getTrashedTeachingMaps(Long userId, String sort, Integer page) {
@@ -196,6 +225,7 @@ public class TrashService {
         for (Long folderId : requestedIds) {
             if (folderRepository.restoreTrashedFolderIfNameAvailable(folderId, userId) > 0) {
                 restoredIds.add(folderId);
+                materialRepository.restoreTrashedMaterialsByFolder(folderId, userId);
             }
         }
 

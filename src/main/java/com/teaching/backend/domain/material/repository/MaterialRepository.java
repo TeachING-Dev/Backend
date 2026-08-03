@@ -222,6 +222,69 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
             @Param("userId") Long userId
     );
 
+    /** 폴더 복구 시 그 폴더 안에서 함께 휴지통으로 이동했던 자료를 폴더와 함께 전부 복구한다. */
+    @Modifying
+    @Query(
+            value = """
+                    UPDATE materials
+                    SET deleted_at = NULL,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE folder_id = :folderId
+                      AND user_id = :userId
+                      AND deleted_at IS NOT NULL
+                    """,
+            nativeQuery = true
+    )
+    int restoreTrashedMaterialsByFolder(
+            @Param("folderId") Long folderId,
+            @Param("userId") Long userId
+    );
+
+    /** 휴지통에 있는 폴더 상세 조회용: 그 폴더 안에 있던(폴더와 함께 휴지통으로 이동한) 자료를 최신순으로 조회한다. */
+    @Query(
+            value = """
+                    SELECT * FROM materials
+                    WHERE folder_id = :folderId
+                      AND user_id = :userId
+                      AND deleted_at IS NOT NULL
+                    ORDER BY deleted_at DESC, id DESC
+                    """,
+            countQuery = """
+                    SELECT COUNT(*) FROM materials
+                    WHERE folder_id = :folderId
+                      AND user_id = :userId
+                      AND deleted_at IS NOT NULL
+                    """,
+            nativeQuery = true
+    )
+    Page<Material> findTrashedByFolderIdOrderByDeletedAtDesc(
+            @Param("folderId") Long folderId,
+            @Param("userId") Long userId,
+            Pageable pageable
+    );
+
+    @Query(
+            value = """
+                    SELECT * FROM materials
+                    WHERE folder_id = :folderId
+                      AND user_id = :userId
+                      AND deleted_at IS NOT NULL
+                    ORDER BY deleted_at ASC, id ASC
+                    """,
+            countQuery = """
+                    SELECT COUNT(*) FROM materials
+                    WHERE folder_id = :folderId
+                      AND user_id = :userId
+                      AND deleted_at IS NOT NULL
+                    """,
+            nativeQuery = true
+    )
+    Page<Material> findTrashedByFolderIdOrderByDeletedAtAsc(
+            @Param("folderId") Long folderId,
+            @Param("userId") Long userId,
+            Pageable pageable
+    );
+
     /** 질문 문장 안에 이 사용자의 자료 제목/태그명이 부분 문자열로 언급됐는지 역방향으로 찾는다.
      *  챗봇 메타 질문("내 자료에 ~있어?")을 벡터 검색보다 먼저 구조화된 조회로 해결하기 위함. */
     @Query("""

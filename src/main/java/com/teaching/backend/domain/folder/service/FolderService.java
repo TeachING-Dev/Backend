@@ -223,6 +223,7 @@ public class FolderService {
         if (restoredCount == 0) {
             throw new FolderException(FolderErrorCode.FOLDER_NOT_FOUND);
         }
+        materialRepository.restoreTrashedMaterialsByFolder(folderId, userId);
 
         return FolderRestoreResponse.of(folderId, false);
     }
