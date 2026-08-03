@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -24,9 +25,11 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -131,7 +134,7 @@ class MaterialSearchServiceTest {
         List<MaterialChunk> result = materialSearchService.searchByContentKeyword("음...", USER_ID);
 
         assertThat(result).isEmpty();
-        verify(materialChunkRepository, never()).findByUserIdAndChunkTextContaining(anyLong(), anyString());
+        verify(materialChunkRepository, never()).findByUserIdAndChunkTextContaining(anyLong(), anyString(), any());
     }
 
     @Test
@@ -139,8 +142,9 @@ class MaterialSearchServiceTest {
         materialSearchService = newService();
         Material material = material(101L, "백엔드 강의");
         MaterialChunk chunk = chunk(11L, material, 0, "노드제이에스는 서버 런타임이다");
-        // "노드제이에스는"에서 조사 "는"을 뗀 "노드제이에스"로 본문을 검색해야 한다.
-        when(materialChunkRepository.findByUserIdAndChunkTextContaining(USER_ID, "노드제이에스"))
+        // "노드제이에스는"에서 조사 "는"을 뗀 "노드제이에스"로 본문을 검색해야 한다. 첫 키워드라 남은 자리(TOP_K)
+        // 전체를 요청한다.
+        when(materialChunkRepository.findByUserIdAndChunkTextContaining(USER_ID, "노드제이에스", PageRequest.of(0, TOP_K)))
                 .thenReturn(List.of(chunk));
 
         List<MaterialChunk> result = materialSearchService.searchByContentKeyword("노드제이에스는 뭐야?", USER_ID);
@@ -153,15 +157,39 @@ class MaterialSearchServiceTest {
         materialSearchService = newService();
         Material material = material(101L, "백엔드 강의");
         MaterialChunk sharedChunk = chunk(11L, material, 0, "스프링부트와 자바로 만든 강의");
-        when(materialChunkRepository.findByUserIdAndChunkTextContaining(USER_ID, "스프링부트"))
+        // 첫 키워드("스프링부트")는 남은 자리 TOP_K개를 요청하고, 이미 1개를 채운 뒤 두 번째 키워드
+        // ("자바")는 남은 TOP_K - 1개만 요청해야 한다.
+        when(materialChunkRepository.findByUserIdAndChunkTextContaining(USER_ID, "스프링부트", PageRequest.of(0, TOP_K)))
                 .thenReturn(List.of(sharedChunk));
-        when(materialChunkRepository.findByUserIdAndChunkTextContaining(USER_ID, "자바"))
+        when(materialChunkRepository.findByUserIdAndChunkTextContaining(USER_ID, "자바", PageRequest.of(0, TOP_K - 1)))
                 .thenReturn(List.of(sharedChunk));
 
         // "스프링부트"와 "자바" 둘 다 같은 청크를 걸러내더라도 결과에는 한 번만 담겨야 한다.
         List<MaterialChunk> result = materialSearchService.searchByContentKeyword("스프링부트와 자바 강의 있어?", USER_ID);
 
         assertThat(result).containsExactly(sharedChunk);
+    }
+
+    @Test
+    void searchByContentKeywordStopsQueryingOnceTopKSlotsAreFilled() {
+        materialSearchService = newService();
+        Material material = material(101L, "백엔드 강의");
+        List<MaterialChunk> fullPage = List.of(
+                chunk(11L, material, 0, "스프링부트 기초"),
+                chunk(12L, material, 1, "스프링부트 심화"),
+                chunk(13L, material, 2, "스프링부트 배포"),
+                chunk(14L, material, 3, "스프링부트 테스트"),
+                chunk(15L, material, 4, "스프링부트 보안")
+        );
+        // 첫 키워드만으로 TOP_K(5)를 다 채우면, 남은 자리가 없으므로 이후 키워드("자바")는 아예
+        // 쿼리하지 않아야 한다(DB 왕복 낭비 방지).
+        when(materialChunkRepository.findByUserIdAndChunkTextContaining(USER_ID, "스프링부트", PageRequest.of(0, TOP_K)))
+                .thenReturn(fullPage);
+
+        List<MaterialChunk> result = materialSearchService.searchByContentKeyword("스프링부트와 자바 강의 있어?", USER_ID);
+
+        assertThat(result).hasSize(TOP_K);
+        verify(materialChunkRepository, never()).findByUserIdAndChunkTextContaining(any(), eq("자바"), any());
     }
 
     @Test

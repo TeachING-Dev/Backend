@@ -9,6 +9,7 @@ import com.teaching.backend.global.ai.openai.OpenAiClient;
 import com.teaching.backend.global.ai.qdrant.QdrantClient;
 import com.teaching.backend.global.ai.qdrant.dto.QdrantSearchHit;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -92,11 +93,14 @@ public class MaterialSearchService {
 
         Map<Long, MaterialChunk> matchedChunks = new LinkedHashMap<>();
         for (String keyword : keywords) {
-            for (MaterialChunk chunk : materialChunkRepository.findByUserIdAndChunkTextContaining(userId, keyword)) {
-                matchedChunks.putIfAbsent(chunk.getId(), chunk);
-            }
-            if (matchedChunks.size() >= topK) {
+            int remaining = topK - matchedChunks.size();
+            if (remaining <= 0) {
                 break;
+            }
+            List<MaterialChunk> hits = materialChunkRepository.findByUserIdAndChunkTextContaining(
+                    userId, keyword, PageRequest.of(0, remaining));
+            for (MaterialChunk chunk : hits) {
+                matchedChunks.putIfAbsent(chunk.getId(), chunk);
             }
         }
 

@@ -1,6 +1,7 @@
 package com.teaching.backend.domain.material.repository;
 
 import com.teaching.backend.domain.material.entity.MaterialChunk;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -30,6 +31,7 @@ public interface MaterialChunkRepository
             """)
     List<MaterialChunk> findByUserIdAndChunkTextContaining(
             @Param("userId") Long userId,
-            @Param("keyword") String keyword
+            @Param("keyword") String keyword,
+            Pageable pageable
     );
 }

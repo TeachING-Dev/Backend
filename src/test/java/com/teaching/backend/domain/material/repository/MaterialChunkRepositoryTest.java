@@ -9,6 +9,7 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -43,7 +44,7 @@ class MaterialChunkRepositoryTest {
         flushAndClear();
 
         List<MaterialChunk> result = materialChunkRepository
-                .findByUserIdAndChunkTextContaining(user.getId(), "node.js");
+                .findByUserIdAndChunkTextContaining(user.getId(), "node.js", PageRequest.of(0, 5));
 
         assertThat(result).extracting(MaterialChunk::getId).containsExactly(chunk.getId());
     }
@@ -56,7 +57,7 @@ class MaterialChunkRepositoryTest {
         flushAndClear();
 
         List<MaterialChunk> result = materialChunkRepository
-                .findByUserIdAndChunkTextContaining(user.getId(), "리액트");
+                .findByUserIdAndChunkTextContaining(user.getId(), "리액트", PageRequest.of(0, 5));
 
         assertThat(result).isEmpty();
     }
@@ -70,9 +71,24 @@ class MaterialChunkRepositoryTest {
         flushAndClear();
 
         List<MaterialChunk> result = materialChunkRepository
-                .findByUserIdAndChunkTextContaining(other.getId(), "node.js");
+                .findByUserIdAndChunkTextContaining(other.getId(), "node.js", PageRequest.of(0, 5));
 
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    void limitsResultsToPageableSizeEvenWhenMoreChunksMatch() {
+        User user = userRepository.save(user("owner"));
+        Material material = materialRepository.save(material(user, "Node.js 강의"));
+        for (int i = 0; i < 5; i++) {
+            materialChunkRepository.save(chunk(material, i, "Node.js 관련 내용 " + i, "point-limit-" + i));
+        }
+        flushAndClear();
+
+        List<MaterialChunk> result = materialChunkRepository
+                .findByUserIdAndChunkTextContaining(user.getId(), "node.js", PageRequest.of(0, 3));
+
+        assertThat(result).hasSize(3);
     }
 
     private User user(String suffix) {
