@@ -11,18 +11,25 @@ import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
 import com.teaching.backend.domain.user.entity.User;
 import com.teaching.backend.global.ai.openai.OpenAiClient;
 import com.teaching.backend.global.ai.qdrant.QdrantClient;
+import com.teaching.backend.global.ai.qdrant.dto.QdrantSearchHit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -85,6 +92,7 @@ class MaterialSearchServiceTest {
                 .thenReturn(List.of(101L));
         when(materialChunkRepository.findAllByMaterial_IdInOrderByMaterial_IdAscChunkIndexAsc(List.of(101L)))
                 .thenReturn(List.of(firstChunk, secondChunk));
+        when(materialRepository.findAllById(Set.of(101L))).thenReturn(List.of(material));
 
         List<MaterialChunk> result = materialSearchService.searchByMetadata("내 자료에 백엔드 관련 자료 있어?", USER_ID);
 
@@ -119,6 +127,113 @@ class MaterialSearchServiceTest {
     }
 
     @Test
+    void searchByContentKeywordReturnsEmptyWithoutQueryingWhenNoKeywordExtracted() {
+        materialSearchService = newService();
+
+        // "음"은 1글자라 MIN_KEYWORD_LENGTH 미만으로 걸러져 검색할 키워드가 하나도 없다.
+        List<MaterialChunk> result = materialSearchService.searchByContentKeyword("음...", USER_ID);
+
+        assertThat(result).isEmpty();
+        verify(materialChunkRepository, never()).findByUserIdAndChunkTextContaining(anyLong(), anyString(), any());
+    }
+
+    @Test
+    void searchByContentKeywordStripsTrailingParticleAndFindsChunkContainingKeyword() {
+        materialSearchService = newService();
+        Material material = material(101L, "백엔드 강의");
+        MaterialChunk chunk = chunk(11L, material, 0, "노드제이에스는 서버 런타임이다");
+        // "노드제이에스는"에서 조사 "는"을 뗀 "노드제이에스"로 본문을 검색해야 한다. 첫 키워드라 남은 자리(TOP_K)
+        // 전체를 요청한다.
+        when(materialChunkRepository.findByUserIdAndChunkTextContaining(USER_ID, "노드제이에스", PageRequest.of(0, TOP_K)))
+                .thenReturn(List.of(chunk));
+
+        List<MaterialChunk> result = materialSearchService.searchByContentKeyword("노드제이에스는 뭐야?", USER_ID);
+
+        assertThat(result).containsExactly(chunk);
+    }
+
+    @Test
+    void searchByContentKeywordDeduplicatesChunkMatchedByMultipleKeywords() {
+        materialSearchService = newService();
+        Material material = material(101L, "백엔드 강의");
+        MaterialChunk sharedChunk = chunk(11L, material, 0, "스프링부트와 자바로 만든 강의");
+        // 첫 키워드("스프링부트")는 남은 자리 TOP_K개를 요청하고, 이미 1개를 채운 뒤 두 번째 키워드
+        // ("자바")는 남은 TOP_K - 1개만 요청해야 한다.
+        when(materialChunkRepository.findByUserIdAndChunkTextContaining(USER_ID, "스프링부트", PageRequest.of(0, TOP_K)))
+                .thenReturn(List.of(sharedChunk));
+        when(materialChunkRepository.findByUserIdAndChunkTextContaining(USER_ID, "자바", PageRequest.of(0, TOP_K - 1)))
+                .thenReturn(List.of(sharedChunk));
+
+        // "스프링부트"와 "자바" 둘 다 같은 청크를 걸러내더라도 결과에는 한 번만 담겨야 한다.
+        List<MaterialChunk> result = materialSearchService.searchByContentKeyword("스프링부트와 자바 강의 있어?", USER_ID);
+
+        assertThat(result).containsExactly(sharedChunk);
+    }
+
+    @Test
+    void searchByContentKeywordStopsQueryingOnceTopKSlotsAreFilled() {
+        materialSearchService = newService();
+        Material material = material(101L, "백엔드 강의");
+        List<MaterialChunk> fullPage = List.of(
+                chunk(11L, material, 0, "스프링부트 기초"),
+                chunk(12L, material, 1, "스프링부트 심화"),
+                chunk(13L, material, 2, "스프링부트 배포"),
+                chunk(14L, material, 3, "스프링부트 테스트"),
+                chunk(15L, material, 4, "스프링부트 보안")
+        );
+        // 첫 키워드만으로 TOP_K(5)를 다 채우면, 남은 자리가 없으므로 이후 키워드("자바")는 아예
+        // 쿼리하지 않아야 한다(DB 왕복 낭비 방지).
+        when(materialChunkRepository.findByUserIdAndChunkTextContaining(USER_ID, "스프링부트", PageRequest.of(0, TOP_K)))
+                .thenReturn(fullPage);
+
+        List<MaterialChunk> result = materialSearchService.searchByContentKeyword("스프링부트와 자바 강의 있어?", USER_ID);
+
+        assertThat(result).hasSize(TOP_K);
+        verify(materialChunkRepository, never()).findByUserIdAndChunkTextContaining(any(), eq("자바"), any());
+    }
+
+    @Test
+    void searchTopChunksFiltersHitsBelowThresholdAndPreservesScoreOrder() {
+        materialSearchService = newService();
+        Material material = material(101L, "Spring Boot REST API 개발 강의");
+        MaterialChunk topChunk = chunk(11L, material, 0, "가장 유사도 높은 청크");
+        MaterialChunk secondChunk = chunk(12L, material, 1, "두 번째로 유사한 청크");
+        when(openAiClient.embed("백엔드 자료 있어?")).thenReturn(new float[]{1f, 0f});
+        when(qdrantClient.search(new float[]{1f, 0f}, TOP_K, USER_ID)).thenReturn(List.of(
+                new QdrantSearchHit("11", 0.9, Map.of("materialChunkId", 11)),
+                new QdrantSearchHit("12", 0.5, Map.of("materialChunkId", 12)),
+                new QdrantSearchHit("13", 0.1, Map.of("materialChunkId", 13)) // 임계값(0.3) 미만이라 걸러져야 함
+        ));
+        when(materialChunkRepository.findByIdIn(List.of(11L, 12L))).thenReturn(List.of(secondChunk, topChunk));
+        when(materialRepository.findAllById(Set.of(101L))).thenReturn(List.of(material));
+
+        List<MaterialChunk> result = materialSearchService.searchTopChunks("백엔드 자료 있어?", USER_ID);
+
+        // Qdrant가 score 내림차순으로 반환하므로, 레포지토리 조회 순서와 무관하게 그 순서를 보존해야 한다.
+        assertThat(result).containsExactly(topChunk, secondChunk);
+    }
+
+    @Test
+    void searchTopChunksDropsChunksWhoseMaterialWasDeleted() {
+        materialSearchService = newService();
+        // Qdrant 벡터는 MySQL의 자료 삭제와 자동으로 동기화되지 않아, 자료가 삭제된 뒤에도 그
+        // 자료의 청크가 검색에 걸릴 수 있다(고아 청크). 그대로 두면 Material 지연 로딩에서
+        // EntityNotFoundException이 터져 챗봇 전체가 500으로 죽으므로 걸러내야 한다.
+        Material deletedMaterial = material(1072L, "삭제된 자료");
+        MaterialChunk orphanChunk = chunk(21L, deletedMaterial, 0, "고아 청크");
+        when(openAiClient.embed("백엔드 자료 있어?")).thenReturn(new float[]{1f, 0f});
+        when(qdrantClient.search(new float[]{1f, 0f}, TOP_K, USER_ID))
+                .thenReturn(List.of(new QdrantSearchHit("21", 0.9, Map.of("materialChunkId", 21))));
+        when(materialChunkRepository.findByIdIn(List.of(21L))).thenReturn(List.of(orphanChunk));
+        // 자료가 이미 삭제되어 materials 테이블에는 없는 상태를 재현: findAllById가 빈 결과를 반환
+        when(materialRepository.findAllById(Set.of(1072L))).thenReturn(List.of());
+
+        List<MaterialChunk> result = materialSearchService.searchTopChunks("백엔드 자료 있어?", USER_ID);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
     void searchByTitleTagSimilarityReturnsEmptyWithoutEmbeddingWhenUserHasNoMaterials() {
         materialSearchService = newService();
         when(materialRepository.findAllByUser_Id(USER_ID, Sort.unsorted())).thenReturn(List.of());
@@ -147,6 +262,7 @@ class MaterialSearchServiceTest {
                 ));
         when(materialChunkRepository.findAllByMaterial_IdInOrderByMaterial_IdAscChunkIndexAsc(List.of(101L)))
                 .thenReturn(List.of(backendChunk));
+        when(materialRepository.findAllById(Set.of(101L))).thenReturn(List.of(backend));
 
         List<MaterialChunk> result = materialSearchService.searchByTitleTagSimilarity("서버 쪽 자료 있어?", USER_ID);
 
@@ -176,6 +292,8 @@ class MaterialSearchServiceTest {
         // 실제 레포지토리는 material_id 오름차순으로 반환하므로(101 -> 202), 그 순서 그대로 스텁한다.
         when(materialChunkRepository.findAllByMaterial_IdInOrderByMaterial_IdAscChunkIndexAsc(List.of(202L, 101L)))
                 .thenReturn(List.of(lowIdChunk, highIdChunk));
+        when(materialRepository.findAllById(Set.of(101L, 202L)))
+                .thenReturn(List.of(lowIdHighSimilarity, highIdLowSimilarity));
 
         List<MaterialChunk> result = materialSearchService.searchByTitleTagSimilarity("서버 쪽 자료 있어?", USER_ID);
 
