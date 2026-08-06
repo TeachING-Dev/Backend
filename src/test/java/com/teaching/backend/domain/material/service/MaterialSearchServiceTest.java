@@ -234,6 +234,72 @@ class MaterialSearchServiceTest {
     }
 
     @Test
+    void searchByMultiQueryVectorKeepsHighestScoreWhenSameChunkMatchesMultipleQueries() {
+        materialSearchService = newService();
+        Material material = material(101L, "Spring Boot REST API 개발 강의");
+        MaterialChunk chunkA = chunk(11L, material, 0, "청크 A");
+        MaterialChunk chunkB = chunk(12L, material, 1, "청크 B");
+        when(openAiClient.chatComplete(any(), eq("질문"))).thenReturn("변형 질문");
+
+        when(openAiClient.embed("질문")).thenReturn(new float[]{1f, 0f});
+        when(qdrantClient.search(new float[]{1f, 0f}, TOP_K, USER_ID))
+                .thenReturn(List.of(new QdrantSearchHit("11", 0.9, Map.of("materialChunkId", 11))));
+
+        when(openAiClient.embed("변형 질문")).thenReturn(new float[]{0f, 1f});
+        when(qdrantClient.search(new float[]{0f, 1f}, TOP_K, USER_ID)).thenReturn(List.of(
+                new QdrantSearchHit("11", 0.5, Map.of("materialChunkId", 11)), // 같은 청크, 더 낮은 점수 -> 무시돼야 함
+                new QdrantSearchHit("12", 0.7, Map.of("materialChunkId", 12))
+        ));
+
+        when(materialChunkRepository.findByIdIn(List.of(11L, 12L))).thenReturn(List.of(chunkB, chunkA));
+        when(materialRepository.findAllById(Set.of(101L))).thenReturn(List.of(material));
+
+        List<MaterialChunk> result = materialSearchService.searchByMultiQueryVector("질문", USER_ID);
+
+        // A는 원본 질문에서 이미 0.9를 받았으니 변형 질문의 더 낮은 점수(0.5)에 밀리면 안 되고,
+        // 결과적으로 A(0.9)가 B(0.7)보다 먼저 와야 한다.
+        assertThat(result).containsExactly(chunkA, chunkB);
+    }
+
+    @Test
+    void searchByMultiQueryVectorExcludesHitsBelowThresholdFromAnyVariant() {
+        materialSearchService = newService();
+        when(openAiClient.chatComplete(any(), eq("질문"))).thenReturn("변형 질문");
+
+        when(openAiClient.embed("질문")).thenReturn(new float[]{1f, 0f});
+        when(qdrantClient.search(new float[]{1f, 0f}, TOP_K, USER_ID))
+                .thenReturn(List.of(new QdrantSearchHit("11", 0.1, Map.of("materialChunkId", 11)))); // 임계값(0.3) 미만
+
+        when(openAiClient.embed("변형 질문")).thenReturn(new float[]{0f, 1f});
+        when(qdrantClient.search(new float[]{0f, 1f}, TOP_K, USER_ID))
+                .thenReturn(List.of(new QdrantSearchHit("12", 0.2, Map.of("materialChunkId", 12)))); // 임계값(0.3) 미만
+
+        List<MaterialChunk> result = materialSearchService.searchByMultiQueryVector("질문", USER_ID);
+
+        assertThat(result).isEmpty();
+        verify(materialChunkRepository, never()).findByIdIn(anyList());
+    }
+
+    @Test
+    void searchByMultiQueryVectorSkipsBlankLinesFromExpansionResponse() {
+        materialSearchService = newService();
+        // LLM이 빈 줄을 섞어 응답해도 실제 표현 질문만 걸러서 임베딩해야 한다.
+        when(openAiClient.chatComplete(any(), eq("질문"))).thenReturn("변형 질문1\n\n   \n변형 질문2");
+
+        when(openAiClient.embed("질문")).thenReturn(new float[]{1f, 0f});
+        when(openAiClient.embed("변형 질문1")).thenReturn(new float[]{0f, 1f});
+        when(openAiClient.embed("변형 질문2")).thenReturn(new float[]{0f, 0f});
+        when(qdrantClient.search(any(), eq(TOP_K), eq(USER_ID))).thenReturn(List.of());
+
+        materialSearchService.searchByMultiQueryVector("질문", USER_ID);
+
+        verify(openAiClient).embed("변형 질문1");
+        verify(openAiClient).embed("변형 질문2");
+        verify(openAiClient, never()).embed("");
+        verify(openAiClient, never()).embed("   ");
+    }
+
+    @Test
     void searchByTitleTagSimilarityReturnsEmptyWithoutEmbeddingWhenUserHasNoMaterials() {
         materialSearchService = newService();
         when(materialRepository.findAllByUser_Id(USER_ID, Sort.unsorted())).thenReturn(List.of());
