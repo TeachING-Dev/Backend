@@ -5,6 +5,7 @@ import com.teaching.backend.domain.material.enums.PlatformType;
 import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.exception.MaterialException;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -69,7 +70,12 @@ class MaterialUrlAnalysisPromptBuilderTest {
 
     @Test
     void usesNoInformationForMissingMetadataAndNoFolderMessage() {
-        when(promptProvider.userTemplate()).thenReturn(template());
+        when(promptProvider.userTemplate()).thenReturn("""
+                AUTHOR={{AUTHOR}}
+                PUBLISHED_AT={{PUBLISHED_AT}}
+                FOLDER_LIST={{FOLDER_LIST}}
+                PLATFORM_TYPE={{PLATFORM_TYPE}}
+                """);
         ExtractedMaterialContent content = new ExtractedMaterialContent(
                 "https://example.com/post",
                 null,
@@ -81,7 +87,18 @@ class MaterialUrlAnalysisPromptBuilderTest {
         );
 
         String message = promptBuilder.buildUserMessage(content, List.of());
+        String noInformation = (String) ReflectionTestUtils.getField(
+                MaterialUrlAnalysisPromptBuilder.class,
+                "NO_INFORMATION"
+        );
+        String noFolderMessage = (String) ReflectionTestUtils.getField(
+                MaterialUrlAnalysisPromptBuilder.class,
+                "NO_FOLDER_MESSAGE"
+        );
 
+        assertThat(message).contains("AUTHOR=" + noInformation);
+        assertThat(message).contains("PUBLISHED_AT=" + noInformation);
+        assertThat(message).contains("FOLDER_LIST=" + noFolderMessage);
         assertThat(message).doesNotContain("{{PLATFORM_TYPE}}", "{{AUTHOR}}", "{{PUBLISHED_AT}}", "{{FOLDER_LIST}}");
     }
 
