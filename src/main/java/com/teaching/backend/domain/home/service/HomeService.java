@@ -39,8 +39,6 @@ public class HomeService {
     private final TeachingMapRepository teachingMapRepository;
     private final TeachingMapStepRepository teachingMapStepRepository;
 
-    @Value("${app.icon-base-url}")
-    private String iconBaseUrl;
 
     public HomeDashboardResponse getDashboard(Long userId) {
         validateUserId(userId);
@@ -108,7 +106,7 @@ public class HomeService {
     }
 
     private String buildIconUrl(String iconPath) {
-        return iconBaseUrl + "/" + iconPath;
+        return iconPath;
     }
 
     private Sort recentSort() {
