@@ -14,5 +14,5 @@ public enum PlatformType {
 
     private final String iconPath;
     PlatformType(String iconPath) { this.iconPath = iconPath; }
-    public String getIconPath() { return iconPath; }
+    public String getIconPath() { return "https://teaching-app-static-2026.s3.ap-northeast-2.amazonaws.com/icons/"+iconPath; }
 }
