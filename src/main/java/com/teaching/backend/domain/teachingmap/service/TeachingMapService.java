@@ -66,8 +66,7 @@ public class TeachingMapService {
     private final TeachingMapPromptGenerator promptGenerator;
     private final TeachingMapAiResultParser resultParser;
     private final MaterialAnalysisRepository materialAnalysisRepository;
-    @Value("${app.icon-base-url}")
-    private String iconBaseUrl;
+
     @Value("${app.teacher-image-base-url}")
     private String teacherImageBaseUrl;
 
@@ -123,7 +122,7 @@ public class TeachingMapService {
     }
 
     private String buildIconUrl(String iconPath) {
-        return iconBaseUrl + "/" + iconPath;
+        return iconPath;
     }
     private GuideType toGuideType(TeacherPersona persona) {
         return switch (persona) {
