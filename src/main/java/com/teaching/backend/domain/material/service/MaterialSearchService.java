@@ -14,6 +14,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -27,10 +28,11 @@ import java.util.stream.IntStream;
 // 채팅 질문에 대해 사용자 소유 자료 중 관련 있는 MaterialChunk를 찾는 서비스.
 // 1순위: 질문 문장에 언급된 자료 제목/태그를 RDB에서 직접 조회(searchByMetadata) — 존재 여부를 묻는
 // 메타 질문에 강함. 2순위: 질문에서 뽑은 키워드가 청크 본문에 그대로 있는지 조회(searchByContentKeyword)
-// — 본문에 단어가 실제로 있는데도 임베딩 유사도가 임계값을 못 넘어 놓치는 경우를 막는다. 3순위: Qdrant
-// 임베딩 유사도 검색(searchTopChunks) — 단어가 그대로 없는 의미/맥락 질문에 강함. 4순위: 자료 제목/태그
-// 자체를 임베딩해 질문과 의미 비교(searchByTitleTagSimilarity) — 앞 순위가 전부 못 잡는 동의어·우회
-// 표현 메타 질문에 대응.
+// — 본문에 단어가 실제로 있는데도 임베딩 유사도가 임계값을 못 넘어 놓치는 경우를 막는다. 3순위: 원본
+// 질문 + LLM이 만든 여러 표현으로 각각 Qdrant 임베딩 검색해 합치는 멀티쿼리 검색(searchByMultiQueryVector)
+// — 단어가 그대로 없는 의미/맥락 질문이나, 질문 표현이 자료 본문과 안 맞아 단일 쿼리로는 유사도가
+// 낮게 나오는 경우의 recall을 높인다. 4순위: 자료 제목/태그 자체를 임베딩해 질문과 의미 비교
+// (searchByTitleTagSimilarity) — 앞 순위가 전부 못 잡는 동의어·우회 표현 메타 질문에 대응.
 @Service
 @Transactional(readOnly = true)
 public class MaterialSearchService {
@@ -42,6 +44,12 @@ public class MaterialSearchService {
     );
     private static final int MIN_KEYWORD_LENGTH = 2;
     private static final int MAX_KEYWORDS = 5;
+
+    private static final int MULTI_QUERY_VARIANT_COUNT = 3;
+    private static final String MULTI_QUERY_EXPANSION_PROMPT = """
+            사용자의 질문과 같은 의도를 유지하면서, 검색에 도움이 되도록 다른 단어와 문장 구조를 사용한
+            표현 %d개를 만들어 주세요. 각 표현은 한 줄에 하나씩, 번호나 설명 없이 질문 문장만 출력하세요.
+            """.formatted(MULTI_QUERY_VARIANT_COUNT);
 
     private final OpenAiClient openAiClient;
     private final QdrantClient qdrantClient;
@@ -130,22 +138,45 @@ public class MaterialSearchService {
     }
 
     public List<MaterialChunk> searchTopChunks(String query, Long userId) {
-        float[] vector = openAiClient.embed(query);
-        List<QdrantSearchHit> hits = qdrantClient.search(vector, topK, userId);
+        return searchByBestScoringChunks(List.of(query), userId);
+    }
 
-        List<Long> chunkIds = hits.stream()
-                .filter(hit -> hit.score() >= similarityThreshold)
-                .map(hit -> ((Number) hit.payload().get("materialChunkId")).longValue())
-                .toList();
+    // 원본 질문 하나만으로는 자료 본문과 표현이 달라(동의어/우회 표현) 임베딩 유사도가 낮게 나와 놓치는
+    // 경우가 있다. LLM으로 같은 의도의 다른 표현 질문 여러 개를 만들어 각각 벡터 검색한 뒤 합쳐서
+    // recall을 높인다(Multi-Query Retriever). 같은 청크가 여러 질문에 걸리면 그중 가장 높은 유사도를 쓴다.
+    public List<MaterialChunk> searchByMultiQueryVector(String question, Long userId) {
+        return searchByBestScoringChunks(buildQueryVariants(question), userId);
+    }
 
-        if (chunkIds.isEmpty()) {
+    // 질문마다 topK개씩 벡터 검색해 임계값 이상인 것만 모으고, 같은 청크가 여러 질문에서 잡히면
+    // 그중 최고 점수를 채택해 병합한 뒤 상위 topK만 남긴다. 단일 질문이면 병합할 게 없으니 Qdrant가
+    // 반환한 순서(score 내림차순) 그대로다.
+    private List<MaterialChunk> searchByBestScoringChunks(List<String> queries, Long userId) {
+        Map<Long, Double> bestScoreByChunkId = new LinkedHashMap<>();
+        for (String query : queries) {
+            float[] vector = openAiClient.embed(query);
+            for (QdrantSearchHit hit : qdrantClient.search(vector, topK, userId)) {
+                if (hit.score() < similarityThreshold) {
+                    continue;
+                }
+                long chunkId = ((Number) hit.payload().get("materialChunkId")).longValue();
+                bestScoreByChunkId.merge(chunkId, hit.score(), Math::max);
+            }
+        }
+
+        if (bestScoreByChunkId.isEmpty()) {
             return List.of();
         }
+
+        List<Long> chunkIds = bestScoreByChunkId.entrySet().stream()
+                .sorted(Map.Entry.<Long, Double>comparingByValue().reversed())
+                .limit(topK)
+                .map(Map.Entry::getKey)
+                .toList();
 
         Map<Long, MaterialChunk> chunksById = materialChunkRepository.findByIdIn(chunkIds).stream()
                 .collect(Collectors.toMap(MaterialChunk::getId, Function.identity()));
 
-        // Qdrant가 score 내림차순으로 반환하므로 chunkIds 순서를 그대로 보존해서 재정렬
         List<MaterialChunk> chunks = chunkIds.stream()
                 .map(chunksById::get)
                 .filter(chunk -> chunk != null)
@@ -155,6 +186,23 @@ public class MaterialSearchService {
         // 청크가 검색에 걸릴 수 있다(고아 청크). 그대로 두면 프롬프트 구성 시 Material 지연 로딩에서
         // EntityNotFoundException이 터져 챗봇 전체가 500으로 죽으므로 여기서 걸러낸다.
         return filterChunksWithExistingMaterial(chunks);
+    }
+
+    // LLM에게 같은 의도의 다른 표현을 요청해 원본 질문에 덧붙인다. 이 호출 자체가 실패하면(타임아웃 등)
+    // 다른 OpenAI 호출들과 동일하게 예외가 그대로 전파되어 ask()가 quota를 반환하고 실패 처리한다 —
+    // 검색 품질을 위해 조용히 원본 질문만으로 저하시키지 않는다.
+    private List<String> buildQueryVariants(String question) {
+        List<String> variants = new ArrayList<>();
+        variants.add(question);
+
+        String response = openAiClient.chatComplete(MULTI_QUERY_EXPANSION_PROMPT, question);
+        response.lines()
+                .map(String::strip)
+                .filter(line -> !line.isBlank())
+                .limit(MULTI_QUERY_VARIANT_COUNT)
+                .forEach(variants::add);
+
+        return variants;
     }
 
     // 자료 제목/태그 자체를 배치 임베딩해 질문과 코사인 유사도로 비교한다(캐싱 없음, 매 호출마다 계산).
