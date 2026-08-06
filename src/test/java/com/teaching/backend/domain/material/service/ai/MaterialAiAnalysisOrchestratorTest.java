@@ -2,7 +2,6 @@ package com.teaching.backend.domain.material.service.ai;
 
 import com.teaching.backend.domain.folder.entity.Folder;
 import com.teaching.backend.domain.folder.repository.FolderRepository;
-import com.teaching.backend.domain.material.dto.ai.MaterialAiHighlightResult;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisPipelineResult;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisResult;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiStageContext;
@@ -12,7 +11,6 @@ import com.teaching.backend.domain.material.dto.extract.MaterialAnalysisPreparat
 import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.entity.MaterialAnalysis;
 import com.teaching.backend.domain.material.enums.AiStatus;
-import com.teaching.backend.domain.material.enums.MaterialAiHighlightType;
 import com.teaching.backend.domain.material.enums.MaterialAiStageType;
 import com.teaching.backend.domain.material.enums.PlatformType;
 import com.teaching.backend.domain.material.exception.MaterialErrorCode;
@@ -73,8 +71,7 @@ class MaterialAiAnalysisOrchestratorTest {
     void analyzesPreparationResultIndexesContentAndCompletesMaterial() {
         User user = user();
         Folder folder = folder(user);
-        MaterialAiAnalysisResult aiResult = new MaterialAiAnalysisResult("summary", "detail", List.of("tag"), null, null);
-        MaterialAiHighlightResult highlight = new MaterialAiHighlightResult("important", MaterialAiHighlightType.CORE);
+        MaterialAiAnalysisResult aiResult = new MaterialAiAnalysisResult("summary", "detail", List.of("tag"), null);
         MaterialAnalysis analysis = MaterialAnalysis.create(
                 Material.create(user, folder, "Title", "https://example.com", PlatformType.BLOG),
                 "summary",
@@ -93,7 +90,6 @@ class MaterialAiAnalysisOrchestratorTest {
                 return new MaterialAiStageResult(
                         MaterialAiStageType.CONTENT_ANALYSIS,
                         aiResult,
-                        List.of(highlight),
                         "Folder"
                 );
             }
@@ -116,7 +112,6 @@ class MaterialAiAnalysisOrchestratorTest {
         assertThat(result.materialAnalysisId()).isEqualTo(200L);
         assertThat(result.chunkCount()).isEqualTo(3);
         assertThat(result.extractedContent().content()).isEqualTo("source content for chunk later");
-        assertThat(result.highlights()).containsExactly(highlight);
         assertThat(result.recommendedFolderId()).isEqualTo(FOLDER_ID);
         assertThat(result.recommendedFolderName()).isEqualTo("Folder");
         ArgumentCaptor<Material> materialCaptor = ArgumentCaptor.forClass(Material.class);
@@ -125,10 +120,6 @@ class MaterialAiAnalysisOrchestratorTest {
                 materialCaptor.getValue(),
                 "source content for chunk later"
         );
-        verify(persistenceService).saveHighlights(
-                analysis,
-                List.of(highlight)
-        );
         assertThat(materialCaptor.getValue().getAiStatus()).isEqualTo(AiStatus.COMPLETED);
     }
 
@@ -136,7 +127,7 @@ class MaterialAiAnalysisOrchestratorTest {
     void recommendedFolderIsNullWhenNoActiveFolderNameMatches() {
         User user = user();
         Folder folder = folder(user);
-        MaterialAiAnalysisResult aiResult = new MaterialAiAnalysisResult("summary", "detail", List.of("tag"), null, null);
+        MaterialAiAnalysisResult aiResult = new MaterialAiAnalysisResult("summary", "detail", List.of("tag"), null);
         MaterialAnalysis analysis = MaterialAnalysis.create(
                 Material.create(user, folder, "Title", "https://example.com", PlatformType.BLOG),
                 "summary",
@@ -155,7 +146,6 @@ class MaterialAiAnalysisOrchestratorTest {
                 return new MaterialAiStageResult(
                         MaterialAiStageType.CONTENT_ANALYSIS,
                         aiResult,
-                        List.of(),
                         "Deleted Folder"
                 );
             }
@@ -186,7 +176,7 @@ class MaterialAiAnalysisOrchestratorTest {
         Folder initialFolder = folder(user);
         Folder activeRecommendedFolder = folder(user);
         ReflectionTestUtils.setField(activeRecommendedFolder, "id", 20L);
-        MaterialAiAnalysisResult aiResult = new MaterialAiAnalysisResult("summary", "detail", List.of("tag"), null, null);
+        MaterialAiAnalysisResult aiResult = new MaterialAiAnalysisResult("summary", "detail", List.of("tag"), null);
         MaterialAnalysis analysis = MaterialAnalysis.create(
                 Material.create(user, initialFolder, "Title", "https://example.com", PlatformType.BLOG),
                 "summary",
@@ -204,7 +194,6 @@ class MaterialAiAnalysisOrchestratorTest {
                 return new MaterialAiStageResult(
                         MaterialAiStageType.CONTENT_ANALYSIS,
                         aiResult,
-                        List.of(),
                         "Folder"
                 );
             }
@@ -258,7 +247,7 @@ class MaterialAiAnalysisOrchestratorTest {
     void indexingFailureIsPropagatedBeforeCompletedStatus() {
         User user = user();
         Folder folder = folder(user);
-        MaterialAiAnalysisResult aiResult = new MaterialAiAnalysisResult("summary", "detail", List.of("tag"), null, null);
+        MaterialAiAnalysisResult aiResult = new MaterialAiAnalysisResult("summary", "detail", List.of("tag"), null);
         Material savedMaterial = Material.create(user, folder, "Title", "https://example.com", PlatformType.BLOG);
         ReflectionTestUtils.setField(savedMaterial, "id", 100L);
         MaterialAnalysis analysis = MaterialAnalysis.create(savedMaterial, "summary", "detail", "v1");

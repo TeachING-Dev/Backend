@@ -467,7 +467,6 @@ class MaterialUrlAnalysisServiceTest {
                             preparationResult.extractedContent(),
                             300L,
                             1,
-                            List.of(),
                             RECOMMENDED_FOLDER_ID,
                             "Backend",
                             List.of("YouTube")
@@ -534,7 +533,6 @@ class MaterialUrlAnalysisServiceTest {
                             preparationResult.extractedContent(),
                             301L,
                             1,
-                            List.of(),
                             null,
                             null,
                             List.of("Web")
@@ -646,7 +644,6 @@ class MaterialUrlAnalysisServiceTest {
                 extractedContent,
                 300L,
                 2,
-                List.of(),
                 RECOMMENDED_FOLDER_ID,
                 "Backend",
                 List.of("Spring", "JPA")

@@ -1,16 +1,11 @@
 package com.teaching.backend.domain.material.service.ai;
 
 import com.teaching.backend.domain.folder.entity.Folder;
-import com.teaching.backend.domain.material.dto.ai.MaterialAiHighlightResult;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisResult;
 import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.entity.MaterialAnalysis;
-import com.teaching.backend.domain.material.entity.MaterialHighlight;
-import com.teaching.backend.domain.material.enums.HighlightType;
-import com.teaching.backend.domain.material.enums.MaterialAiHighlightType;
 import com.teaching.backend.domain.material.enums.PlatformType;
 import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
-import com.teaching.backend.domain.material.repository.MaterialHighlightRepository;
 import com.teaching.backend.domain.tag.entity.MaterialTag;
 import com.teaching.backend.domain.tag.entity.Tag;
 import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
@@ -44,9 +39,6 @@ class MaterialAiAnalysisPersistenceServiceTest {
     private MaterialAnalysisRepository materialAnalysisRepository;
 
     @Mock
-    private MaterialHighlightRepository materialHighlightRepository;
-
-    @Mock
     private TagRepository tagRepository;
 
     @Mock
@@ -63,7 +55,6 @@ class MaterialAiAnalysisPersistenceServiceTest {
                 "summary",
                 "detail",
                 List.of(" spring ", "spring", "jpa"),
-                null,
                 null
         );
         when(materialAnalysisRepository.save(any(MaterialAnalysis.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -90,7 +81,6 @@ class MaterialAiAnalysisPersistenceServiceTest {
                 "summary",
                 "detail",
                 List.of("spring"),
-                null,
                 null
         );
         when(materialAnalysisRepository.save(any(MaterialAnalysis.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -112,7 +102,6 @@ class MaterialAiAnalysisPersistenceServiceTest {
                 "summary",
                 "detail",
                 List.of("spring"),
-                null,
                 null
         );
         when(materialAnalysisRepository.save(any(MaterialAnalysis.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -137,7 +126,6 @@ class MaterialAiAnalysisPersistenceServiceTest {
                 "summary",
                 "detail",
                 List.of("", "  ", tooLong),
-                null,
                 null
         );
         when(materialAnalysisRepository.save(any(MaterialAnalysis.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -151,31 +139,6 @@ class MaterialAiAnalysisPersistenceServiceTest {
         verify(tagRepository, never()).findByName("  ");
         verify(tagRepository).insertIfAbsent(truncated);
         verify(materialTagRepository).save(any(MaterialTag.class));
-    }
-
-    @Test
-    void savesValidatedHighlightsWithOffsetsAndNormalizedType() {
-        Material material = material();
-        ReflectionTestUtils.setField(material, "id", 100L);
-        String longAnalysis = "## Summary\n* **Main** point\nImportant sentence. Be careful.";
-        MaterialAnalysis analysis = MaterialAnalysis.create(material, "summary", longAnalysis, "v1");
-        MaterialAiHighlightResult core = new MaterialAiHighlightResult("Important sentence.", MaterialAiHighlightType.CORE);
-        MaterialAiHighlightResult caution = new MaterialAiHighlightResult("Be careful.", MaterialAiHighlightType.CAUTION);
-        when(materialHighlightRepository.save(any(MaterialHighlight.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-        persistenceService.saveHighlights(analysis, List.of(core, caution));
-
-        ArgumentCaptor<MaterialHighlight> captor = ArgumentCaptor.forClass(MaterialHighlight.class);
-        verify(materialHighlightRepository, times(2)).save(captor.capture());
-        assertThat(captor.getAllValues().get(0).getHighlightText()).isEqualTo("Important sentence.");
-        assertThat(captor.getAllValues().get(0).getHighlightType()).isEqualTo(HighlightType.MAIN);
-        assertThat(captor.getAllValues().get(0).getStartPosition()).isEqualTo(longAnalysis.indexOf("Important sentence."));
-        assertThat(captor.getAllValues().get(0).getMaterialAnalysis()).isSameAs(analysis);
-        assertThat(longAnalysis.substring(
-                captor.getAllValues().get(0).getStartPosition(),
-                captor.getAllValues().get(0).getEndPosition()
-        )).isEqualTo("Important sentence.");
-        assertThat(captor.getAllValues().get(1).getHighlightType()).isEqualTo(HighlightType.CAUTION);
     }
 
     private Material material() {

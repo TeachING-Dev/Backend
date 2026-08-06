@@ -3,7 +3,6 @@ package com.teaching.backend.domain.material.service.ai;
 import com.teaching.backend.domain.folder.entity.Folder;
 import com.teaching.backend.domain.folder.repository.FolderRepository;
 import com.teaching.backend.domain.folder.service.FolderService;
-import com.teaching.backend.domain.material.dto.ai.MaterialAiHighlightResult;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisPipelineResult;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisResult;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiStageContext;
@@ -54,7 +53,6 @@ public class MaterialAiAnalysisOrchestrator {
 
         Optional<MaterialAiAnalysisResult> previousResult = Optional.empty();
         MaterialAnalysis savedAnalysis = null;
-        List<MaterialAiHighlightResult> highlights = List.of();
         String recommendedFolderName = null;
         for (MaterialAiAnalysisStage stage : materialAiAnalysisStageRegistry.stagesInOrder()) {
             MaterialAiStageResult stageResult = stage.execute(new MaterialAiStageContext(
@@ -73,7 +71,6 @@ public class MaterialAiAnalysisOrchestrator {
                 );
                 previousResult = Optional.of(stageResult.analysisResult());
             }
-            highlights = stageResult.highlights();
             recommendedFolderName = stageResult.recommendedFolderName();
         }
 
@@ -81,12 +78,6 @@ public class MaterialAiAnalysisOrchestrator {
                 material,
                 preparationResult.extractedContent().content()
         );
-        if (previousResult.isPresent()) {
-            materialAiAnalysisPersistenceService.saveHighlights(
-                    savedAnalysis,
-                    highlights
-            );
-        }
         material.markAnalysisCompleted();
         Folder recommendedFolder = resolveRecommendedFolder(preparationResult.userId(), recommendedFolderName);
 
@@ -104,7 +95,6 @@ public class MaterialAiAnalysisOrchestrator {
                 preparationResult.extractedContent(),
                 savedAnalysis == null ? null : savedAnalysis.getId(),
                 chunkCount,
-                highlights,
                 recommendedFolder == null ? null : recommendedFolder.getId(),
                 recommendedFolder == null ? null : recommendedFolder.getName(),
                 tags
