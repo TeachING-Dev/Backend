@@ -123,6 +123,42 @@ class MaterialAiAnalysisOrchestratorTest {
         assertThat(materialCaptor.getValue().getAiStatus()).isEqualTo(AiStatus.COMPLETED);
     }
 
+    // 재분석(forceAnalyze=true)이 기존 자료를 넘겨주면, 새 Material을 만들지 않고 그 자료를 재사용해야
+    // 한다(#114) — 안 그러면 재분석할 때마다 자료/청크/벡터가 중복으로 쌓인다.
+    @Test
+    void reusesExistingMaterialInsteadOfCreatingNewWhenProvided() {
+        User user = user();
+        Folder folder = folder(user);
+        Material existingMaterial = Material.create(user, folder, "Old Title", "https://example.com", PlatformType.BLOG);
+        ReflectionTestUtils.setField(existingMaterial, "id", 555L);
+        MaterialAiAnalysisResult aiResult = new MaterialAiAnalysisResult("summary", "detail", List.of("tag"), null);
+        MaterialAnalysis analysis = MaterialAnalysis.create(existingMaterial, "summary", "detail", "v1");
+        ReflectionTestUtils.setField(analysis, "id", 200L);
+        MaterialAiAnalysisStage stage = new MaterialAiAnalysisStage() {
+            @Override
+            public MaterialAiStageType type() {
+                return MaterialAiStageType.CONTENT_ANALYSIS;
+            }
+
+            @Override
+            public MaterialAiStageResult execute(MaterialAiStageContext context) {
+                return new MaterialAiStageResult(MaterialAiStageType.CONTENT_ANALYSIS, aiResult, null);
+            }
+        };
+        when(stageRegistry.stagesInOrder()).thenReturn(List.of(stage));
+        when(persistenceService.saveAnalysisResult(existingMaterial, aiResult)).thenReturn(analysis);
+        when(materialIndexingService.indexMaterialContent(existingMaterial, "source content for chunk later"))
+                .thenReturn(3);
+
+        MaterialAiAnalysisPipelineResult result = orchestrator.analyze(preparationResult(), existingMaterial);
+
+        assertThat(result.materialId()).isEqualTo(555L);
+        assertThat(existingMaterial.getTitle()).isEqualTo("Extracted Title");
+        assertThat(existingMaterial.getAiStatus()).isEqualTo(AiStatus.COMPLETED);
+        verify(materialRepository, never()).save(any());
+        verify(userRepository, never()).findById(any());
+    }
+
     @Test
     void recommendedFolderIsNullWhenNoActiveFolderNameMatches() {
         User user = user();

@@ -38,37 +38,56 @@ public class MaterialAiAnalysisPersistenceService {
     ) {
         String safeShortSummary = truncate(result.shortSummary(), MAX_SHORT_SUMMARY_LENGTH);
 
-        MaterialAnalysis analysis = materialAnalysisRepository.save(
-                MaterialAnalysis.create(
-                        material,
-                        safeShortSummary,
-                        result.longAnalysis(),
-                        PROMPT_VERSION
-                )
-        );
+        // material_id는 유니크 제약이라, 재분석(forceAnalyze)으로 기존 자료를 재사용하는 경우 새로
+        // insert하면 제약 위반이 난다. 기존 분석이 있으면 그 자리에서 갱신하고, 없으면 새로 만든다.
+        MaterialAnalysis analysis = materialAnalysisRepository.findByMaterialId(material.getId())
+                .map(existing -> {
+                    existing.updateAnalysis(safeShortSummary, result.longAnalysis(), PROMPT_VERSION);
+                    return existing;
+                })
+                .orElseGet(() -> materialAnalysisRepository.save(
+                        MaterialAnalysis.create(
+                                material,
+                                safeShortSummary,
+                                result.longAnalysis(),
+                                PROMPT_VERSION
+                        )
+                ));
         saveTags(material, result.tags());
         return analysis;
     }
 
+    // 새 분석 결과의 태그 집합과 자료에 이미 붙어있는 태그를 맞춘다: 더 이상 나오지 않는 태그는 지우고
+    // (재분석으로 낡은 태그가 안 남게), 새로 나온 태그만 추가한다. 이미 붙어있는 태그는 다시 안 건드림.
     private void saveTags(Material material, List<String> tagNames) {
-        if (tagNames == null || tagNames.isEmpty()) {
-            return;
+        Set<String> cleanTagNames = tagNames == null
+                ? Set.of()
+                : tagNames.stream()
+                        .filter(Objects::nonNull)
+                        .map(String::trim)
+                        .filter(name -> !name.isBlank())
+                        .map(name -> truncate(name, MAX_TAG_NAME_LENGTH))
+                        .collect(Collectors.toCollection(LinkedHashSet::new));
+
+        List<MaterialTag> existingMaterialTags = materialTagRepository.findAllWithTagByMaterialIds(
+                List.of(material.getId()));
+
+        List<MaterialTag> staleMaterialTags = existingMaterialTags.stream()
+                .filter(materialTag -> !cleanTagNames.contains(materialTag.getTag().getName()))
+                .toList();
+        if (!staleMaterialTags.isEmpty()) {
+            materialTagRepository.deleteAll(staleMaterialTags);
         }
 
-        Set<String> cleanTagNames = tagNames.stream()
-                .filter(Objects::nonNull)
-                .map(String::trim)
-                .filter(name -> !name.isBlank())
-                .map(name -> truncate(name, MAX_TAG_NAME_LENGTH))
-                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Set<String> existingTagNames = existingMaterialTags.stream()
+                .map(materialTag -> materialTag.getTag().getName())
+                .collect(Collectors.toSet());
 
         for (String name : cleanTagNames) {
-            Tag tag = getOrCreateTag(name);
-
-            boolean exists = materialTagRepository.existsByMaterial_IdAndTag_Id(material.getId(), tag.getId());
-            if (!exists) {
-                materialTagRepository.save(MaterialTag.create(material, tag));
+            if (existingTagNames.contains(name)) {
+                continue;
             }
+            materialTagRepository.save(MaterialTag.create(material, getOrCreateTag(name)));
         }
     }
 

@@ -95,4 +95,12 @@ public class Material extends BaseSoftDeleteEntity {
     public void changeFolder(Folder folder) {
         this.folder = folder;
     }
+
+    // 재분석(forceAnalyze) 시 새 자료를 만드는 대신 이 자료를 재사용할 때, 원문에서 다시 뽑은
+    // 제목/플랫폼으로 갱신한다. url/folder는 그대로 유지한다(같은 URL을 다시 분석하는 것이므로
+    // url은 불변, folder는 이미 배치된 위치를 유지).
+    public void updateForReanalysis(String title, PlatformType platformType) {
+        this.title = title;
+        this.platformType = platformType;
+    }
 }

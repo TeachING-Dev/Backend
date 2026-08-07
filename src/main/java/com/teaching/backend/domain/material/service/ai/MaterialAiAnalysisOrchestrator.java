@@ -40,15 +40,21 @@ public class MaterialAiAnalysisOrchestrator {
 
     @Transactional
     public MaterialAiAnalysisPipelineResult analyze(MaterialAnalysisPreparationResult preparationResult) {
-        User user = userRepository.findById(preparationResult.userId())
-                .orElseThrow(() -> new UserException(UserErrorCode.USER_NOT_FOUND));
-        Material material = materialRepository.save(Material.create(
-                user,
-                null,
-                resolveTitle(preparationResult),
-                preparationResult.originalUrl(),
-                preparationResult.platformType()
-        ));
+        return analyze(preparationResult, null);
+    }
+
+    // existingMaterial이 주어지면(forceAnalyze로 같은 URL을 재분석하는 경우) 새 자료를 만들지 않고
+    // 그 자료를 재사용한다 — 그래야 청크 재인덱싱(MaterialIndexingService)과 분석 결과 갱신
+    // (MaterialAiAnalysisPersistenceService)이 같은 materialId를 보고 기존 청크/분석/벡터를
+    // 덮어쓰지, 매번 새로 쌓지 않는다.
+    @Transactional
+    public MaterialAiAnalysisPipelineResult analyze(
+            MaterialAnalysisPreparationResult preparationResult,
+            Material existingMaterial
+    ) {
+        Material material = existingMaterial != null
+                ? reuseMaterial(existingMaterial, preparationResult)
+                : createMaterial(preparationResult);
         material.markAnalysisInProgress();
 
         Optional<MaterialAiAnalysisResult> previousResult = Optional.empty();
@@ -99,6 +105,24 @@ public class MaterialAiAnalysisOrchestrator {
                 recommendedFolder == null ? null : recommendedFolder.getName(),
                 tags
         );
+    }
+
+    private Material createMaterial(MaterialAnalysisPreparationResult preparationResult) {
+        User user = userRepository.findById(preparationResult.userId())
+                .orElseThrow(() -> new UserException(UserErrorCode.USER_NOT_FOUND));
+        return materialRepository.save(Material.create(
+                user,
+                null,
+                resolveTitle(preparationResult),
+                preparationResult.originalUrl(),
+                preparationResult.platformType()
+        ));
+    }
+
+    // existingMaterial은 이미 이 유저 소유로 조회된 자료라 User를 다시 조회할 필요가 없다.
+    private Material reuseMaterial(Material existingMaterial, MaterialAnalysisPreparationResult preparationResult) {
+        existingMaterial.updateForReanalysis(resolveTitle(preparationResult), preparationResult.platformType());
+        return existingMaterial;
     }
 
     private Folder resolveRecommendedFolder(Long userId, String recommendedFolderName) {

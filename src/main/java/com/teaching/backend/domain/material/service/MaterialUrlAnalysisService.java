@@ -58,9 +58,20 @@ public class MaterialUrlAnalysisService {
         PlatformType platformType = materialPlatformResolver.resolve(null, originalUrl);
 
         if (request.isForceAnalyze()) {
-            Material existingMaterial = findLatestCompletedMaterial(userId, originalUrl)
-                    .orElse(null);
-            return analyzeNewMaterial(userId, originalUrl, platformType, existingMaterial);
+            // forceAnalyze도 이제(#114) 기존 자료를 새로 만들지 않고 재사용하므로, 같은 URL에 대한
+            // 동시 재분석 요청이 같은 Material/청크/벡터를 동시에 갱신하지 않도록 가드로 직렬화해야
+            // 한다 — 재사용 전에는 매번 독립된 새 자료를 만들어서 이 문제가 없었다. completedResult는
+            // 항상 비워서(Optional::empty) "이미 완료된 결과 재사용" 없이 매번 실제로 재분석하게 한다.
+            return materialUrlAnalysisConcurrencyGuard.executeSerialized(
+                    userId,
+                    originalUrl,
+                    Optional::empty,
+                    () -> {
+                        Material existingMaterial = findLatestCompletedMaterial(userId, originalUrl)
+                                .orElse(null);
+                        return analyzeNewMaterial(userId, originalUrl, platformType, existingMaterial);
+                    }
+            );
         }
 
         return materialUrlAnalysisConcurrencyGuard.executeSerialized(
@@ -83,7 +94,12 @@ public class MaterialUrlAnalysisService {
                 originalUrl,
                 platformType
         );
-        MaterialAiAnalysisPipelineResult analysisResult = materialAiAnalysisOrchestrator.analyze(preparationResult);
+        // existingMaterial이 있으면(forceAnalyze로 같은 URL 재분석) 새 자료를 만드는 대신 재사용한다 —
+        // 그렇지 않으면 재분석할 때마다 자료/청크/Qdrant 벡터가 중복으로 계속 쌓인다.
+        MaterialAiAnalysisPipelineResult analysisResult = materialAiAnalysisOrchestrator.analyze(
+                preparationResult,
+                existingMaterial
+        );
 
         List<MaterialTagResponse> tags = materialTagRepository.findAllByMaterialId(analysisResult.materialId()).stream()
                 .map(MaterialTagResponse::from)
