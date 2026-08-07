@@ -40,6 +40,7 @@ public class UserController {
 
     private final UserService userService;
     private final CurrentUserProvider currentUserProvider;
+    private final RefreshTokenCookieUtil refreshTokenCookieUtil;
 
     @Value("${cookie.secure}")
     private boolean cookieSecure;
@@ -86,7 +87,7 @@ public class UserController {
     public ApiResponse<Void> withdraw(@RequestBody UserWithdrawRequestDto request, HttpServletResponse response) {
         Long userId = currentUserProvider.getCurrentUserId();
         userService.withdraw(userId, request);
-        RefreshTokenCookieUtil.clear(response, cookieSecure);
+        refreshTokenCookieUtil.clear(response);
         return ApiResponse.onSuccess(UserSuccessCode.WITHDRAWN, null);
     }
 
