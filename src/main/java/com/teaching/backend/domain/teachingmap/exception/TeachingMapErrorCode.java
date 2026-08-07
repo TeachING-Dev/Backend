@@ -14,6 +14,7 @@ public enum TeachingMapErrorCode implements BaseErrorCode {
     AI_RESPONSE_PARSE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "TEACHING_MAP_500_1", "AI 응답을 파싱하는데 실패했습니다."),
     AI_RESULT_MATERIAL_MISMATCH(HttpStatus.INTERNAL_SERVER_ERROR, "TEACHING_MAP_500_2", "AI가 반환한 자료 정보가 폴더 내 자료와 일치하지 않습니다."),
     AI_RESULT_INVALID(HttpStatus.INTERNAL_SERVER_ERROR, "TEACHING_MAP_500_3", "AI 응답이 유효하지 않습니다."),
+    HIGHLIGHT_AI_RESPONSE_PARSE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "TEACHING_MAP_500_4", "하이라이트 AI 응답을 파싱하는데 실패했습니다."),
     TEACHING_MAP_IDS_REQUIRED(HttpStatus.BAD_REQUEST, "TMAP4002", "티칭맵 ID 목록을 입력해주세요."),
 
 

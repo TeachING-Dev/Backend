@@ -37,6 +37,7 @@ import com.teaching.backend.global.ai.openai.OpenAiClient;
 import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -45,10 +46,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import org.slf4j.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -74,6 +73,8 @@ public class TeachingMapService {
     private final MaterialTagRepository materialTagRepository;
     private final AiGuideRepository aiGuideRepository;
     private final HighlightAnalysisPromptGenerator highlightPromptGenerator;
+    private final MaterialHighlightPromptGenerator materialHighlightPromptGenerator;
+    private final MaterialHighlightResultParser materialHighlightResultParser;
 
 //티칭맵 전체목록 조회
 
@@ -158,6 +159,8 @@ public class TeachingMapService {
         Map<Long, Material> materialById = materials.stream()
                 .collect(Collectors.toMap(Material::getId, m -> m));
 
+        generateHighlightsForMaterials(analysisByMaterialId.values());
+
         String systemPrompt = promptGenerator.buildSystemPrompt();
         String userMessage = promptGenerator.buildUserMessage(request.type(), materials, analysisByMaterialId);
         String aiResponse = openAiClient.chatCompleteJson(systemPrompt, userMessage);
@@ -186,6 +189,59 @@ public class TeachingMapService {
         return TeachingMapCreateResponse.from(teachingMap);
     }
 
+    private static final Logger log = LoggerFactory.getLogger(TeachingMapService.class);
+
+    private void generateHighlightsForMaterials(Collection<MaterialAnalysis> analyses) {
+        for (MaterialAnalysis analysis : analyses) {
+            if (materialHighlightRepository.existsByMaterialAnalysis(analysis)) {
+                continue; // 이미 생성됨, 재사용
+            }
+            try {
+                String systemPrompt = materialHighlightPromptGenerator.buildSystemPrompt();
+                String userMessage = materialHighlightPromptGenerator.buildUserMessage(analysis.getDetailAnalysis());
+                String aiResponse = openAiClient.chatCompleteJson(systemPrompt, userMessage);
+
+                List<MaterialHighlightResultParser.HighlightItem> items =
+                        materialHighlightResultParser.parse(aiResponse);
+
+                saveHighlights(analysis, items);
+            } catch (Exception e) {
+                log.warn("하이라이트 생성 실패, materialAnalysisId={}", analysis.getId(), e);
+                // 자료 하나 실패해도 티칭맵 생성 전체는 계속 진행
+            }
+        }
+    }
+
+    private void saveHighlights(MaterialAnalysis analysis, List<MaterialHighlightResultParser.HighlightItem> items) {
+        if (items.isEmpty()) {
+            throw new IllegalStateException("AI 응답에 하이라이트가 없습니다. materialAnalysisId=" + analysis.getId());
+        }
+
+        String detailAnalysis = analysis.getDetailAnalysis();
+        List<MaterialHighlight> highlights = new ArrayList<>();
+
+        for (var item : items) {
+            if (item.text() == null || item.text().isBlank()) {
+                throw new IllegalStateException("하이라이트 텍스트가 비어 있습니다. materialAnalysisId=" + analysis.getId());
+            }
+            int start = detailAnalysis.indexOf(item.text());
+            if (start == -1) {
+                throw new IllegalStateException("본문과 일치하지 않는 하이라이트입니다. materialAnalysisId=" + analysis.getId());
+            }
+            int end = start + item.text().length();
+            highlights.add(MaterialHighlight.create(
+                    analysis, item.text(), toHighlightType(item.type()), start, end));
+        }
+        materialHighlightRepository.saveAll(highlights); // 여기 도달하면 전부 검증 통과한 상태
+    }
+
+    private HighlightType toHighlightType(String type) {
+        return switch (type) {
+            case "핵심" -> HighlightType.MAIN;
+            case "주의" -> HighlightType.CAUTION;
+            default -> throw new IllegalArgumentException("알 수 없는 하이라이트 타입: " + type);
+        };
+    }
     private void validateAiResult(TeachingMapAiResultParser.TeachingMapAiResult result,
                                   TeachingMapType type, int materialCount) {
         List<TeachingMapAiResultParser.TeachingMapAiNode> nodes = result.nodes();
