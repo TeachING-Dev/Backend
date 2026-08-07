@@ -724,7 +724,7 @@ class MaterialUrlAnalysisServiceTest {
         when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, originalUrl))
                 .thenReturn(List.of());
         when(materialContentExtractorRegistry.extract(resolvedPlatformType, originalUrl)).thenReturn(extractedContent);
-        when(materialAiAnalysisOrchestrator.analyze(any(MaterialAnalysisPreparationResult.class)))
+        when(materialAiAnalysisOrchestrator.analyze(any(MaterialAnalysisPreparationResult.class), isNull()))
                 .thenAnswer(invocation -> {
                     MaterialAnalysisPreparationResult preparationResult = invocation.getArgument(
                             0,
@@ -740,7 +740,6 @@ class MaterialUrlAnalysisServiceTest {
                             preparationResult.extractedContent(),
                             302L,
                             1,
-                            List.of(),
                             null,
                             null,
                             List.of("Blog")
@@ -757,7 +756,7 @@ class MaterialUrlAnalysisServiceTest {
         ArgumentCaptor<MaterialAnalysisPreparationResult> captor =
                 ArgumentCaptor.forClass(MaterialAnalysisPreparationResult.class);
         verify(materialContentExtractorRegistry).extract(resolvedPlatformType, originalUrl);
-        verify(materialAiAnalysisOrchestrator).analyze(captor.capture());
+        verify(materialAiAnalysisOrchestrator).analyze(captor.capture(), isNull());
         assertThat(captor.getValue().platformType()).isEqualTo(resolvedPlatformType);
         assertThat(captor.getValue().extractedContent().platformType()).isEqualTo(extractedPlatformType);
         assertThat(result.platformType()).isEqualTo(resolvedPlatformType.name());
