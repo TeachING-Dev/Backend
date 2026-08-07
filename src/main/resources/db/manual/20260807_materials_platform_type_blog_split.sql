@@ -9,9 +9,13 @@
 -- - Do not backfill existing BLOG rows in this script.
 --
 -- Preconditions:
--- - Run the verification query first.
+-- - Run both verification queries before ALTER TABLE.
 -- - If COLUMN_TYPE is already a VARCHAR or already includes TISTORY and NAVER_BLOG, do not run ALTER TABLE.
--- - If pdf_row_count is greater than 0, do not run ALTER TABLE until a product-approved data cleanup is complete.
+-- - If pdf_row_count is greater than 0, stop and do not run ALTER TABLE.
+-- - Existing PDF rows must be handled first by a product/operations-approved plan:
+--   either migrate them to an approved remaining platform_type or delete them.
+-- - This script intentionally does not choose that policy and does not include PDF -> WEB UPDATE or DELETE SQL.
+-- - After any approved PDF data cleanup, rerun the pdf_row_count query and confirm it is 0 before ALTER TABLE.
 --
 -- Rollback note:
 -- - Do not remove TISTORY or NAVER_BLOG from the enum while rows with those values exist.
@@ -20,10 +24,14 @@
 
 SHOW COLUMNS FROM materials LIKE 'platform_type';
 
+-- Required pre-ALTER verification.
+-- If this returns a value greater than 0, stop here. Do not run ALTER TABLE below.
+-- Resolve existing PDF rows through a separate approved migration/delete procedure, then rerun this query.
 SELECT COUNT(*) AS pdf_row_count
 FROM materials
 WHERE platform_type = 'PDF';
 
+-- Run this only after confirming pdf_row_count = 0.
 ALTER TABLE materials
     MODIFY COLUMN platform_type ENUM(
         'YOUTUBE',
