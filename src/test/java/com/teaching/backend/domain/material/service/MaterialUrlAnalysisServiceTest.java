@@ -183,7 +183,7 @@ class MaterialUrlAnalysisServiceTest {
     }
 
     @Test
-    void forceAnalyzeTrueRunsNewPipelineWithoutUsingConcurrencyGuard() {
+    void forceAnalyzeTrueRunsNewPipelineSerializedThroughConcurrencyGuard() {
         givenValidRequest();
         givenSuccessfulExtraction();
         givenSuccessfulPipeline();
@@ -207,7 +207,9 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(result.recommendedFolderName()).isEqualTo("Backend");
         assertThat(result.tags()).singleElement()
                 .satisfies(tag -> assertThat(tag.tagName()).isEqualTo("Spring"));
-        verify(materialUrlAnalysisConcurrencyGuard, never()).executeSerialized(any(), anyString(), any(), any());
+        // 재사용 도입(#114) 이후로는 forceAnalyze도 같은 URL에 대한 동시 재분석이 같은 자료를 동시에
+        // 갱신하지 않도록 concurrency guard로 직렬화해야 한다.
+        verify(materialUrlAnalysisConcurrencyGuard).executeSerialized(eq(USER_ID), eq(URL), any(), any());
         verify(materialContentExtractorRegistry).extract(PlatformType.VELOG, URL);
         verify(materialAiAnalysisOrchestrator).analyze(any(MaterialAnalysisPreparationResult.class), isNull());
     }

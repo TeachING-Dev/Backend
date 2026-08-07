@@ -85,7 +85,6 @@ class MaterialAiAnalysisPersistenceServiceTest {
                 "summary",
                 "detail",
                 List.of("spring"),
-                null,
                 null
         );
         when(materialAnalysisRepository.save(any(MaterialAnalysis.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -167,23 +166,19 @@ class MaterialAiAnalysisPersistenceServiceTest {
     }
 
     // 재분석(forceAnalyze=true)으로 같은 자료에 대해 다시 저장하면, material_id가 유니크 제약이라
-    // 새로 insert하면 제약 위반이 난다(#114). 기존 분석이 있으면 그 자리에서 갱신해야 하고, 그때
-    // 남아있는 이전 하이라이트도 새로 저장되는 것과 중복되지 않도록 먼저 지워야 한다.
+    // 새로 insert하면 제약 위반이 난다(#114). 기존 분석이 있으면 그 자리에서 갱신해야 한다.
     @Test
     void updatesExistingAnalysisInPlaceInsteadOfInsertingDuplicateWhenReanalyzing() {
         Material material = material();
         ReflectionTestUtils.setField(material, "id", 100L);
         MaterialAnalysis existingAnalysis = MaterialAnalysis.create(material, "old summary", "old detail", "v1");
-        MaterialHighlight oldHighlight = MaterialHighlight.create(existingAnalysis, "old text", HighlightType.MAIN, 0, 5);
         MaterialAiAnalysisResult result = new MaterialAiAnalysisResult(
                 "new summary",
                 "new detail",
                 List.of("spring"),
-                null,
                 null
         );
         when(materialAnalysisRepository.findByMaterialId(100L)).thenReturn(Optional.of(existingAnalysis));
-        when(materialHighlightRepository.findAllByMaterialId(100L)).thenReturn(List.of(oldHighlight));
         when(tagRepository.findByName("spring")).thenReturn(Optional.of(Tag.create("spring")));
 
         MaterialAnalysis analysis = persistenceService.saveAnalysisResult(material, result);
@@ -192,32 +187,6 @@ class MaterialAiAnalysisPersistenceServiceTest {
         assertThat(analysis.getSummary()).isEqualTo("new summary");
         assertThat(analysis.getDetailAnalysis()).isEqualTo("new detail");
         verify(materialAnalysisRepository, never()).save(any());
-        verify(materialHighlightRepository).deleteAll(List.of(oldHighlight));
-    }
-
-    @Test
-    void savesValidatedHighlightsWithOffsetsAndNormalizedType() {
-        Material material = material();
-        ReflectionTestUtils.setField(material, "id", 100L);
-        String longAnalysis = "## Summary\n* **Main** point\nImportant sentence. Be careful.";
-        MaterialAnalysis analysis = MaterialAnalysis.create(material, "summary", longAnalysis, "v1");
-        MaterialAiHighlightResult core = new MaterialAiHighlightResult("Important sentence.", MaterialAiHighlightType.CORE);
-        MaterialAiHighlightResult caution = new MaterialAiHighlightResult("Be careful.", MaterialAiHighlightType.CAUTION);
-        when(materialHighlightRepository.save(any(MaterialHighlight.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-        persistenceService.saveHighlights(analysis, List.of(core, caution));
-
-        ArgumentCaptor<MaterialHighlight> captor = ArgumentCaptor.forClass(MaterialHighlight.class);
-        verify(materialHighlightRepository, times(2)).save(captor.capture());
-        assertThat(captor.getAllValues().get(0).getHighlightText()).isEqualTo("Important sentence.");
-        assertThat(captor.getAllValues().get(0).getHighlightType()).isEqualTo(HighlightType.MAIN);
-        assertThat(captor.getAllValues().get(0).getStartPosition()).isEqualTo(longAnalysis.indexOf("Important sentence."));
-        assertThat(captor.getAllValues().get(0).getMaterialAnalysis()).isSameAs(analysis);
-        assertThat(longAnalysis.substring(
-                captor.getAllValues().get(0).getStartPosition(),
-                captor.getAllValues().get(0).getEndPosition()
-        )).isEqualTo("Important sentence.");
-        assertThat(captor.getAllValues().get(1).getHighlightType()).isEqualTo(HighlightType.CAUTION);
     }
 
     private Material material() {

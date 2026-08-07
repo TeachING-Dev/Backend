@@ -131,7 +131,7 @@ class MaterialAiAnalysisOrchestratorTest {
         Folder folder = folder(user);
         Material existingMaterial = Material.create(user, folder, "Old Title", "https://example.com", PlatformType.BLOG);
         ReflectionTestUtils.setField(existingMaterial, "id", 555L);
-        MaterialAiAnalysisResult aiResult = new MaterialAiAnalysisResult("summary", "detail", List.of("tag"), null, null);
+        MaterialAiAnalysisResult aiResult = new MaterialAiAnalysisResult("summary", "detail", List.of("tag"), null);
         MaterialAnalysis analysis = MaterialAnalysis.create(existingMaterial, "summary", "detail", "v1");
         ReflectionTestUtils.setField(analysis, "id", 200L);
         MaterialAiAnalysisStage stage = new MaterialAiAnalysisStage() {
@@ -142,7 +142,7 @@ class MaterialAiAnalysisOrchestratorTest {
 
             @Override
             public MaterialAiStageResult execute(MaterialAiStageContext context) {
-                return new MaterialAiStageResult(MaterialAiStageType.CONTENT_ANALYSIS, aiResult, List.of(), null);
+                return new MaterialAiStageResult(MaterialAiStageType.CONTENT_ANALYSIS, aiResult, null);
             }
         };
         when(stageRegistry.stagesInOrder()).thenReturn(List.of(stage));
