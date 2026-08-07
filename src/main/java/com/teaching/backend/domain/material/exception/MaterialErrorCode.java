@@ -28,7 +28,9 @@ public enum MaterialErrorCode implements BaseErrorCode {
     AI_ANALYSIS_GENERATION_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "MATERIAL5001", "AI 자료 분석 생성에 실패했습니다."),
     AI_ANALYSIS_PARSE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "MATERIAL5002", "AI 분석 응답을 해석하지 못했습니다."),
     MATERIAL_CONTENT_EXTRACTION_FAILED(HttpStatus.BAD_GATEWAY, "MATERIAL5021", "자료 원문 추출에 실패했습니다."),
-    MATERIAL_CONTENT_EMPTY(HttpStatus.BAD_GATEWAY, "MATERIAL5022", "자료 원문이 비어 있습니다.");
+    MATERIAL_CONTENT_EMPTY(HttpStatus.BAD_GATEWAY, "MATERIAL5022", "자료 원문이 비어 있습니다."),
+    DETAIL_ANALYSIS_REQUIRED(HttpStatus.BAD_REQUEST, "MATERIAL4010", "수정할 상세 분석 내용을 입력해주세요."),
+    DETAIL_ANALYSIS_IMAGE_MODIFIED(HttpStatus.BAD_REQUEST, "MATERIAL4011", "상세 분석의 이미지·링크 등 구성 요소는 수정할 수 없습니다. 텍스트만 수정해주세요.");
 
     private final HttpStatus status;
     private final String code;

@@ -67,4 +67,9 @@ public class MaterialAnalysis extends BaseSoftDeleteEntity {
         this.summary = summary;
         this.isUserEdited = true;
     }
+
+    public void editDetailAnalysis(String detailAnalysis) {
+        this.detailAnalysis = detailAnalysis;
+        this.isUserEdited = true;
+    }
 }

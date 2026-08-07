@@ -5,13 +5,14 @@ import com.teaching.backend.domain.folder.exception.FolderErrorCode;
 import com.teaching.backend.domain.folder.exception.FolderException;
 import com.teaching.backend.domain.folder.repository.FolderRepository;
 import com.teaching.backend.domain.material.dto.MaterialListResponse;
+import com.teaching.backend.domain.material.dto.request.MaterialAnalysisDetailUpdateRequest;
 import com.teaching.backend.domain.material.dto.request.MaterialAnalysisSummaryUpdateRequest;
 import com.teaching.backend.domain.material.dto.request.MaterialFinalizeRequest;
 import com.teaching.backend.domain.material.dto.request.MaterialIdsRequest;
 import com.teaching.backend.domain.material.dto.request.MaterialMoveRequest;
+import com.teaching.backend.domain.material.dto.response.MaterialAnalysisDetailUpdateResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialAnalysisResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialAnalysisSummaryUpdateResponse;
-import com.teaching.backend.domain.material.dto.response.MaterialDetailResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialFinalizeResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialMoveResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialOriginUrlResponse;
@@ -35,6 +36,9 @@ import com.teaching.backend.global.exception.GeneralException;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Attribute;
+import org.jsoup.nodes.Element;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -42,6 +46,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -86,19 +91,6 @@ public class MaterialService {
                 .toList();
     }
 
-    public MaterialDetailResponse getMaterialDetail(
-            Long userId,
-            Long folderId,
-            Long materialId
-    ) {
-        Material material = getOwnedMaterial(userId, folderId, materialId);
-        String summary = materialAnalysisRepository.findByMaterialId(materialId)
-                .map(MaterialAnalysis::getSummary)
-                .orElse(null);
-
-        return MaterialDetailResponse.of(material, summary, getTagResponses(materialId));
-    }
-
     public MaterialAnalysisResponse getMaterialAnalysis(
             Long userId,
             Long folderId,
@@ -127,6 +119,24 @@ public class MaterialService {
         analysis.editSummary(shortSummary);
 
         return MaterialAnalysisSummaryUpdateResponse.of(materialId, analysis);
+    }
+
+    @Transactional
+    public MaterialAnalysisDetailUpdateResponse updateAnalysisDetail(
+            Long userId,
+            Long folderId,
+            Long materialId,
+            MaterialAnalysisDetailUpdateRequest request
+    ) {
+        getOwnedMaterial(userId, folderId, materialId);
+        String fullAnalysis = validateAndNormalizeDetailAnalysis(request);
+
+        MaterialAnalysis analysis = getOwnedAnalysis(materialId);
+        validateNonTextContentUnchanged(analysis.getDetailAnalysis(), fullAnalysis);
+        analysis.editDetailAnalysis(fullAnalysis);
+        entityManager.flush();
+
+        return MaterialAnalysisDetailUpdateResponse.of(materialId, analysis);
     }
 
     public List<MaterialTagResponse> getMaterialTags(
@@ -442,5 +452,37 @@ public class MaterialService {
         }
 
         return request.shortSummary().trim();
+    }
+
+    private String validateAndNormalizeDetailAnalysis(MaterialAnalysisDetailUpdateRequest request) {
+        if (request == null || request.fullAnalysis() == null || request.fullAnalysis().isBlank()) {
+            throw new MaterialException(MaterialErrorCode.DETAIL_ANALYSIS_REQUIRED);
+        }
+
+        return request.fullAnalysis().trim();
+    }
+
+    private void validateNonTextContentUnchanged(String originalHtml, String editedHtml) {
+        if (!extractElementSignatures(originalHtml).equals(extractElementSignatures(editedHtml))) {
+            throw new MaterialException(MaterialErrorCode.DETAIL_ANALYSIS_IMAGE_MODIFIED);
+        }
+    }
+
+    private List<String> extractElementSignatures(String html) {
+        return Jsoup.parseBodyFragment(html == null ? "" : html)
+                .body()
+                .select("*")
+                .stream()
+                .map(this::elementSignature)
+                .toList();
+    }
+
+    private String elementSignature(Element element) {
+        String attributes = element.attributes().asList().stream()
+                .sorted(Comparator.comparing(Attribute::getKey))
+                .map(attribute -> attribute.getKey() + "=" + attribute.getValue())
+                .collect(Collectors.joining(" "));
+
+        return element.tagName() + " " + attributes;
     }
 }
