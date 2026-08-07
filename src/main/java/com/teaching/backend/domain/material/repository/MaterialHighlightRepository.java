@@ -1,5 +1,6 @@
 package com.teaching.backend.domain.material.repository;
 
+import com.teaching.backend.domain.material.entity.MaterialAnalysis;
 import com.teaching.backend.domain.material.entity.MaterialHighlight;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -16,4 +17,7 @@ public interface MaterialHighlightRepository
         ORDER BY h.startPosition, h.id
     """)
     List<MaterialHighlight> findAllByMaterialId(@Param("materialId") Long materialId);
+
+    boolean existsByMaterialAnalysis(MaterialAnalysis materialAnalysis);
+
 }

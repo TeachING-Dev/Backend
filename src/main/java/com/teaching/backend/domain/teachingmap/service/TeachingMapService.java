@@ -37,6 +37,7 @@ import com.teaching.backend.global.ai.openai.OpenAiClient;
 import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -45,10 +46,8 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import org.slf4j.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -74,6 +73,8 @@ public class TeachingMapService {
     private final MaterialTagRepository materialTagRepository;
     private final AiGuideRepository aiGuideRepository;
     private final HighlightAnalysisPromptGenerator highlightPromptGenerator;
+    private final MaterialHighlightPromptGenerator materialHighlightPromptGenerator;
+    private final MaterialHighlightResultParser materialHighlightResultParser;
 
 //티칭맵 전체목록 조회
 
@@ -158,6 +159,8 @@ public class TeachingMapService {
         Map<Long, Material> materialById = materials.stream()
                 .collect(Collectors.toMap(Material::getId, m -> m));
 
+        generateHighlightsForMaterials(analysisByMaterialId.values());
+
         String systemPrompt = promptGenerator.buildSystemPrompt();
         String userMessage = promptGenerator.buildUserMessage(request.type(), materials, analysisByMaterialId);
         String aiResponse = openAiClient.chatCompleteJson(systemPrompt, userMessage);
@@ -186,6 +189,53 @@ public class TeachingMapService {
         return TeachingMapCreateResponse.from(teachingMap);
     }
 
+    private static final Logger log = LoggerFactory.getLogger(TeachingMapService.class);
+
+    private void generateHighlightsForMaterials(Collection<MaterialAnalysis> analyses) {
+        for (MaterialAnalysis analysis : analyses) {
+            if (materialHighlightRepository.existsByMaterialAnalysis(analysis)) {
+                continue; // 이미 생성됨, 재사용
+            }
+            try {
+                String systemPrompt = materialHighlightPromptGenerator.buildSystemPrompt();
+                String userMessage = materialHighlightPromptGenerator.buildUserMessage(analysis.getDetailAnalysis());
+                String aiResponse = openAiClient.chatCompleteJson(systemPrompt, userMessage);
+
+                List<MaterialHighlightResultParser.HighlightItem> items =
+                        materialHighlightResultParser.parse(aiResponse);
+
+                saveHighlights(analysis, items);
+            } catch (Exception e) {
+                log.warn("하이라이트 생성 실패, materialAnalysisId={}", analysis.getId(), e);
+                // 자료 하나 실패해도 티칭맵 생성 전체는 계속 진행
+            }
+        }
+    }
+
+    private void saveHighlights(MaterialAnalysis analysis, List<MaterialHighlightResultParser.HighlightItem> items) {
+        String detailAnalysis = analysis.getDetailAnalysis();
+        List<MaterialHighlight> highlights = new ArrayList<>();
+
+        for (var item : items) {
+            int start = detailAnalysis.indexOf(item.text());
+            if (start == -1) {
+                log.warn("하이라이트 텍스트 매칭 실패, materialAnalysisId={}", analysis.getId());
+                continue;
+            }
+            int end = start + item.text().length();
+            highlights.add(MaterialHighlight.create(
+                    analysis, item.text(), toHighlightType(item.type()), start, end));
+        }
+        materialHighlightRepository.saveAll(highlights);
+    }
+
+    private HighlightType toHighlightType(String type) {
+        return switch (type) {
+            case "핵심" -> HighlightType.MAIN;
+            case "주의" -> HighlightType.CAUTION;
+            default -> throw new IllegalArgumentException("알 수 없는 하이라이트 타입: " + type);
+        };
+    }
     private void validateAiResult(TeachingMapAiResultParser.TeachingMapAiResult result,
                                   TeachingMapType type, int materialCount) {
         List<TeachingMapAiResultParser.TeachingMapAiNode> nodes = result.nodes();
