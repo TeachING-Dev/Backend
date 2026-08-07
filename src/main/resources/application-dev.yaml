@@ -76,6 +76,17 @@ support:
   kakao-channel-url: ${SUPPORT_KAKAO_CHANNEL_URL:https://pf.kakao.com/_teaching}
   email: ${SUPPORT_EMAIL:support@teaching.com}
 
+kakaopay:
+  cid: ${KAKAOPAY_CID}
+  secret-key: ${KAKAOPAY_SECRET_KEY}
+  base-url: ${KAKAOPAY_BASE_URL:https://open-api.kakaopay.com}
+  item-name: ${KAKAOPAY_ITEM_NAME:TeachING Plus 구독}
+  amount: ${KAKAOPAY_AMOUNT:5900}
+  # 카카오페이 결제 승인/취소/실패 콜백이 도달할 이 서버 자신의 주소 (카카오 개발자센터에 Web 플랫폼 도메인으로 등록 필요)
+  callback-base-url: ${KAKAOPAY_CALLBACK_BASE_URL:http://localhost:8080}
+  # 콜백 처리 후 최종적으로 사용자를 돌려보낼 프론트엔드 주소
+  frontend-base-url: ${KAKAOPAY_FRONTEND_BASE_URL:http://localhost:5173}
+
 
 openai:
   api-key: ${OPENAI_API_KEY}

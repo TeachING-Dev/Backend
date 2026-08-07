@@ -104,4 +104,8 @@ public class User extends BaseSoftDeleteEntity {
     public void changeTeacherPersona(TeacherPersona teacherPersona) {
         this.teacherPersona = teacherPersona;
     }
+
+    public void changeMembershipType(MembershipType membershipType) {
+        this.membershipType = membershipType;
+    }
 }

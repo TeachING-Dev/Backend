@@ -47,7 +47,12 @@ public class SecurityConfig {
             "/api/v1/auth/check-nickname",
             "/oauth2/**",
             "/login/oauth2/**",
-            "/oauth/redirect"
+            "/oauth/redirect",
+            // 카카오페이가 브라우저를 리다이렉트시켜 호출하는 콜백이라 JWT를 실어 보내지 않는다.
+            // orderId(추측 불가한 값)+카카오페이가 발급한 pg_token으로만 검증한다.
+            "/api/v1/payments/success",
+            "/api/v1/payments/cancel",
+            "/api/v1/payments/fail"
     };
 
 

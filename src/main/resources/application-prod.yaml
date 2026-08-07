@@ -78,6 +78,15 @@ support:
   kakao-channel-url: ${SUPPORT_KAKAO_CHANNEL_URL:https://pf.kakao.com/_teaching}
   email: ${SUPPORT_EMAIL:support@teaching.com}
 
+kakaopay:
+  cid: ${KAKAOPAY_CID}
+  secret-key: ${KAKAOPAY_SECRET_KEY}
+  base-url: ${KAKAOPAY_BASE_URL:https://open-api.kakaopay.com}
+  item-name: ${KAKAOPAY_ITEM_NAME:TeachING Plus 구독}
+  amount: ${KAKAOPAY_AMOUNT:5900}
+  callback-base-url: ${KAKAOPAY_CALLBACK_BASE_URL}
+  frontend-base-url: ${KAKAOPAY_FRONTEND_BASE_URL:https://www.teachingg.site}
+
 aws:
   s3:
     bucket: ${AWS_S3_BUCKET}
