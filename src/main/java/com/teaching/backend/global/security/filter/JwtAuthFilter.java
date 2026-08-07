@@ -7,6 +7,7 @@ import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.response.ApiResponse;
 import com.teaching.backend.global.security.service.CustomUserDetailsService;
 import com.teaching.backend.global.security.util.JwtUtil;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -42,6 +43,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
                 if (jwtUtil.isValid(token)) {
                     Long userId = jwtUtil.getUserId(token);
+                    if (!"access".equals(jwtUtil.getTokenType(token))) {
+                        throw new JwtException("Access Token이 아닙니다.");
+                    }
                     UserDetails userDetails = customUserDetailsService.loadUserByUsername(String.valueOf(userId));
                     Authentication auth = new UsernamePasswordAuthenticationToken(
                             userDetails,

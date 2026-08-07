@@ -42,7 +42,9 @@ public class SecurityConfig {
             "/swagger-ui/**",
             "/swagger-resources/**",
             "/v3/api-docs/**",
-            "/api/v1/auth/**",
+            "/api/v1/auth/reissue",
+            "/api/v1/auth/logout",
+            "/api/v1/auth/check-nickname",
             "/oauth2/**",
             "/login/oauth2/**",
             "/oauth/redirect"
