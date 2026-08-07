@@ -41,6 +41,9 @@ public class AuthService {
             throw new AuthException(AuthErrorCode.INVALID_REFRESH_TOKEN);
         }
 
+        if (!"refresh".equals(jwtUtil.getTokenType(refreshToken))) {
+            throw new AuthException(AuthErrorCode.REFRESH_TOKEN_NOT_FOUND);
+        }
         String tokenHash = tokenHasher.hash(refreshToken);
 
         RefreshToken savedToken = refreshTokenRepository.findByTokenHash(tokenHash)

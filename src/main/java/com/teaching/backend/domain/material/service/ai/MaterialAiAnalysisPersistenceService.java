@@ -1,16 +1,9 @@
 package com.teaching.backend.domain.material.service.ai;
 
-import com.teaching.backend.domain.material.dto.ai.MaterialAiHighlightResult;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisResult;
-import com.teaching.backend.domain.material.entity.MaterialHighlight;
-import com.teaching.backend.domain.material.enums.HighlightType;
-import com.teaching.backend.domain.material.enums.MaterialAiHighlightType;
-import com.teaching.backend.domain.material.exception.MaterialErrorCode;
-import com.teaching.backend.domain.material.exception.MaterialException;
 import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.entity.MaterialAnalysis;
 import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
-import com.teaching.backend.domain.material.repository.MaterialHighlightRepository;
 import com.teaching.backend.domain.tag.entity.MaterialTag;
 import com.teaching.backend.domain.tag.entity.Tag;
 import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
@@ -19,22 +12,23 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
-
-import static reactor.netty.http.HttpConnectionLiveness.log;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class MaterialAiAnalysisPersistenceService {
 
-    private static final String PROMPT_VERSION = "v1";
+    private static final String PROMPT_VERSION = "v2";
     private static final int MAX_TAG_NAME_LENGTH = 50;
     private static final int MAX_SHORT_SUMMARY_LENGTH = 255;
 
     private final MaterialAnalysisRepository materialAnalysisRepository;
-    private final MaterialHighlightRepository materialHighlightRepository;
     private final TagRepository tagRepository;
     private final MaterialTagRepository materialTagRepository;
 
@@ -205,15 +199,10 @@ public class MaterialAiAnalysisPersistenceService {
     }
 
     private String truncate(String value, int maxLength) {
-        if (value == null) return null;
+        if (value == null) {
+            return null;
+        }
         String trimmed = value.trim();
         return trimmed.length() <= maxLength ? trimmed : trimmed.substring(0, maxLength);
-    }
-
-    private HighlightType toHighlightType(MaterialAiHighlightType type) {
-        if (type == MaterialAiHighlightType.CAUTION) {
-            return HighlightType.CAUTION;
-        }
-        return HighlightType.MAIN;
     }
 }

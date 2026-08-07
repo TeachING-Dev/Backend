@@ -47,7 +47,6 @@ public class ContentAnalysisMaterialAiStage implements MaterialAiAnalysisStage {
         return new MaterialAiStageResult(
                 type(),
                 result,
-                parseResult.highlights(),
                 parseResult.recommendedFolderName()
         );
     }

@@ -1,16 +1,11 @@
 package com.teaching.backend.domain.material.service.ai;
 
 import com.teaching.backend.domain.folder.entity.Folder;
-import com.teaching.backend.domain.material.dto.ai.MaterialAiHighlightResult;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisResult;
 import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.entity.MaterialAnalysis;
-import com.teaching.backend.domain.material.entity.MaterialHighlight;
-import com.teaching.backend.domain.material.enums.HighlightType;
-import com.teaching.backend.domain.material.enums.MaterialAiHighlightType;
 import com.teaching.backend.domain.material.enums.PlatformType;
 import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
-import com.teaching.backend.domain.material.repository.MaterialHighlightRepository;
 import com.teaching.backend.domain.tag.entity.MaterialTag;
 import com.teaching.backend.domain.tag.entity.Tag;
 import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
@@ -44,9 +39,6 @@ class MaterialAiAnalysisPersistenceServiceTest {
     private MaterialAnalysisRepository materialAnalysisRepository;
 
     @Mock
-    private MaterialHighlightRepository materialHighlightRepository;
-
-    @Mock
     private TagRepository tagRepository;
 
     @Mock
@@ -63,7 +55,6 @@ class MaterialAiAnalysisPersistenceServiceTest {
                 "summary",
                 "detail",
                 List.of(" spring ", "spring", "jpa"),
-                null,
                 null
         );
         when(materialAnalysisRepository.save(any(MaterialAnalysis.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -115,7 +106,6 @@ class MaterialAiAnalysisPersistenceServiceTest {
                 "summary",
                 "detail",
                 List.of("spring"),
-                null,
                 null
         );
         when(materialAnalysisRepository.save(any(MaterialAnalysis.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -137,7 +127,6 @@ class MaterialAiAnalysisPersistenceServiceTest {
                 "summary",
                 "detail",
                 List.of("spring"),
-                null,
                 null
         );
         when(materialAnalysisRepository.save(any(MaterialAnalysis.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -162,7 +151,6 @@ class MaterialAiAnalysisPersistenceServiceTest {
                 "summary",
                 "detail",
                 List.of("", "  ", tooLong),
-                null,
                 null
         );
         when(materialAnalysisRepository.save(any(MaterialAnalysis.class))).thenAnswer(invocation -> invocation.getArgument(0));

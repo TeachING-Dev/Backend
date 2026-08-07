@@ -57,7 +57,6 @@ class HomeServiceTest {
 
     @BeforeEach
     void setUp() {
-        ReflectionTestUtils.setField(homeService, "iconBaseUrl", "https://cdn.example.com/icons");
         lenient().when(teachingMapStepRepository.findActivePlatformTypesByTeachingMapIdIn(any(), eq(USER_ID)))
                 .thenReturn(List.of());
     }
@@ -236,9 +235,9 @@ class HomeServiceTest {
         assertThat(result.activeTeachingMaps().get(0).sourcePlatforms())
                 .extracting("imageUrl")
                 .containsExactly(
-                        "https://cdn.example.com/icons/" + PlatformType.YOUTUBE.getIconPath(),
-                        "https://cdn.example.com/icons/" + PlatformType.VELOG.getIconPath(),
-                        "https://cdn.example.com/icons/" + PlatformType.BLOG.getIconPath()
+                        PlatformType.YOUTUBE.getIconPath(),
+                        PlatformType.VELOG.getIconPath(),
+                        PlatformType.BLOG.getIconPath()
                 );
     }
 

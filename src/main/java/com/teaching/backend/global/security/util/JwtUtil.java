@@ -39,11 +39,11 @@ public class JwtUtil {
 
     // AccessToken 생성
     public String createAccessToken(AuthMember member) {
-        return createToken(member, accessExpiration);
+        return createToken(member, accessExpiration,"access");
     }
     // 추가
     public String createRefreshToken(AuthMember member) {
-        return createToken(member, refreshExpiration);
+        return createToken(member, refreshExpiration,"refresh");
     }
 
     // 추가: refreshToken 만료 시각 계산 (DB 저장용)
@@ -62,6 +62,15 @@ public class JwtUtil {
             return null;
         }
     }
+
+    //토큰 타입 꺼내는 getter 추가
+    public String getTokenType(String token) {
+        try {
+            return getClaims(token).getPayload().get("tokenType", String.class);
+        } catch (JwtException e) {
+            return null;
+        }
+    }
     /** 토큰 유효성 확인
      *
      * @param token 유효한지 확인할 토큰
@@ -77,7 +86,7 @@ public class JwtUtil {
     }
 
     // 토큰 생성
-    private String createToken(AuthMember member, Duration expiration) {
+    private String createToken(AuthMember member, Duration expiration,String tokenType) {
         Instant now = Instant.now();
 
         // 인가 정보
@@ -89,6 +98,7 @@ public class JwtUtil {
                 .subject(String.valueOf(member.getUserId())) // User Id를 Subject로
                 .claim("role", authorities)
                 .claim("email", member.getUsername())
+                .claim("tokenType", tokenType)
                 .id(UUID.randomUUID().toString()) // 매번 고유한 jti
                 .issuedAt(Date.from(now)) // 언제 발급한지
                 .expiration(Date.from(now.plus(expiration))) // 언제까지 유효한지
