@@ -82,6 +82,31 @@ class MaterialAiAnalysisPersistenceServiceTest {
         assertThat(materialTagCaptor.getAllValues()).hasSize(2);
     }
 
+    // 재분석(#114)으로 태그가 새로 갱신될 때, 이번 분석에 더 이상 안 나오는 태그는 낡은 채로 남지 않고
+    // 지워져야 한다. 여전히 나오는 태그는 다시 저장(중복)하지 않는다.
+    @Test
+    void removesStaleTagsNoLongerProducedByReanalysisButKeepsStillRelevantOnes() {
+        Material material = material();
+        ReflectionTestUtils.setField(material, "id", 100L);
+        MaterialTag existingSpringTag = MaterialTag.create(material, Tag.create("spring"));
+        MaterialTag existingJavaTag = MaterialTag.create(material, Tag.create("java"));
+        MaterialAiAnalysisResult result = new MaterialAiAnalysisResult(
+                "summary",
+                "detail",
+                List.of("spring"),
+                null,
+                null
+        );
+        when(materialAnalysisRepository.save(any(MaterialAnalysis.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(materialTagRepository.findAllWithTagByMaterialIds(List.of(100L)))
+                .thenReturn(List.of(existingSpringTag, existingJavaTag));
+
+        persistenceService.saveAnalysisResult(material, result);
+
+        verify(materialTagRepository).deleteAll(List.of(existingJavaTag));
+        verify(materialTagRepository, never()).save(any(MaterialTag.class));
+    }
+
     @Test
     void savesMaterialAnalysisAndCreatesNewTagWithAtomicInsert() {
         Material material = material();
@@ -153,6 +178,35 @@ class MaterialAiAnalysisPersistenceServiceTest {
         verify(materialTagRepository).save(any(MaterialTag.class));
     }
 
+    // 재분석(forceAnalyze=true)으로 같은 자료에 대해 다시 저장하면, material_id가 유니크 제약이라
+    // 새로 insert하면 제약 위반이 난다(#114). 기존 분석이 있으면 그 자리에서 갱신해야 하고, 그때
+    // 남아있는 이전 하이라이트도 새로 저장되는 것과 중복되지 않도록 먼저 지워야 한다.
+    @Test
+    void updatesExistingAnalysisInPlaceInsteadOfInsertingDuplicateWhenReanalyzing() {
+        Material material = material();
+        ReflectionTestUtils.setField(material, "id", 100L);
+        MaterialAnalysis existingAnalysis = MaterialAnalysis.create(material, "old summary", "old detail", "v1");
+        MaterialHighlight oldHighlight = MaterialHighlight.create(existingAnalysis, "old text", HighlightType.MAIN, 0, 5);
+        MaterialAiAnalysisResult result = new MaterialAiAnalysisResult(
+                "new summary",
+                "new detail",
+                List.of("spring"),
+                null,
+                null
+        );
+        when(materialAnalysisRepository.findByMaterialId(100L)).thenReturn(Optional.of(existingAnalysis));
+        when(materialHighlightRepository.findAllByMaterialId(100L)).thenReturn(List.of(oldHighlight));
+        when(tagRepository.findByName("spring")).thenReturn(Optional.of(Tag.create("spring")));
+
+        MaterialAnalysis analysis = persistenceService.saveAnalysisResult(material, result);
+
+        assertThat(analysis).isSameAs(existingAnalysis);
+        assertThat(analysis.getSummary()).isEqualTo("new summary");
+        assertThat(analysis.getDetailAnalysis()).isEqualTo("new detail");
+        verify(materialAnalysisRepository, never()).save(any());
+        verify(materialHighlightRepository).deleteAll(List.of(oldHighlight));
+    }
+
     @Test
     void savesValidatedHighlightsWithOffsetsAndNormalizedType() {
         Material material = material();
@@ -181,6 +235,10 @@ class MaterialAiAnalysisPersistenceServiceTest {
     private Material material() {
         User user = User.create("user@example.com", "user", null, null, null);
         Folder folder = Folder.create(user, "Folder");
-        return Material.create(user, folder, "Title", "https://example.com", PlatformType.BLOG);
+        Material material = Material.create(user, folder, "Title", "https://example.com", PlatformType.BLOG);
+        // 실제로는 저장된(id가 채워진) Material만 saveAnalysisResult에 넘어온다 — saveTags가
+        // material.getId()를 List.of(...)에 담는데, null이면 NPE가 난다.
+        ReflectionTestUtils.setField(material, "id", 999L);
+        return material;
     }
 }

@@ -83,7 +83,12 @@ public class MaterialUrlAnalysisService {
                 originalUrl,
                 platformType
         );
-        MaterialAiAnalysisPipelineResult analysisResult = materialAiAnalysisOrchestrator.analyze(preparationResult);
+        // existingMaterial이 있으면(forceAnalyze로 같은 URL 재분석) 새 자료를 만드는 대신 재사용한다 —
+        // 그렇지 않으면 재분석할 때마다 자료/청크/Qdrant 벡터가 중복으로 계속 쌓인다.
+        MaterialAiAnalysisPipelineResult analysisResult = materialAiAnalysisOrchestrator.analyze(
+                preparationResult,
+                existingMaterial
+        );
 
         List<MaterialTagResponse> tags = materialTagRepository.findAllByMaterialId(analysisResult.materialId()).stream()
                 .map(MaterialTagResponse::from)

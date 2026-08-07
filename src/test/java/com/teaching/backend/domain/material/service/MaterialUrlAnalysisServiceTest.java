@@ -43,6 +43,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -128,7 +129,7 @@ class MaterialUrlAnalysisServiceTest {
                     assertThat(tag.tagName()).isEqualTo("Spring");
                 });
         verify(materialContentExtractorRegistry, never()).extract(any(), anyString());
-        verify(materialAiAnalysisOrchestrator, never()).analyze(any());
+        verify(materialAiAnalysisOrchestrator, never()).analyze(any(), any());
     }
 
     @Test
@@ -154,7 +155,7 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(result.chunkCount()).isZero();
         assertThat(result.tags()).isEmpty();
         verify(materialContentExtractorRegistry, never()).extract(any(), anyString());
-        verify(materialAiAnalysisOrchestrator, never()).analyze(any());
+        verify(materialAiAnalysisOrchestrator, never()).analyze(any(), any());
     }
 
     @Test
@@ -178,7 +179,7 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(result.materialId()).isNull();
         assertThat(result.title()).isEqualTo("Newer");
         verify(materialContentExtractorRegistry, never()).extract(any(), anyString());
-        verify(materialAiAnalysisOrchestrator, never()).analyze(any());
+        verify(materialAiAnalysisOrchestrator, never()).analyze(any(), any());
     }
 
     @Test
@@ -208,7 +209,33 @@ class MaterialUrlAnalysisServiceTest {
                 .satisfies(tag -> assertThat(tag.tagName()).isEqualTo("Spring"));
         verify(materialUrlAnalysisConcurrencyGuard, never()).executeSerialized(any(), anyString(), any(), any());
         verify(materialContentExtractorRegistry).extract(PlatformType.VELOG, URL);
-        verify(materialAiAnalysisOrchestrator).analyze(any(MaterialAnalysisPreparationResult.class));
+        verify(materialAiAnalysisOrchestrator).analyze(any(MaterialAnalysisPreparationResult.class), isNull());
+    }
+
+    // 재분석(forceAnalyze=true)이 같은 URL로 이미 분석 완료된 자료를 찾으면, 새 자료를 만들지 않고
+    // 그 기존 자료를 재사용해야 한다(#114) — 안 그러면 재분석할 때마다 자료/청크/벡터가 중복으로 쌓인다.
+    @Test
+    void forceAnalyzeTrueReusesExistingCompletedMaterialInsteadOfCreatingNew() {
+        Material completed = material(101L, "Completed", URL, PlatformType.VELOG, AiStatus.COMPLETED, createdAt(1));
+        givenValidRequest();
+        when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
+                .thenReturn(List.of(completed));
+        givenSuccessfulExtraction();
+        when(materialAiAnalysisOrchestrator.analyze(any(MaterialAnalysisPreparationResult.class), eq(completed)))
+                .thenAnswer(invocation -> pipelineResult(
+                        invocation.getArgument(0, MaterialAnalysisPreparationResult.class).extractedContent()
+                ));
+        when(materialTagRepository.findAllByMaterialId(200L)).thenReturn(List.of());
+
+        MaterialAnalyzeResponse result = materialUrlAnalysisService.analyze(
+                USER_ID,
+                new MaterialAnalyzeRequest(URL, true)
+        );
+
+        assertThat(result.resultType()).isEqualTo(MaterialAnalyzeResultType.ANALYSIS_COMPLETED);
+        assertThat(result.existingMaterialId()).isEqualTo(101L);
+        verify(materialAiAnalysisOrchestrator).analyze(any(MaterialAnalysisPreparationResult.class), eq(completed));
+        verify(materialAiAnalysisOrchestrator, never()).analyze(any(MaterialAnalysisPreparationResult.class), isNull());
     }
 
     @Test
@@ -236,7 +263,7 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(result.recommendedFolderName()).isEqualTo("Backend");
         assertThat(result.tags()).extracting("tagName").containsExactly("Spring", "JPA");
         verify(materialContentExtractorRegistry).extract(PlatformType.VELOG, URL);
-        verify(materialAiAnalysisOrchestrator).analyze(any(MaterialAnalysisPreparationResult.class));
+        verify(materialAiAnalysisOrchestrator).analyze(any(MaterialAnalysisPreparationResult.class), isNull());
     }
 
     @Test
@@ -252,7 +279,7 @@ class MaterialUrlAnalysisServiceTest {
 
         verify(materialUrlAnalysisConcurrencyGuard).executeSerialized(eq(USER_ID), eq(URL), any(), any());
         verify(materialRepository).findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL);
-        verify(materialAiAnalysisOrchestrator).analyze(any(MaterialAnalysisPreparationResult.class));
+        verify(materialAiAnalysisOrchestrator).analyze(any(MaterialAnalysisPreparationResult.class), isNull());
     }
 
     @Test
@@ -288,7 +315,7 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(second.chunkCount()).isEqualTo(2);
         assertThat(second.tags()).singleElement()
                 .satisfies(tag -> assertThat(tag.tagName()).isEqualTo("Spring"));
-        verify(materialAiAnalysisOrchestrator, times(1)).analyze(any(MaterialAnalysisPreparationResult.class));
+        verify(materialAiAnalysisOrchestrator, times(1)).analyze(any(MaterialAnalysisPreparationResult.class), isNull());
         verify(materialContentExtractorRegistry, times(1)).extract(PlatformType.VELOG, URL);
     }
 
@@ -319,7 +346,7 @@ class MaterialUrlAnalysisServiceTest {
 
         assertThat(retry.resultType()).isEqualTo(MaterialAnalyzeResultType.ANALYSIS_COMPLETED);
         verify(materialUrlAnalysisConcurrencyGuard, times(2)).executeSerialized(eq(USER_ID), eq(URL), any(), any());
-        verify(materialAiAnalysisOrchestrator, times(1)).analyze(any(MaterialAnalysisPreparationResult.class));
+        verify(materialAiAnalysisOrchestrator, times(1)).analyze(any(MaterialAnalysisPreparationResult.class), isNull());
     }
 
     @Test
@@ -409,7 +436,7 @@ class MaterialUrlAnalysisServiceTest {
                 .thenReturn(List.of());
         ExtractedMaterialContent extractedContent = extractedContent();
         when(materialContentExtractorRegistry.extract(PlatformType.VELOG, URL)).thenReturn(extractedContent);
-        when(materialAiAnalysisOrchestrator.analyze(any(MaterialAnalysisPreparationResult.class)))
+        when(materialAiAnalysisOrchestrator.analyze(any(MaterialAnalysisPreparationResult.class), isNull()))
                 .thenReturn(pipelineResult(extractedContent));
         when(materialTagRepository.findAllByMaterialId(200L)).thenReturn(List.of());
 
@@ -418,7 +445,7 @@ class MaterialUrlAnalysisServiceTest {
         ArgumentCaptor<MaterialAnalysisPreparationResult> captor =
                 ArgumentCaptor.forClass(MaterialAnalysisPreparationResult.class);
         verify(materialContentExtractorRegistry, times(1)).extract(PlatformType.VELOG, URL);
-        verify(materialAiAnalysisOrchestrator).analyze(captor.capture());
+        verify(materialAiAnalysisOrchestrator).analyze(captor.capture(), isNull());
         assertThat(captor.getValue().userId()).isEqualTo(USER_ID);
         assertThat(captor.getValue().folderId()).isNull();
         assertThat(captor.getValue().originalUrl()).isEqualTo(URL);
@@ -451,7 +478,7 @@ class MaterialUrlAnalysisServiceTest {
         when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, YOUTUBE_URL))
                 .thenReturn(List.of());
         when(materialContentExtractorRegistry.extract(PlatformType.YOUTUBE, YOUTUBE_URL)).thenReturn(youtubeContent);
-        when(materialAiAnalysisOrchestrator.analyze(any(MaterialAnalysisPreparationResult.class)))
+        when(materialAiAnalysisOrchestrator.analyze(any(MaterialAnalysisPreparationResult.class), isNull()))
                 .thenAnswer(invocation -> {
                     MaterialAnalysisPreparationResult preparationResult = invocation.getArgument(
                             0,
@@ -484,7 +511,7 @@ class MaterialUrlAnalysisServiceTest {
         ArgumentCaptor<MaterialAnalysisPreparationResult> captor =
                 ArgumentCaptor.forClass(MaterialAnalysisPreparationResult.class);
         verify(materialContentExtractorRegistry).extract(PlatformType.YOUTUBE, YOUTUBE_URL);
-        verify(materialAiAnalysisOrchestrator).analyze(captor.capture());
+        verify(materialAiAnalysisOrchestrator).analyze(captor.capture(), isNull());
         assertThat(captor.getValue().platformType()).isEqualTo(PlatformType.YOUTUBE);
         assertThat(captor.getValue().folderId()).isNull();
         assertThat(captor.getValue().extractedContent().content())
@@ -518,7 +545,7 @@ class MaterialUrlAnalysisServiceTest {
         when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, WEB_URL))
                 .thenReturn(List.of());
         when(materialContentExtractorRegistry.extract(PlatformType.WEB, WEB_URL)).thenReturn(webContent);
-        when(materialAiAnalysisOrchestrator.analyze(any(MaterialAnalysisPreparationResult.class)))
+        when(materialAiAnalysisOrchestrator.analyze(any(MaterialAnalysisPreparationResult.class), isNull()))
                 .thenAnswer(invocation -> {
                     MaterialAnalysisPreparationResult preparationResult = invocation.getArgument(
                             0,
@@ -551,7 +578,7 @@ class MaterialUrlAnalysisServiceTest {
         ArgumentCaptor<MaterialAnalysisPreparationResult> captor =
                 ArgumentCaptor.forClass(MaterialAnalysisPreparationResult.class);
         verify(materialContentExtractorRegistry).extract(PlatformType.WEB, WEB_URL);
-        verify(materialAiAnalysisOrchestrator).analyze(captor.capture());
+        verify(materialAiAnalysisOrchestrator).analyze(captor.capture(), isNull());
         assertThat(captor.getValue().platformType()).isEqualTo(PlatformType.WEB);
         assertThat(captor.getValue().extractedContent().platformType()).isEqualTo(PlatformType.WEB);
         assertThat(result.platformType()).isEqualTo("WEB");
@@ -590,7 +617,7 @@ class MaterialUrlAnalysisServiceTest {
                 .isInstanceOf(MaterialException.class)
                 .extracting("errorCode")
                 .isEqualTo(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
-        verify(materialAiAnalysisOrchestrator, never()).analyze(any());
+        verify(materialAiAnalysisOrchestrator, never()).analyze(any(), any());
     }
 
     @Test
@@ -599,7 +626,7 @@ class MaterialUrlAnalysisServiceTest {
         when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, URL))
                 .thenReturn(List.of());
         givenSuccessfulExtraction();
-        when(materialAiAnalysisOrchestrator.analyze(any(MaterialAnalysisPreparationResult.class)))
+        when(materialAiAnalysisOrchestrator.analyze(any(MaterialAnalysisPreparationResult.class), isNull()))
                 .thenThrow(new MaterialException(MaterialErrorCode.MATERIAL_VECTOR_STORE_FAILED));
 
         assertThatThrownBy(() -> materialUrlAnalysisService.analyze(
@@ -630,7 +657,7 @@ class MaterialUrlAnalysisServiceTest {
     }
 
     private void givenSuccessfulPipeline() {
-        when(materialAiAnalysisOrchestrator.analyze(any(MaterialAnalysisPreparationResult.class)))
+        when(materialAiAnalysisOrchestrator.analyze(any(MaterialAnalysisPreparationResult.class), isNull()))
                 .thenAnswer(invocation -> pipelineResult(invocation.getArgument(0, MaterialAnalysisPreparationResult.class)
                         .extractedContent()));
     }
