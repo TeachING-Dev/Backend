@@ -7,9 +7,10 @@ import com.teaching.backend.domain.folder.repository.FolderRepository;
 import com.teaching.backend.domain.material.dto.MaterialListResponse;
 import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.entity.MaterialAnalysis;
+import com.teaching.backend.domain.material.dto.request.MaterialAnalysisDetailUpdateRequest;
 import com.teaching.backend.domain.material.dto.request.MaterialFinalizeRequest;
+import com.teaching.backend.domain.material.dto.response.MaterialAnalysisDetailUpdateResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialAnalysisResponse;
-import com.teaching.backend.domain.material.dto.response.MaterialDetailResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialFinalizeResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialTagResponse;
 import com.teaching.backend.domain.material.enums.AiStatus;
@@ -304,27 +305,6 @@ class MaterialServiceTest {
     }
 
     @Test
-    void getMaterialDetailIncludesPlatformImageAndTagIdsAlongsideTitleAndOriginUrl() {
-        Material material = material(101L, USER_ID, "Original Title", PlatformType.YOUTUBE, AiStatus.COMPLETED, createdAt(1));
-        Folder ownedFolder = material.getFolder();
-        MaterialTag tagRelation = materialTagWithTagId(material, 501L, "javascript");
-        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(ownedFolder));
-        when(materialRepository.findByIdAndFolder_IdAndUser_Id(101L, FOLDER_ID, USER_ID)).thenReturn(Optional.of(material));
-        when(materialAnalysisRepository.findByMaterialId(101L)).thenReturn(Optional.of(analysis(material, "summary")));
-        when(materialTagRepository.findAllWithTagByMaterialIds(List.of(101L))).thenReturn(List.of(tagRelation));
-
-        MaterialDetailResponse result = materialService.getMaterialDetail(USER_ID, FOLDER_ID, 101L);
-
-        assertThat(result.title()).isEqualTo("Original Title");
-        assertThat(result.originUrl()).isEqualTo("https://example.com");
-        assertThat(result.platformType()).isEqualTo("YOUTUBE");
-        assertThat(result.platformImageUrl()).isEqualTo(PlatformType.YOUTUBE.getIconPath());
-        assertThat(result.tags()).hasSize(1);
-        assertThat(result.tags().get(0).tagId()).isEqualTo(501L);
-        assertThat(result.tags().get(0).tagName()).isEqualTo("javascript");
-    }
-
-    @Test
     void getMaterialAnalysisIncludesPlatformImageTitleOriginUrlAndTagsAlongsideAnalysis() {
         Material material = material(101L, USER_ID, "Original Title", PlatformType.NOTION, AiStatus.COMPLETED, createdAt(1));
         Folder ownedFolder = material.getFolder();
@@ -345,6 +325,69 @@ class MaterialServiceTest {
         assertThat(result.tags().get(0).tagId()).isEqualTo(501L);
         assertThat(result.tags().get(0).tagName()).isEqualTo("javascript");
         assertThat(result.shortSummary()).isEqualTo("summary");
+    }
+
+    @Test
+    void updateAnalysisDetailAllowsTextEditsWhenImagesAreUnchanged() {
+        Material material = material(101L, USER_ID, "Original Title", PlatformType.NOTION, AiStatus.COMPLETED, createdAt(1));
+        Folder ownedFolder = material.getFolder();
+        MaterialAnalysis analysis = detailAnalysis(material, "<p>Old text</p><img src=\"https://cdn.example.com/a.png\">");
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(ownedFolder));
+        when(materialRepository.findByIdAndFolder_IdAndUser_Id(101L, FOLDER_ID, USER_ID)).thenReturn(Optional.of(material));
+        when(materialAnalysisRepository.findByMaterialId(101L)).thenReturn(Optional.of(analysis));
+
+        MaterialAnalysisDetailUpdateResponse result = materialService.updateAnalysisDetail(
+                USER_ID,
+                FOLDER_ID,
+                101L,
+                new MaterialAnalysisDetailUpdateRequest("<p>New text</p><img src=\"https://cdn.example.com/a.png\">")
+        );
+
+        assertThat(result.fullAnalysis()).isEqualTo("<p>New text</p><img src=\"https://cdn.example.com/a.png\">");
+        assertThat(result.isUserEdited()).isTrue();
+        assertThat(analysis.isUserEdited()).isTrue();
+    }
+
+    @Test
+    void updateAnalysisDetailRejectsWhenImageIsModified() {
+        Material material = material(101L, USER_ID, "Original Title", PlatformType.NOTION, AiStatus.COMPLETED, createdAt(1));
+        Folder ownedFolder = material.getFolder();
+        MaterialAnalysis analysis = detailAnalysis(material, "<p>Old text</p><img src=\"https://cdn.example.com/a.png\">");
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(ownedFolder));
+        when(materialRepository.findByIdAndFolder_IdAndUser_Id(101L, FOLDER_ID, USER_ID)).thenReturn(Optional.of(material));
+        when(materialAnalysisRepository.findByMaterialId(101L)).thenReturn(Optional.of(analysis));
+
+        assertThatThrownBy(() -> materialService.updateAnalysisDetail(
+                USER_ID,
+                FOLDER_ID,
+                101L,
+                new MaterialAnalysisDetailUpdateRequest("<p>New text</p><img src=\"https://cdn.example.com/b.png\">")
+        ))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.DETAIL_ANALYSIS_IMAGE_MODIFIED);
+
+        assertThat(analysis.isUserEdited()).isFalse();
+    }
+
+    @Test
+    void updateAnalysisDetailRejectsBlankContent() {
+        Material material = material(101L, USER_ID, "Original Title", PlatformType.NOTION, AiStatus.COMPLETED, createdAt(1));
+        Folder ownedFolder = material.getFolder();
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(ownedFolder));
+        when(materialRepository.findByIdAndFolder_IdAndUser_Id(101L, FOLDER_ID, USER_ID)).thenReturn(Optional.of(material));
+
+        assertThatThrownBy(() -> materialService.updateAnalysisDetail(
+                USER_ID,
+                FOLDER_ID,
+                101L,
+                new MaterialAnalysisDetailUpdateRequest("   ")
+        ))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.DETAIL_ANALYSIS_REQUIRED);
+
+        verify(materialAnalysisRepository, never()).findByMaterialId(any());
     }
 
     @Test
@@ -694,6 +737,12 @@ class MaterialServiceTest {
 
     private MaterialAnalysis analysis(Material material, String summary) {
         MaterialAnalysis analysis = MaterialAnalysis.create(material, summary, "detail", "v1");
+        ReflectionTestUtils.setField(analysis, "id", material.getId() + 1000);
+        return analysis;
+    }
+
+    private MaterialAnalysis detailAnalysis(Material material, String detailAnalysisHtml) {
+        MaterialAnalysis analysis = MaterialAnalysis.create(material, "summary", detailAnalysisHtml, "v1");
         ReflectionTestUtils.setField(analysis, "id", material.getId() + 1000);
         return analysis;
     }

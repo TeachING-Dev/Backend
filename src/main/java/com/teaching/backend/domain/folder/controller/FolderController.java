@@ -14,12 +14,13 @@ import com.teaching.backend.domain.folder.exception.FolderErrorCode;
 import com.teaching.backend.domain.folder.exception.FolderException;
 import com.teaching.backend.domain.folder.service.FolderService;
 import com.teaching.backend.domain.material.code.MaterialSuccessCode;
+import com.teaching.backend.domain.material.dto.request.MaterialAnalysisDetailUpdateRequest;
 import com.teaching.backend.domain.material.dto.request.MaterialAnalysisSummaryUpdateRequest;
 import com.teaching.backend.domain.material.dto.request.MaterialIdsRequest;
 import com.teaching.backend.domain.material.dto.request.MaterialMoveRequest;
+import com.teaching.backend.domain.material.dto.response.MaterialAnalysisDetailUpdateResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialAnalysisResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialAnalysisSummaryUpdateResponse;
-import com.teaching.backend.domain.material.dto.response.MaterialDetailResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialMoveResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialOriginUrlResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialRestoreResponse;
@@ -271,32 +272,6 @@ public class FolderController {
     }
 
     @Operation(
-            summary = "자료 상세 조회",
-            description = "자료 상세 화면에 필요한 기본 정보를 조회합니다."
-    )
-    @GetMapping("/{folderId}/materials/{materialId}")
-    public ResponseEntity<ApiResponse<MaterialDetailResponse>> getMaterialDetail(
-            @Parameter(hidden = true)
-            @AuthenticationPrincipal AuthMember authMember,
-
-            @Parameter(description = "폴더 ID", example = "1")
-            @PathVariable String folderId,
-
-            @Parameter(description = "자료 ID", example = "101")
-            @PathVariable String materialId
-    ) {
-        MaterialDetailResponse result = materialService.getMaterialDetail(
-                getAuthenticatedUserId(authMember),
-                parseFolderId(folderId),
-                parseMaterialId(materialId)
-        );
-
-        return ResponseEntity.ok(
-                ApiResponse.onSuccess(MaterialSuccessCode.MATERIAL_DETAIL_SUCCESS, result)
-        );
-    }
-
-    @Operation(
             summary = "AI 상세 분석 조회",
             description = "자료 상세 화면에서 AI 요약과 AI 상세 분석 내용을 조회합니다."
     )
@@ -348,6 +323,35 @@ public class FolderController {
 
         return ResponseEntity.ok(
                 ApiResponse.onSuccess(MaterialSuccessCode.MATERIAL_ANALYSIS_SUMMARY_UPDATE_SUCCESS, result)
+        );
+    }
+
+    @Operation(
+            summary = "AI 상세 분석 수정",
+            description = "사용자가 AI 상세 분석 내용을 직접 수정합니다. 분석 결과에 포함된 이미지는 수정할 수 없고, 텍스트만 수정할 수 있습니다."
+    )
+    @PatchMapping("/{folderId}/materials/{materialId}/analysis/detail")
+    public ResponseEntity<ApiResponse<MaterialAnalysisDetailUpdateResponse>> updateMaterialAnalysisDetail(
+            @Parameter(hidden = true)
+            @AuthenticationPrincipal AuthMember authMember,
+
+            @Parameter(description = "폴더 ID", example = "1")
+            @PathVariable String folderId,
+
+            @Parameter(description = "자료 ID", example = "101")
+            @PathVariable String materialId,
+
+            @RequestBody MaterialAnalysisDetailUpdateRequest request
+    ) {
+        MaterialAnalysisDetailUpdateResponse result = materialService.updateAnalysisDetail(
+                getAuthenticatedUserId(authMember),
+                parseFolderId(folderId),
+                parseMaterialId(materialId),
+                request
+        );
+
+        return ResponseEntity.ok(
+                ApiResponse.onSuccess(MaterialSuccessCode.MATERIAL_ANALYSIS_DETAIL_UPDATE_SUCCESS, result)
         );
     }
 

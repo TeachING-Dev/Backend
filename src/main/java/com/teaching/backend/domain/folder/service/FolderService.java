@@ -14,6 +14,7 @@ import com.teaching.backend.domain.folder.entity.Folder;
 import com.teaching.backend.domain.folder.exception.FolderErrorCode;
 import com.teaching.backend.domain.folder.exception.FolderException;
 import com.teaching.backend.domain.folder.repository.FolderRepository;
+import com.teaching.backend.domain.material.dto.response.MaterialTagResponse;
 import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.entity.MaterialAnalysis;
 import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
@@ -333,7 +334,7 @@ public class FolderService {
                 .toList();
 
         Map<Long, String> summaryByMaterialId = getSummaryByMaterialId(materialIds);
-        Map<Long, List<String>> tagsByMaterialId = getTagsByMaterialId(materialIds);
+        Map<Long, List<MaterialTagResponse>> tagsByMaterialId = getTagsByMaterialId(materialIds);
 
         return materials.stream()
                 .map(material -> FolderMaterialItemResponse.of(
@@ -354,13 +355,13 @@ public class FolderService {
                 ));
     }
 
-    private Map<Long, List<String>> getTagsByMaterialId(List<Long> materialIds) {
-        Map<Long, List<String>> tagsByMaterialId = new HashMap<>();
+    private Map<Long, List<MaterialTagResponse>> getTagsByMaterialId(List<Long> materialIds) {
+        Map<Long, List<MaterialTagResponse>> tagsByMaterialId = new HashMap<>();
 
         for (MaterialTag materialTag : materialTagRepository.findAllWithTagByMaterialIds(materialIds)) {
             tagsByMaterialId
                     .computeIfAbsent(materialTag.getMaterial().getId(), ignored -> new ArrayList<>())
-                    .add(materialTag.getTag().getName());
+                    .add(MaterialTagResponse.from(materialTag));
         }
 
         return tagsByMaterialId;

@@ -5,13 +5,14 @@ import com.teaching.backend.domain.folder.exception.FolderErrorCode;
 import com.teaching.backend.domain.folder.exception.FolderException;
 import com.teaching.backend.domain.folder.repository.FolderRepository;
 import com.teaching.backend.domain.material.dto.MaterialListResponse;
+import com.teaching.backend.domain.material.dto.request.MaterialAnalysisDetailUpdateRequest;
 import com.teaching.backend.domain.material.dto.request.MaterialAnalysisSummaryUpdateRequest;
 import com.teaching.backend.domain.material.dto.request.MaterialFinalizeRequest;
 import com.teaching.backend.domain.material.dto.request.MaterialIdsRequest;
 import com.teaching.backend.domain.material.dto.request.MaterialMoveRequest;
+import com.teaching.backend.domain.material.dto.response.MaterialAnalysisDetailUpdateResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialAnalysisResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialAnalysisSummaryUpdateResponse;
-import com.teaching.backend.domain.material.dto.response.MaterialDetailResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialFinalizeResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialMoveResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialOriginUrlResponse;
@@ -35,6 +36,8 @@ import com.teaching.backend.global.exception.GeneralException;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Element;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -86,19 +89,6 @@ public class MaterialService {
                 .toList();
     }
 
-    public MaterialDetailResponse getMaterialDetail(
-            Long userId,
-            Long folderId,
-            Long materialId
-    ) {
-        Material material = getOwnedMaterial(userId, folderId, materialId);
-        String summary = materialAnalysisRepository.findByMaterialId(materialId)
-                .map(MaterialAnalysis::getSummary)
-                .orElse(null);
-
-        return MaterialDetailResponse.of(material, summary, getTagResponses(materialId));
-    }
-
     public MaterialAnalysisResponse getMaterialAnalysis(
             Long userId,
             Long folderId,
@@ -127,6 +117,23 @@ public class MaterialService {
         analysis.editSummary(shortSummary);
 
         return MaterialAnalysisSummaryUpdateResponse.of(materialId, analysis);
+    }
+
+    @Transactional
+    public MaterialAnalysisDetailUpdateResponse updateAnalysisDetail(
+            Long userId,
+            Long folderId,
+            Long materialId,
+            MaterialAnalysisDetailUpdateRequest request
+    ) {
+        getOwnedMaterial(userId, folderId, materialId);
+        String fullAnalysis = validateAndNormalizeDetailAnalysis(request);
+
+        MaterialAnalysis analysis = getOwnedAnalysis(materialId);
+        validateImagesUnchanged(analysis.getDetailAnalysis(), fullAnalysis);
+        analysis.editDetailAnalysis(fullAnalysis);
+
+        return MaterialAnalysisDetailUpdateResponse.of(materialId, analysis);
     }
 
     public List<MaterialTagResponse> getMaterialTags(
@@ -442,5 +449,28 @@ public class MaterialService {
         }
 
         return request.shortSummary().trim();
+    }
+
+    private String validateAndNormalizeDetailAnalysis(MaterialAnalysisDetailUpdateRequest request) {
+        if (request == null || request.fullAnalysis() == null || request.fullAnalysis().isBlank()) {
+            throw new MaterialException(MaterialErrorCode.DETAIL_ANALYSIS_REQUIRED);
+        }
+
+        return request.fullAnalysis().trim();
+    }
+
+    private void validateImagesUnchanged(String originalHtml, String editedHtml) {
+        if (!extractImageSignatures(originalHtml).equals(extractImageSignatures(editedHtml))) {
+            throw new MaterialException(MaterialErrorCode.DETAIL_ANALYSIS_IMAGE_MODIFIED);
+        }
+    }
+
+    private List<String> extractImageSignatures(String html) {
+        return Jsoup.parseBodyFragment(html == null ? "" : html)
+                .body()
+                .select("img")
+                .stream()
+                .map(Element::outerHtml)
+                .toList();
     }
 }

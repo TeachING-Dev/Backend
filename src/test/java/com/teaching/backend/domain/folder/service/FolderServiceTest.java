@@ -12,6 +12,8 @@ import com.teaching.backend.domain.material.enums.AiStatus;
 import com.teaching.backend.domain.material.enums.PlatformType;
 import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
+import com.teaching.backend.domain.tag.entity.MaterialTag;
+import com.teaching.backend.domain.tag.entity.Tag;
 import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
 import com.teaching.backend.domain.user.entity.User;
 import com.teaching.backend.domain.user.enums.MembershipType;
@@ -333,7 +335,35 @@ class FolderServiceTest {
                 .satisfies(item -> {
                     assertThat(item.materialId()).isEqualTo(101L);
                     assertThat(item.platformType()).isEqualTo("YOUTUBE");
+                    assertThat(item.platformImageUrl()).isEqualTo(PlatformType.YOUTUBE.getIconPath());
                     assertThat(item.summary()).isEqualTo("Summary");
+                });
+    }
+
+    @Test
+    void getFolderMaterialsIncludesTagIdsAlongsideTagNames() {
+        Folder folder = folder(USER_ID, FOLDER_ID, "Backend");
+        Material material = material(101L, USER_ID, folder, PlatformType.YOUTUBE);
+        Tag tag = Tag.create("javascript");
+        ReflectionTestUtils.setField(tag, "id", 501L);
+        MaterialTag materialTag = MaterialTag.create(material, tag);
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(folder));
+        when(materialRepository.searchFolderMaterials(
+                eq(FOLDER_ID),
+                eq(USER_ID),
+                eq(null),
+                any(Pageable.class)
+        )).thenReturn(new PageImpl<>(List.of(material)));
+        when(materialAnalysisRepository.findAllActiveByMaterialIds(List.of(101L))).thenReturn(List.of());
+        when(materialTagRepository.findAllWithTagByMaterialIds(List.of(101L))).thenReturn(List.of(materialTag));
+
+        var result = folderService.getFolderMaterials(USER_ID, FOLDER_ID, null, "recent", 0, 10);
+
+        assertThat(result.content()).singleElement()
+                .satisfies(item -> {
+                    assertThat(item.tags()).hasSize(1);
+                    assertThat(item.tags().get(0).tagId()).isEqualTo(501L);
+                    assertThat(item.tags().get(0).tagName()).isEqualTo("javascript");
                 });
     }
 

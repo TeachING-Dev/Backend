@@ -24,7 +24,6 @@ public record MaterialAnalyzeResponse(
         String recommendedFolderName,
         List<MaterialTagResponse> tags
 ) {
-
     public static MaterialAnalyzeResponse alreadyAnalyzed(
             Material material,
             MaterialAnalysis materialAnalysis,
