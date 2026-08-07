@@ -1,5 +1,6 @@
 package com.teaching.backend.domain.material.entity;
 
+import com.teaching.backend.domain.material.enums.HighlightGenerationStatus;
 import com.teaching.backend.global.common.BaseSoftDeleteEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -37,6 +38,12 @@ public class MaterialAnalysis extends BaseSoftDeleteEntity {
     @Column(nullable = false)
     @ColumnDefault("false")
     private boolean isUserEdited;
+
+    //하이라이트 생성 상태 컬럼 추가
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    @ColumnDefault("'NOT_STARTED'")
+    private HighlightGenerationStatus highlightStatus = HighlightGenerationStatus.NOT_STARTED;
 
     @Builder(access = AccessLevel.PRIVATE)
     private MaterialAnalysis(Material material, String summary, String detailAnalysis, String promptVersion) {

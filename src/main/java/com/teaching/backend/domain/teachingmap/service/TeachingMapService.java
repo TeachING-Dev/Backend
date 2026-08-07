@@ -213,20 +213,26 @@ public class TeachingMapService {
     }
 
     private void saveHighlights(MaterialAnalysis analysis, List<MaterialHighlightResultParser.HighlightItem> items) {
+        if (items.isEmpty()) {
+            throw new IllegalStateException("AI 응답에 하이라이트가 없습니다. materialAnalysisId=" + analysis.getId());
+        }
+
         String detailAnalysis = analysis.getDetailAnalysis();
         List<MaterialHighlight> highlights = new ArrayList<>();
 
         for (var item : items) {
+            if (item.text() == null || item.text().isBlank()) {
+                throw new IllegalStateException("하이라이트 텍스트가 비어 있습니다. materialAnalysisId=" + analysis.getId());
+            }
             int start = detailAnalysis.indexOf(item.text());
             if (start == -1) {
-                log.warn("하이라이트 텍스트 매칭 실패, materialAnalysisId={}", analysis.getId());
-                continue;
+                throw new IllegalStateException("본문과 일치하지 않는 하이라이트입니다. materialAnalysisId=" + analysis.getId());
             }
             int end = start + item.text().length();
             highlights.add(MaterialHighlight.create(
                     analysis, item.text(), toHighlightType(item.type()), start, end));
         }
-        materialHighlightRepository.saveAll(highlights);
+        materialHighlightRepository.saveAll(highlights); // 여기 도달하면 전부 검증 통과한 상태
     }
 
     private HighlightType toHighlightType(String type) {
