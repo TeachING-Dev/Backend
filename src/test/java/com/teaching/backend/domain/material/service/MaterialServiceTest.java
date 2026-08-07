@@ -346,6 +346,7 @@ class MaterialServiceTest {
         assertThat(result.fullAnalysis()).isEqualTo("<p>New text</p><img src=\"https://cdn.example.com/a.png\">");
         assertThat(result.isUserEdited()).isTrue();
         assertThat(analysis.isUserEdited()).isTrue();
+        verify(entityManager).flush();
     }
 
     @Test
@@ -368,6 +369,30 @@ class MaterialServiceTest {
                 .isEqualTo(MaterialErrorCode.DETAIL_ANALYSIS_IMAGE_MODIFIED);
 
         assertThat(analysis.isUserEdited()).isFalse();
+        verify(entityManager, never()).flush();
+    }
+
+    @Test
+    void updateAnalysisDetailRejectsWhenNonImageElementIsInjected() {
+        Material material = material(101L, USER_ID, "Original Title", PlatformType.NOTION, AiStatus.COMPLETED, createdAt(1));
+        Folder ownedFolder = material.getFolder();
+        MaterialAnalysis analysis = detailAnalysis(material, "<p>Old text</p>");
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(ownedFolder));
+        when(materialRepository.findByIdAndFolder_IdAndUser_Id(101L, FOLDER_ID, USER_ID)).thenReturn(Optional.of(material));
+        when(materialAnalysisRepository.findByMaterialId(101L)).thenReturn(Optional.of(analysis));
+
+        assertThatThrownBy(() -> materialService.updateAnalysisDetail(
+                USER_ID,
+                FOLDER_ID,
+                101L,
+                new MaterialAnalysisDetailUpdateRequest("<p onclick=\"alert(1)\">New text</p><script>alert(1)</script>")
+        ))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.DETAIL_ANALYSIS_IMAGE_MODIFIED);
+
+        assertThat(analysis.isUserEdited()).isFalse();
+        verify(entityManager, never()).flush();
     }
 
     @Test
@@ -388,6 +413,7 @@ class MaterialServiceTest {
                 .isEqualTo(MaterialErrorCode.DETAIL_ANALYSIS_REQUIRED);
 
         verify(materialAnalysisRepository, never()).findByMaterialId(any());
+        verify(entityManager, never()).flush();
     }
 
     @Test

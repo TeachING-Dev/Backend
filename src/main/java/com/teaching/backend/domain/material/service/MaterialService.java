@@ -37,6 +37,7 @@ import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
+import org.jsoup.nodes.Attribute;
 import org.jsoup.nodes.Element;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -45,6 +46,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -130,8 +132,9 @@ public class MaterialService {
         String fullAnalysis = validateAndNormalizeDetailAnalysis(request);
 
         MaterialAnalysis analysis = getOwnedAnalysis(materialId);
-        validateImagesUnchanged(analysis.getDetailAnalysis(), fullAnalysis);
+        validateNonTextContentUnchanged(analysis.getDetailAnalysis(), fullAnalysis);
         analysis.editDetailAnalysis(fullAnalysis);
+        entityManager.flush();
 
         return MaterialAnalysisDetailUpdateResponse.of(materialId, analysis);
     }
@@ -459,18 +462,27 @@ public class MaterialService {
         return request.fullAnalysis().trim();
     }
 
-    private void validateImagesUnchanged(String originalHtml, String editedHtml) {
-        if (!extractImageSignatures(originalHtml).equals(extractImageSignatures(editedHtml))) {
+    private void validateNonTextContentUnchanged(String originalHtml, String editedHtml) {
+        if (!extractElementSignatures(originalHtml).equals(extractElementSignatures(editedHtml))) {
             throw new MaterialException(MaterialErrorCode.DETAIL_ANALYSIS_IMAGE_MODIFIED);
         }
     }
 
-    private List<String> extractImageSignatures(String html) {
+    private List<String> extractElementSignatures(String html) {
         return Jsoup.parseBodyFragment(html == null ? "" : html)
                 .body()
-                .select("img")
+                .select("*")
                 .stream()
-                .map(Element::outerHtml)
+                .map(this::elementSignature)
                 .toList();
+    }
+
+    private String elementSignature(Element element) {
+        String attributes = element.attributes().asList().stream()
+                .sorted(Comparator.comparing(Attribute::getKey))
+                .map(attribute -> attribute.getKey() + "=" + attribute.getValue())
+                .collect(Collectors.joining(" "));
+
+        return element.tagName() + " " + attributes;
     }
 }
