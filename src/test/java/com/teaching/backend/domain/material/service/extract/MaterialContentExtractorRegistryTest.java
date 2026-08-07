@@ -6,7 +6,9 @@ import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.exception.MaterialException;
 import org.junit.jupiter.api.Test;
 
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -43,22 +45,24 @@ class MaterialContentExtractorRegistryTest {
     }
 
     @Test
+    void extractsBlogTistoryAndNaverBlogWithSameExtractor() {
+        ExtractedMaterialContent expected = content(PlatformType.BLOG);
+        MaterialContentExtractor blogExtractor = extractor(
+                EnumSet.of(PlatformType.BLOG, PlatformType.TISTORY, PlatformType.NAVER_BLOG),
+                expected
+        );
+        MaterialContentExtractorRegistry registry = new MaterialContentExtractorRegistry(List.of(blogExtractor));
+
+        assertThat(registry.extract(PlatformType.BLOG, "https://medium.com/post")).isEqualTo(expected);
+        assertThat(registry.extract(PlatformType.TISTORY, "https://example.tistory.com/post")).isEqualTo(expected);
+        assertThat(registry.extract(PlatformType.NAVER_BLOG, "https://blog.naver.com/writer/1")).isEqualTo(expected);
+    }
+
+    @Test
     void failsWhenPlatformIsUnsupported() {
         MaterialContentExtractorRegistry registry = new MaterialContentExtractorRegistry(List.of());
 
         assertThatThrownBy(() -> registry.extract(PlatformType.WEB, "https://example.com"))
-                .isInstanceOf(MaterialException.class)
-                .extracting("errorCode")
-                .isEqualTo(MaterialErrorCode.UNSUPPORTED_MATERIAL_PLATFORM);
-    }
-
-    @Test
-    void failsWhenPdfHasNoHtmlExtractor() {
-        MaterialContentExtractorRegistry registry = new MaterialContentExtractorRegistry(List.of(
-                extractor(PlatformType.WEB, content(PlatformType.WEB))
-        ));
-
-        assertThatThrownBy(() -> registry.extract(PlatformType.PDF, "https://example.com/file.pdf"))
                 .isInstanceOf(MaterialException.class)
                 .extracting("errorCode")
                 .isEqualTo(MaterialErrorCode.UNSUPPORTED_MATERIAL_PLATFORM);
@@ -81,6 +85,20 @@ class MaterialContentExtractorRegistryTest {
             @Override
             public boolean supports(PlatformType supportedPlatformType) {
                 return supportedPlatformType == platformType;
+            }
+
+            @Override
+            public ExtractedMaterialContent extract(String originalUrl) {
+                return content;
+            }
+        };
+    }
+
+    private MaterialContentExtractor extractor(Set<PlatformType> platformTypes, ExtractedMaterialContent content) {
+        return new MaterialContentExtractor() {
+            @Override
+            public boolean supports(PlatformType supportedPlatformType) {
+                return platformTypes.contains(supportedPlatformType);
             }
 
             @Override

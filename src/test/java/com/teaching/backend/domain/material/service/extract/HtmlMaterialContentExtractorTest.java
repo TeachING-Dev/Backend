@@ -230,19 +230,50 @@ class HtmlMaterialContentExtractorTest {
 
     @Test
     void blogExtractorExtractsTistorySkinContentByAdditionalSelector() {
-        ExternalHtmlDocumentClient client = client("""
-                <html><body>
-                  <header>site header</header>
-                  <div class="area_view"><p>Tistory skin article content with enough text</p></div>
-                </body></html>
-                """);
+        String tistoryUrl = "https://example.tistory.com/post";
+        ExternalHtmlDocumentClient client = mock(ExternalHtmlDocumentClient.class);
+        when(client.fetch(tistoryUrl)).thenReturn(new HtmlDocument(
+                tistoryUrl,
+                """
+                        <html><body>
+                          <header>site header</header>
+                          <div class="area_view"><p>Tistory skin article content with enough text</p></div>
+                        </body></html>
+                        """,
+                "text/html"
+        ));
         RenderedHtmlDocumentClient renderedClient = mock(RenderedHtmlDocumentClient.class);
         BlogMaterialContentExtractor extractor = new BlogMaterialContentExtractor(client, renderedClient);
 
-        ExtractedMaterialContent result = extractor.extract(URL);
+        ExtractedMaterialContent result = extractor.extract(tistoryUrl);
 
+        assertThat(result.platformType()).isEqualTo(PlatformType.BLOG);
         assertThat(result.content()).contains("Tistory skin article content");
-        verify(renderedClient, never()).render(URL);
+        verify(renderedClient, never()).render(tistoryUrl);
+    }
+
+    @Test
+    void blogExtractorUsesRenderedFallbackForTistory() {
+        String tistoryUrl = "https://example.tistory.com/post";
+        ExternalHtmlDocumentClient client = mock(ExternalHtmlDocumentClient.class);
+        when(client.fetch(tistoryUrl)).thenReturn(new HtmlDocument(
+                tistoryUrl,
+                "<html><body><main>short</main></body></html>",
+                "text/html"
+        ));
+        RenderedHtmlDocumentClient renderedClient = mock(RenderedHtmlDocumentClient.class);
+        when(renderedClient.render(tistoryUrl)).thenReturn(Optional.of(new HtmlDocument(
+                tistoryUrl,
+                "<html><body><div class=\"area_view\">Rendered tistory content with enough text</div></body></html>",
+                "text/html"
+        )));
+        BlogMaterialContentExtractor extractor = new BlogMaterialContentExtractor(client, renderedClient);
+
+        ExtractedMaterialContent result = extractor.extract(tistoryUrl);
+
+        assertThat(result.platformType()).isEqualTo(PlatformType.BLOG);
+        assertThat(result.content()).contains("Rendered tistory content");
+        verify(renderedClient).render(tistoryUrl);
     }
 
     @Test
@@ -265,6 +296,7 @@ class HtmlMaterialContentExtractorTest {
 
         ExtractedMaterialContent result = extractor.extract(outerUrl);
 
+        assertThat(result.platformType()).isEqualTo(PlatformType.BLOG);
         assertThat(result.content()).contains("Naver blog iframe content");
         verify(renderedClient, never()).render(outerUrl);
     }
@@ -289,6 +321,7 @@ class HtmlMaterialContentExtractorTest {
 
         ExtractedMaterialContent result = extractor.extract(outerUrl);
 
+        assertThat(result.platformType()).isEqualTo(PlatformType.BLOG);
         assertThat(result.content()).contains("Relative iframe content");
         verify(client).fetch(frameUrl);
         verify(renderedClient, never()).render(outerUrl);
@@ -313,6 +346,7 @@ class HtmlMaterialContentExtractorTest {
 
         ExtractedMaterialContent result = extractor.extract(blogUrl);
 
+        assertThat(result.platformType()).isEqualTo(PlatformType.BLOG);
         assertThat(result.content()).contains("Rendered naver blog content");
         verify(renderedClient).render(blogUrl);
     }
@@ -342,6 +376,7 @@ class HtmlMaterialContentExtractorTest {
 
         ExtractedMaterialContent result = extractor.extract(outerUrl);
 
+        assertThat(result.platformType()).isEqualTo(PlatformType.BLOG);
         assertThat(result.content()).contains("Rendered naver blog content");
         verify(renderedClient).render(outerUrl);
     }
@@ -365,6 +400,7 @@ class HtmlMaterialContentExtractorTest {
 
         ExtractedMaterialContent result = extractor.extract(blogUrl);
 
+        assertThat(result.platformType()).isEqualTo(PlatformType.BLOG);
         assertThat(result.content()).contains("Rendered blog content");
         verify(renderedClient).render(blogUrl);
     }

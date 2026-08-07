@@ -28,6 +28,13 @@ public class BlogMaterialContentExtractor extends AbstractHtmlMaterialContentExt
     }
 
     @Override
+    public boolean supports(PlatformType platformType) {
+        return platformType == PlatformType.BLOG
+                || platformType == PlatformType.TISTORY
+                || platformType == PlatformType.NAVER_BLOG;
+    }
+
+    @Override
     protected Optional<ParsedHtmlContent> parsePlatformFallback(
             String originalUrl,
             HtmlDocument initialDocument

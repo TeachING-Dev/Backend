@@ -160,7 +160,7 @@ public class MaterialUrlAnalysisService {
                 userId,
                 null,
                 originalUrl,
-                extractedContent.platformType(),
+                platformType,
                 extractedContent
         );
     }

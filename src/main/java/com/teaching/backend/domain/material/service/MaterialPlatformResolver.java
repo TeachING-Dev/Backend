@@ -34,6 +34,12 @@ public class MaterialPlatformResolver {
         if (isDomainOrSubdomain(normalizedHost, "velog.io")) {
             return PlatformType.VELOG;
         }
+        if (isDomainOrSubdomain(normalizedHost, "tistory.com")) {
+            return PlatformType.TISTORY;
+        }
+        if (isNaverBlogHost(normalizedHost)) {
+            return PlatformType.NAVER_BLOG;
+        }
         if (isDomainOrSubdomain(normalizedHost, "notion.so")
                 || isDomainOrSubdomain(normalizedHost, "notion.site")) {
             return PlatformType.NOTION;
@@ -44,11 +50,6 @@ public class MaterialPlatformResolver {
         if (isBlogHost(normalizedHost)) {
             return PlatformType.BLOG;
         }
-
-        String path = uri.getPath();
-        if (path != null && path.toLowerCase(Locale.ROOT).endsWith(".pdf")) {
-            return PlatformType.PDF;
-        }
         return PlatformType.WEB;
     }
 
@@ -57,11 +58,13 @@ public class MaterialPlatformResolver {
     }
 
     private boolean isBlogHost(String host) {
-        return isDomainOrSubdomain(host, "blog.naver.com")
-                || isDomainOrSubdomain(host, "tistory.com")
-                || isDomainOrSubdomain(host, "blogspot.com")
+        return isDomainOrSubdomain(host, "blogspot.com")
                 || isDomainOrSubdomain(host, "medium.com")
                 || isDomainOrSubdomain(host, "wordpress.com");
+    }
+
+    private boolean isNaverBlogHost(String host) {
+        return isDomainOrSubdomain(host, "blog.naver.com");
     }
 
     private boolean isCafeHost(String host) {

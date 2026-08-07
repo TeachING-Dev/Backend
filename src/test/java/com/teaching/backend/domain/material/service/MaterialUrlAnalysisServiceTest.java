@@ -59,6 +59,9 @@ class MaterialUrlAnalysisServiceTest {
     private static final String URL = "https://velog.io/@example/spring";
     private static final String YOUTUBE_URL = "https://www.youtube.com/watch?v=video";
     private static final String WEB_URL = "https://www.hanbit.co.kr/channel/view.html?cmscode=CMS7876574876";
+    private static final String TISTORY_URL = "https://example.tistory.com/post";
+    private static final String NAVER_BLOG_URL = "https://blog.naver.com/writer/123";
+    private static final String BLOG_URL = "https://medium.com/example/post";
 
     @Mock
     private MaterialRepository materialRepository;
@@ -585,6 +588,21 @@ class MaterialUrlAnalysisServiceTest {
     }
 
     @Test
+    void keepsTistoryResolverPlatformTypeThroughResponse() {
+        assertAnalyzeKeepsResolverPlatform(TISTORY_URL, PlatformType.TISTORY, PlatformType.BLOG);
+    }
+
+    @Test
+    void keepsNaverBlogResolverPlatformTypeThroughResponse() {
+        assertAnalyzeKeepsResolverPlatform(NAVER_BLOG_URL, PlatformType.NAVER_BLOG, PlatformType.BLOG);
+    }
+
+    @Test
+    void keepsGeneralBlogResolverPlatformTypeThroughResponse() {
+        assertAnalyzeKeepsResolverPlatform(BLOG_URL, PlatformType.BLOG, PlatformType.BLOG);
+    }
+
+    @Test
     void prepareAnalysisReturnsExtractedContentWithNullFolderId() {
         ExtractedMaterialContent extractedContent = extractedContent();
         when(materialContentExtractorRegistry.extract(PlatformType.VELOG, URL)).thenReturn(extractedContent);
@@ -677,6 +695,71 @@ class MaterialUrlAnalysisServiceTest {
                 "Backend",
                 List.of("Spring", "JPA")
         );
+    }
+
+    private void assertAnalyzeKeepsResolverPlatform(
+            String originalUrl,
+            PlatformType resolvedPlatformType,
+            PlatformType extractedPlatformType
+    ) {
+        ExtractedMaterialContent extractedContent = new ExtractedMaterialContent(
+                originalUrl,
+                extractedPlatformType,
+                "Title",
+                "Extracted content for platform split analysis",
+                null,
+                "author",
+                createdAt(1)
+        );
+        when(materialUrlValidator.isValidHttpUrl(originalUrl)).thenReturn(true);
+        when(materialPlatformResolver.resolve(null, originalUrl)).thenReturn(resolvedPlatformType);
+        when(materialUrlAnalysisConcurrencyGuard.executeSerialized(eq(USER_ID), eq(originalUrl), any(), any()))
+                .thenAnswer(invocation -> {
+                    Optional<?> completed = (Optional<?>) invocation.getArgument(2, Supplier.class).get();
+                    if (completed.isPresent()) {
+                        return completed.get();
+                    }
+                    return invocation.getArgument(3, Supplier.class).get();
+                });
+        when(materialRepository.findAllByUser_IdAndOriginalUrlOrderByCreatedAtDescIdDesc(USER_ID, originalUrl))
+                .thenReturn(List.of());
+        when(materialContentExtractorRegistry.extract(resolvedPlatformType, originalUrl)).thenReturn(extractedContent);
+        when(materialAiAnalysisOrchestrator.analyze(any(MaterialAnalysisPreparationResult.class), isNull()))
+                .thenAnswer(invocation -> {
+                    MaterialAnalysisPreparationResult preparationResult = invocation.getArgument(
+                            0,
+                            MaterialAnalysisPreparationResult.class
+                    );
+                    return new MaterialAiAnalysisPipelineResult(
+                            202L,
+                            USER_ID,
+                            preparationResult.folderId(),
+                            "Summary",
+                            originalUrl,
+                            preparationResult.platformType(),
+                            preparationResult.extractedContent(),
+                            302L,
+                            1,
+                            null,
+                            null,
+                            List.of("Blog")
+                    );
+                });
+        when(materialTagRepository.findAllByMaterialId(202L))
+                .thenReturn(List.of(materialTag(null, 701L, "Blog")));
+
+        MaterialAnalyzeResponse result = materialUrlAnalysisService.analyze(
+                USER_ID,
+                new MaterialAnalyzeRequest(originalUrl, false)
+        );
+
+        ArgumentCaptor<MaterialAnalysisPreparationResult> captor =
+                ArgumentCaptor.forClass(MaterialAnalysisPreparationResult.class);
+        verify(materialContentExtractorRegistry).extract(resolvedPlatformType, originalUrl);
+        verify(materialAiAnalysisOrchestrator).analyze(captor.capture(), isNull());
+        assertThat(captor.getValue().platformType()).isEqualTo(resolvedPlatformType);
+        assertThat(captor.getValue().extractedContent().platformType()).isEqualTo(extractedPlatformType);
+        assertThat(result.platformType()).isEqualTo(resolvedPlatformType.name());
     }
 
     private ExtractedMaterialContent extractedContent() {
