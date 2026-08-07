@@ -15,6 +15,7 @@ public record MaterialAnalyzeResponse(
         Long existingMaterialId,
         Long existingFolderId,
         String summary,
+        String fullAnalysis,
         String originalUrl,
         String title,
         String platformType,
@@ -41,6 +42,7 @@ public record MaterialAnalyzeResponse(
                 material.getFolderId(),
 
                 materialAnalysis  == null ? null : materialAnalysis.getSummary(),
+                materialAnalysis  == null ? null : materialAnalysis.getDetailAnalysis(),
                 material.getOriginalUrl(),
                 material.getTitle(),
                 platformType == null ? null : platformType.name(),
@@ -59,6 +61,7 @@ public record MaterialAnalyzeResponse(
         return new MaterialAnalyzeResponse(
                 null,
                 MaterialAnalyzeResultType.ANALYSIS_REQUIRED,
+                null,
                 null,
                 null,
                 null,
@@ -96,6 +99,7 @@ public record MaterialAnalyzeResponse(
                 existingMaterial == null ? null : existingMaterial.getId(),
                 existingMaterial == null ? null : existingMaterial.getFolderId(),
                 result.summary(),
+                result.fullAnalysis(),
                 result.originalUrl(),
                 title,
                 platformType == null ? null : platformType.name(),

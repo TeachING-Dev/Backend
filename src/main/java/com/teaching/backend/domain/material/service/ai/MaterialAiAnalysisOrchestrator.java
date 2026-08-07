@@ -96,6 +96,7 @@ public class MaterialAiAnalysisOrchestrator {
                 preparationResult.userId(),
                 preparationResult.folderId(),
                 savedAnalysis == null ? null : savedAnalysis.getSummary(),
+                savedAnalysis == null ? null : savedAnalysis.getDetailAnalysis(),
                 preparationResult.originalUrl(),
                 preparationResult.platformType(),
                 preparationResult.extractedContent(),

@@ -309,7 +309,8 @@ class MaterialServiceTest {
         Material material = material(101L, USER_ID, "Original Title", PlatformType.NOTION, AiStatus.COMPLETED, createdAt(1));
         Folder ownedFolder = material.getFolder();
         MaterialTag tagRelation = materialTagWithTagId(material, 501L, "javascript");
-        MaterialAnalysis analysis = analysis(material, "summary");
+        MaterialAnalysis analysis = MaterialAnalysis.create(material, "short summary", "detailed analysis content", "v1");
+        ReflectionTestUtils.setField(analysis, "id", 1101L);
         when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(ownedFolder));
         when(materialRepository.findByIdAndFolder_IdAndUser_Id(101L, FOLDER_ID, USER_ID)).thenReturn(Optional.of(material));
         when(materialAnalysisRepository.findByMaterialId(101L)).thenReturn(Optional.of(analysis));
@@ -324,7 +325,8 @@ class MaterialServiceTest {
         assertThat(result.tags()).hasSize(1);
         assertThat(result.tags().get(0).tagId()).isEqualTo(501L);
         assertThat(result.tags().get(0).tagName()).isEqualTo("javascript");
-        assertThat(result.shortSummary()).isEqualTo("summary");
+        assertThat(result.shortSummary()).isEqualTo("short summary");
+        assertThat(result.fullAnalysis()).isEqualTo("detailed analysis content");
     }
 
     @Test
