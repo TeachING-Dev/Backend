@@ -125,6 +125,8 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(result.platformType()).isEqualTo("VELOG");
         assertThat(result.status()).isEqualTo("COMPLETED");
         assertThat(result.materialAnalysisId()).isEqualTo(301L);
+        assertThat(result.summary()).isEqualTo("short summary");
+        assertThat(result.fullAnalysis()).isEqualTo("detailed analysis content");
         assertThat(result.chunkCount()).isEqualTo(3);
         assertThat(result.tags()).singleElement()
                 .satisfies(tag -> {
@@ -155,6 +157,8 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(result.existingFolderId()).isEqualTo(FOLDER_ID);
         assertThat(result.materialId()).isNull();
         assertThat(result.materialAnalysisId()).isNull();
+        assertThat(result.summary()).isNull();
+        assertThat(result.fullAnalysis()).isNull();
         assertThat(result.chunkCount()).isZero();
         assertThat(result.tags()).isEmpty();
         verify(materialContentExtractorRegistry, never()).extract(any(), anyString());
@@ -202,6 +206,8 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(result.existingMaterialId()).isNull();
         assertThat(result.materialId()).isEqualTo(200L);
         assertThat(result.materialAnalysisId()).isEqualTo(300L);
+        assertThat(result.summary()).isEqualTo("short summary");
+        assertThat(result.fullAnalysis()).isEqualTo("detailed analysis content");
         assertThat(result.originalUrl()).isEqualTo(URL);
         assertThat(result.platformType()).isEqualTo("VELOG");
         assertThat(result.status()).isEqualTo("COMPLETED");
@@ -263,6 +269,8 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(result.existingMaterialId()).isNull();
         assertThat(result.materialId()).isEqualTo(200L);
         assertThat(result.materialAnalysisId()).isEqualTo(300L);
+        assertThat(result.summary()).isEqualTo("short summary");
+        assertThat(result.fullAnalysis()).isEqualTo("detailed analysis content");
         assertThat(result.status()).isEqualTo("COMPLETED");
         assertThat(result.recommendedFolderId()).isEqualTo(RECOMMENDED_FOLDER_ID);
         assertThat(result.recommendedFolderName()).isEqualTo("Backend");
@@ -317,6 +325,8 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(second.existingFolderId()).isEqualTo(FOLDER_ID);
         assertThat(second.materialId()).isNull();
         assertThat(second.materialAnalysisId()).isEqualTo(300L);
+        assertThat(second.summary()).isEqualTo("short summary");
+        assertThat(second.fullAnalysis()).isEqualTo("detailed analysis content");
         assertThat(second.chunkCount()).isEqualTo(2);
         assertThat(second.tags()).singleElement()
                 .satisfies(tag -> assertThat(tag.tagName()).isEqualTo("Spring"));
@@ -494,6 +504,7 @@ class MaterialUrlAnalysisServiceTest {
                             USER_ID,
                             null,
                             "Summary",
+                            "YouTube detailed analysis content",
                             YOUTUBE_URL,
                             PlatformType.YOUTUBE,
                             preparationResult.extractedContent(),
@@ -521,6 +532,7 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(captor.getValue().extractedContent().content())
                 .isEqualTo("YouTube transcript text from official captions");
         assertThat(result.platformType()).isEqualTo("YOUTUBE");
+        assertThat(result.fullAnalysis()).isEqualTo("YouTube detailed analysis content");
         assertThat(result.tags()).singleElement()
                 .satisfies(tag -> assertThat(tag.tagName()).isEqualTo("YouTube"));
     }
@@ -560,6 +572,7 @@ class MaterialUrlAnalysisServiceTest {
                             USER_ID,
                             preparationResult.folderId(),
                             "Summary",
+                            "Web detailed analysis content",
                             WEB_URL,
                             preparationResult.platformType(),
                             preparationResult.extractedContent(),
@@ -585,6 +598,7 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(captor.getValue().platformType()).isEqualTo(PlatformType.WEB);
         assertThat(captor.getValue().extractedContent().platformType()).isEqualTo(PlatformType.WEB);
         assertThat(result.platformType()).isEqualTo("WEB");
+        assertThat(result.fullAnalysis()).isEqualTo("Web detailed analysis content");
     }
 
     @Test
@@ -685,7 +699,8 @@ class MaterialUrlAnalysisServiceTest {
                 200L,
                 USER_ID,
                 null,
-                "Summary",
+                "short summary",
+                "detailed analysis content",
                 URL,
                 PlatformType.VELOG,
                 extractedContent,
@@ -735,6 +750,7 @@ class MaterialUrlAnalysisServiceTest {
                             USER_ID,
                             preparationResult.folderId(),
                             "Summary",
+                            "Blog detailed analysis content",
                             originalUrl,
                             preparationResult.platformType(),
                             preparationResult.extractedContent(),
@@ -760,6 +776,7 @@ class MaterialUrlAnalysisServiceTest {
         assertThat(captor.getValue().platformType()).isEqualTo(resolvedPlatformType);
         assertThat(captor.getValue().extractedContent().platformType()).isEqualTo(extractedPlatformType);
         assertThat(result.platformType()).isEqualTo(resolvedPlatformType.name());
+        assertThat(result.fullAnalysis()).isEqualTo("Blog detailed analysis content");
     }
 
     private ExtractedMaterialContent extractedContent() {
@@ -792,7 +809,7 @@ class MaterialUrlAnalysisServiceTest {
     }
 
     private MaterialAnalysis materialAnalysis(Long analysisId, Material material) {
-        MaterialAnalysis analysis = MaterialAnalysis.create(material, "summary", "detail", "v1");
+        MaterialAnalysis analysis = MaterialAnalysis.create(material, "short summary", "detailed analysis content", "v1");
         ReflectionTestUtils.setField(analysis, "id", analysisId);
         return analysis;
     }
