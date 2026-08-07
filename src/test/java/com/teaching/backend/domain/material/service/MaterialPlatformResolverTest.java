@@ -49,10 +49,28 @@ class MaterialPlatformResolverTest {
 
     @Test
     void resolvesRepresentativeBlogUrl() {
-        assertThat(resolver.resolve(null, "https://blog.naver.com/example/1"))
+        assertThat(resolver.resolve(null, "https://example.blogspot.com/1"))
                 .isEqualTo(PlatformType.BLOG);
+        assertThat(resolver.resolve(null, "https://medium.com/example/1"))
+                .isEqualTo(PlatformType.BLOG);
+        assertThat(resolver.resolve(null, "https://example.wordpress.com/post"))
+                .isEqualTo(PlatformType.BLOG);
+    }
+
+    @Test
+    void resolvesTistoryUrl() {
+        assertThat(resolver.resolve(null, "https://tistory.com"))
+                .isEqualTo(PlatformType.TISTORY);
         assertThat(resolver.resolve(null, "https://example.tistory.com/post"))
-                .isEqualTo(PlatformType.BLOG);
+                .isEqualTo(PlatformType.TISTORY);
+    }
+
+    @Test
+    void resolvesNaverBlogUrl() {
+        assertThat(resolver.resolve(null, "https://blog.naver.com/example/1"))
+                .isEqualTo(PlatformType.NAVER_BLOG);
+        assertThat(resolver.resolve(null, "https://m.blog.naver.com/example/1"))
+                .isEqualTo(PlatformType.NAVER_BLOG);
     }
 
     @Test
@@ -64,13 +82,13 @@ class MaterialPlatformResolverTest {
     }
 
     @Test
-    void resolvesPdfUrl() {
+    void resolvesPdfUrlAsWebBecausePdfPlatformIsUnsupported() {
         assertThat(resolver.resolve(null, "https://example.com/guide.pdf"))
-                .isEqualTo(PlatformType.PDF);
+                .isEqualTo(PlatformType.WEB);
         assertThat(resolver.resolve(null, "https://example.com/document.PDF?download=1"))
-                .isEqualTo(PlatformType.PDF);
+                .isEqualTo(PlatformType.WEB);
         assertThat(resolver.resolve(null, "https://example.com/document.pdf#page=2"))
-                .isEqualTo(PlatformType.PDF);
+                .isEqualTo(PlatformType.WEB);
     }
 
     @Test
@@ -94,6 +112,12 @@ class MaterialPlatformResolverTest {
         assertThat(resolver.resolve(null, "https://notion.site.evil.com/page"))
                 .isEqualTo(PlatformType.WEB);
         assertThat(resolver.resolve(null, "https://velog.io.evil.com/page"))
+                .isEqualTo(PlatformType.WEB);
+        assertThat(resolver.resolve(null, "https://evil-tistory.com/page"))
+                .isEqualTo(PlatformType.WEB);
+        assertThat(resolver.resolve(null, "https://tistory.com.evil.com/page"))
+                .isEqualTo(PlatformType.WEB);
+        assertThat(resolver.resolve(null, "https://blog.naver.com.evil.com/page"))
                 .isEqualTo(PlatformType.WEB);
         assertThat(resolver.resolve(null, "https://cafe.naver.com.evil.com/page"))
                 .isEqualTo(PlatformType.WEB);

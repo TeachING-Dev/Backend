@@ -6,10 +6,11 @@ import lombok.Getter;
 public enum PlatformType {
     YOUTUBE("youtube-icon.svg"),
     VELOG("velog-icon.svg"),
+    TISTORY("tistory-icon.svg"),
+    NAVER_BLOG("naver-blog-icon.svg"),
     BLOG("blog-icon.svg"),
     CAFE("cafe-icon.svg"),
     NOTION("notion-icon.svg"),
-    PDF("pdf-icon.svg"),
     WEB("web-icon.svg");
 
     private final String iconPath;

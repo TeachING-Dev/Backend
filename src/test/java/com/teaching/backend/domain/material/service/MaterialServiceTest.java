@@ -133,7 +133,7 @@ class MaterialServiceTest {
 
     @Test
     void getMaterialListAllowsMissingMaterialAnalysis() {
-        Material material = material(101L, USER_ID, "Material", PlatformType.PDF, AiStatus.PENDING, createdAt(1));
+        Material material = material(101L, USER_ID, "Material", PlatformType.WEB, AiStatus.PENDING, createdAt(1));
         when(materialRepository.findAllByUser_Id(eq(USER_ID), any(Sort.class)))
                 .thenReturn(List.of(material));
         when(materialAnalysisRepository.findAllActiveByMaterialIds(List.of(101L)))

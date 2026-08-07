@@ -66,7 +66,7 @@ class HomeServiceTest {
         List<Material> materials = List.of(
                 material(101L, USER_ID, "Material 1", PlatformType.YOUTUBE, AiStatus.COMPLETED, createdAt(1)),
                 material(102L, USER_ID, "Material 2", PlatformType.BLOG, AiStatus.COMPLETED, createdAt(2)),
-                material(103L, USER_ID, "Material 3", PlatformType.PDF, AiStatus.COMPLETED, createdAt(3)),
+                material(103L, USER_ID, "Material 3", PlatformType.TISTORY, AiStatus.COMPLETED, createdAt(3)),
                 material(104L, USER_ID, "Material 4", PlatformType.WEB, AiStatus.COMPLETED, createdAt(4)),
                 material(105L, USER_ID, "Material 5", PlatformType.NOTION, AiStatus.COMPLETED, createdAt(5))
         );
