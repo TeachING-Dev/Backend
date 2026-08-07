@@ -1,22 +1,47 @@
 package com.teaching.backend.global.security.util;
 
-import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
+import org.springframework.stereotype.Component;
 
 /**
- * 로그아웃/회원탈퇴 시 refreshToken 쿠키를 클라이언트에서 즉시 만료시키는 공통 유틸.
- * 쿠키 옵션(HttpOnly, Path)은 OAuthSuccessHandler 가 최초 발급할 때와 동일하게 맞춘다.
+ * refreshToken 쿠키 발급/삭제를 전담하는 컴포넌트.
+ * secure/domain 등 쿠키 옵션은 이 클래스 하나에서만 관리하고,
+ * 호출하는 쪽(OAuthSuccessHandler, AuthController)은 값(refreshToken, maxAge)만 넘긴다.
  */
+@Component
 public class RefreshTokenCookieUtil {
 
     private static final String COOKIE_NAME = "refreshToken";
 
-    public static void clear(HttpServletResponse response, boolean secure) {
-        Cookie cookie = new Cookie(COOKIE_NAME, "");
-        cookie.setHttpOnly(true);
-        cookie.setSecure(secure);
-        cookie.setPath("/");
-        cookie.setMaxAge(0);
-        response.addCookie(cookie);
+    @Value("${cookie.secure}")
+    private boolean secure;
+
+    @Value("${cookie.domain}")
+    private String domain;
+
+    public void issue(HttpServletResponse response, String refreshToken, long maxAgeSeconds) {
+        response.addHeader(HttpHeaders.SET_COOKIE, build(refreshToken, maxAgeSeconds).toString());
+    }
+
+    public void clear(HttpServletResponse response) {
+        response.addHeader(HttpHeaders.SET_COOKIE, build("", 0).toString());
+    }
+
+    private ResponseCookie build(String value, long maxAgeSeconds) {
+        ResponseCookie.ResponseCookieBuilder builder = ResponseCookie.from(COOKIE_NAME, value)
+                .httpOnly(true)
+                .secure(secure)
+                .sameSite(secure ? "None" : "Lax")
+                .path("/")
+                .maxAge(maxAgeSeconds);
+
+        if (domain != null && !domain.isBlank()) {
+            builder.domain(domain);
+        }
+
+        return builder.build();
     }
 }

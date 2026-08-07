@@ -70,6 +70,7 @@ app:
 
 cookie:
   secure: true
+  domain: teachingg.site
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:https://www.teachingg.site,http://localhost:5173}

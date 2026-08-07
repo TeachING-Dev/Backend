@@ -8,6 +8,7 @@ import com.teaching.backend.global.security.util.JwtUtil;
 import com.teaching.backend.domain.auth.entity.RefreshToken;
 import com.teaching.backend.domain.user.entity.User;
 import com.teaching.backend.domain.auth.repository.RefreshTokenRepository;
+import com.teaching.backend.global.security.util.RefreshTokenCookieUtil;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
@@ -33,11 +34,10 @@ public class OAuthSuccessHandler implements AuthenticationSuccessHandler {
 
     private final JwtUtil jwtUtil;
 private final RefreshTokenService refreshTokenService;
+    private final RefreshTokenCookieUtil refreshTokenCookieUtil;
     @Value("${app.oauth2.redirect-uri}")
     private String redirectUri;
 
-    @Value("${cookie.secure}")
-    private boolean cookieSecure;
 
     private final TokenHasher tokenHasher;
 
@@ -64,18 +64,9 @@ private final RefreshTokenService refreshTokenService;
             refreshTokenService.forceUpdate(user, refreshTokenHash, expiry);
         }
 
-        // refreshToken은 HttpOnly 쿠키로
-        ResponseCookie refreshCookie = ResponseCookie.from("refreshToken", refreshToken)
-                .httpOnly(true)
-                .secure(cookieSecure)
-                .sameSite("None")
-                .path("/")
-                .maxAge(14 * 24 * 60 * 60)
-                .build();
-        response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie.toString());
 
+        refreshTokenCookieUtil.issue(response, refreshToken, 14 * 24 * 60 * 60);
 
-        // (accessToken도 쿠키로, 리다이렉트는 순수 redirectUri로만)
         String targetUrl = UriComponentsBuilder.fromUriString(redirectUri)
                 .queryParam("accessToken", accessToken)
                 .queryParam("isNewUser", oAuthMember.isNewUser())

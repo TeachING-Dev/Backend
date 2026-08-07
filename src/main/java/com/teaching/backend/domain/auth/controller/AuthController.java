@@ -31,6 +31,7 @@ import java.util.Optional;
 public class AuthController {
 
     private final AuthService authService;
+    private final RefreshTokenCookieUtil refreshTokenCookieUtil;
 
     @Value("${cookie.secure}")
     private boolean cookieSecure;
@@ -68,7 +69,7 @@ public class AuthController {
     @PostMapping("/logout")
     public ApiResponse<Void> logout(HttpServletRequest request, HttpServletResponse response) {
         extractRefreshTokenFromCookieOrEmpty(request).ifPresent(authService::logout);
-        RefreshTokenCookieUtil.clear(response, cookieSecure);
+        refreshTokenCookieUtil.clear(response);
         return ApiResponse.onSuccess(AuthSuccessCode.LOGOUT_SUCCESS, null);
     }
 
