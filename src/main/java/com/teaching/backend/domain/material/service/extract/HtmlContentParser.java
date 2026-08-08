@@ -10,6 +10,7 @@ import org.jsoup.nodes.TextNode;
 import org.jsoup.select.Elements;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -397,7 +398,7 @@ public class HtmlContentParser {
         if (normalized.length() < 3) {
             return false;
         }
-        if (NON_CONTENT_IMAGE_SIGNALS.stream().anyMatch(normalized::contains)) {
+        if (NON_CONTENT_IMAGE_SIGNALS.stream().anyMatch(signal -> hasTokenSignal(normalized, signal))) {
             return false;
         }
         return !normalized.matches("(?i).+\\.(png|jpe?g|gif|webp|svg)$");
@@ -405,7 +406,7 @@ public class HtmlContentParser {
 
     private Optional<String> imageUrl(Element image) {
         for (String attribute : IMAGE_URL_ATTRIBUTES) {
-            Optional<String> url = normalizeImageUrl(image, image.attr(attribute));
+            Optional<String> url = normalizeImageUrl(image, attribute, image.attr(attribute));
             if (url.isPresent()) {
                 return url;
             }
@@ -421,7 +422,7 @@ public class HtmlContentParser {
 
         for (String candidate : srcset.split(",")) {
             String rawUrl = candidate.trim().split("\\s+")[0];
-            Optional<String> url = normalizeImageUrl(image, rawUrl);
+            Optional<String> url = normalizeImageUrl(image, null, rawUrl);
             if (url.isPresent()) {
                 return url;
             }
@@ -429,17 +430,30 @@ public class HtmlContentParser {
         return Optional.empty();
     }
 
-    private Optional<String> normalizeImageUrl(Element image, String rawUrl) {
+    private Optional<String> normalizeImageUrl(Element image, String attributeName, String rawUrl) {
         return normalizeBlank(rawUrl)
                 .filter(value -> !isPlaceholderImageUrl(value))
                 .flatMap(value -> {
+                    if (attributeName != null && !attributeName.isBlank()) {
+                        Optional<String> absoluteUrl = normalizeBlank(image.absUrl(attributeName))
+                                .filter(url -> !isPlaceholderImageUrl(url));
+                        if (absoluteUrl.isPresent()) {
+                            return absoluteUrl;
+                        }
+                    }
                     try {
-                        return normalizeBlank(URI.create(image.baseUri()).resolve(value).toString());
-                    } catch (RuntimeException e) {
+                        return normalizeBlank(new URI(image.baseUri())
+                                .resolve(sanitizeUrlWhitespace(value))
+                                .toString());
+                    } catch (Exception e) {
                         return Optional.empty();
                     }
                 })
                 .filter(this::isAllowedImageUrl);
+    }
+
+    private String sanitizeUrlWhitespace(String value) {
+        return value.trim().replaceAll("\\s", "%20");
     }
 
     private boolean isAllowedImageUrl(String url) {
@@ -467,15 +481,59 @@ public class HtmlContentParser {
             return true;
         }
 
-        String signalSource = String.join(" ",
-                url,
-                image.attr("alt"),
-                image.attr("title"),
-                image.className(),
-                image.id()
-        ).toLowerCase(Locale.ROOT);
+        return hasNonContentUrlSignal(url)
+                || hasNonContentAttributeSignal(image.attr("alt"))
+                || hasNonContentAttributeSignal(image.attr("title"))
+                || hasNonContentAttributeSignal(image.className())
+                || hasNonContentAttributeSignal(image.id());
+    }
 
-        return NON_CONTENT_IMAGE_SIGNALS.stream().anyMatch(signalSource::contains);
+    private boolean hasNonContentAttributeSignal(String value) {
+        String normalized = value == null ? "" : value.toLowerCase(Locale.ROOT);
+        return NON_CONTENT_IMAGE_SIGNALS.stream().anyMatch(signal -> hasTokenSignal(normalized, signal));
+    }
+
+    private boolean hasNonContentUrlSignal(String url) {
+        try {
+            URI uri = new URI(url);
+            String path = uri.getPath() == null ? "" : uri.getPath().toLowerCase(Locale.ROOT);
+            String[] segments = path.split("/");
+            for (int index = 0; index < segments.length; index++) {
+                String segment = segments[index];
+                if (segment.isBlank()) {
+                    continue;
+                }
+                boolean filename = index == segments.length - 1;
+                String candidate = filename ? stripFileExtension(segment) : segment;
+                if (hasNonContentAttributeSignal(candidate)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (URISyntaxException e) {
+            return hasNonContentAttributeSignal(url);
+        }
+    }
+
+    private String stripFileExtension(String filename) {
+        int dotIndex = filename.lastIndexOf('.');
+        return dotIndex <= 0 ? filename : filename.substring(0, dotIndex);
+    }
+
+    private boolean hasTokenSignal(String value, String signal) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        if (signal.endsWith("_") || signal.endsWith("-")) {
+            return value.contains(signal);
+        }
+        String[] tokens = value.split("[^a-z0-9]+");
+        for (String token : tokens) {
+            if (token.equals(signal) || token.equals(signal + "s")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean isTinyImage(Element image) {

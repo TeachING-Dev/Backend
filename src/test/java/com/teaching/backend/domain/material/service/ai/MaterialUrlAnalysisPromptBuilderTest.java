@@ -155,6 +155,68 @@ class MaterialUrlAnalysisPromptBuilderTest {
     }
 
     @Test
+    void limitsOversizedImageCandidateMetadataAndSkipsOversizedUrlsWithinPromptBudget() {
+        when(promptProvider.userTemplate()).thenReturn("{{IMAGE_CANDIDATES}}");
+        int metadataLimit = (int) ReflectionTestUtils.getField(
+                MaterialUrlAnalysisPromptBuilder.class,
+                "MAX_IMAGE_METADATA_LENGTH"
+        );
+        int blockLimit = (int) ReflectionTestUtils.getField(
+                MaterialUrlAnalysisPromptBuilder.class,
+                "MAX_IMAGE_CANDIDATES_BLOCK_LENGTH"
+        );
+        String oversizedMetadata = "metadata".repeat(100);
+        String oversizedUrl = "https://cdn.example.com/" + "a".repeat(2_100) + ".png";
+        MaterialImageCandidate validCandidate = new MaterialImageCandidate(
+                "https://cdn.example.com/chart.png",
+                oversizedMetadata,
+                oversizedMetadata,
+                oversizedMetadata,
+                oversizedMetadata,
+                oversizedMetadata
+        );
+        MaterialImageCandidate oversizedUrlCandidate = new MaterialImageCandidate(
+                oversizedUrl,
+                "valid alt",
+                null,
+                null,
+                null,
+                null
+        );
+        List<MaterialImageCandidate> candidates = new java.util.ArrayList<>();
+        candidates.add(validCandidate);
+        candidates.add(oversizedUrlCandidate);
+        for (int index = 0; index < 30; index++) {
+            candidates.add(new MaterialImageCandidate(
+                    "https://cdn.example.com/image-" + index + ".png",
+                    oversizedMetadata,
+                    oversizedMetadata,
+                    oversizedMetadata,
+                    oversizedMetadata,
+                    oversizedMetadata
+            ));
+        }
+        ExtractedMaterialContent content = new ExtractedMaterialContent(
+                "https://example.com/post",
+                PlatformType.BLOG,
+                "Title",
+                "content",
+                null,
+                null,
+                null,
+                candidates
+        );
+
+        String message = promptBuilder.buildUserMessage(content, List.of());
+
+        assertThat(message).contains("- URL: https://cdn.example.com/chart.png");
+        assertThat(message).doesNotContain(oversizedUrl);
+        assertThat(message).doesNotContain(oversizedMetadata);
+        assertThat(message).contains(oversizedMetadata.substring(0, metadataLimit));
+        assertThat(message.length()).isLessThanOrEqualTo(blockLimit);
+    }
+
+    @Test
     void usesNoImageCandidatesMessageWhenImageCandidatesAreEmpty() {
         when(promptProvider.userTemplate()).thenReturn(template());
         ExtractedMaterialContent content = new ExtractedMaterialContent(

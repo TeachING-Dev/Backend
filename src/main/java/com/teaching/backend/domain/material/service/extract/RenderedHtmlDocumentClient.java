@@ -260,7 +260,14 @@ public class RenderedHtmlDocumentClient {
                             document.querySelectorAll('.notion-toggle-block').forEach(element => {
                               try {
                                 element.scrollIntoView({block: 'center'});
-                                const target = element.querySelector('[role="button"], button') || element;
+                                const target = element.querySelector('[role="button"], button, [aria-expanded]') || element;
+                                const expandedState =
+                                  target.getAttribute('aria-expanded') ||
+                                  element.getAttribute('aria-expanded') ||
+                                  (element.querySelector('[aria-expanded="true"]') ? 'true' : null);
+                                if (expandedState === 'true') {
+                                  return;
+                                }
                                 target.click();
                                 expandedCount++;
                               } catch (error) {

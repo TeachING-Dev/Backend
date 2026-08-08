@@ -12,6 +12,7 @@ import java.util.concurrent.Semaphore;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.mock;
@@ -133,7 +134,11 @@ class RenderedHtmlDocumentClientTest {
 
         assertThat(result).isPresent();
         JavascriptExecutor javascriptExecutor = (JavascriptExecutor) driver;
-        verify(javascriptExecutor).executeScript(startsWith("let expandedCount"));
+        verify(javascriptExecutor).executeScript(org.mockito.ArgumentMatchers.<String>argThat(script -> script != null
+                && script.startsWith("let expandedCount")
+                && script.contains("aria-expanded")
+                && script.contains("expandedState === 'true'")
+                && script.contains("return;")));
         verify(javascriptExecutor).executeScript(startsWith("window.scrollTo"), eq(1));
         verify(javascriptExecutor).executeScript(startsWith("window.scrollTo"), eq(2));
         verify(javascriptExecutor).executeScript(startsWith("window.scrollTo"), eq(3));

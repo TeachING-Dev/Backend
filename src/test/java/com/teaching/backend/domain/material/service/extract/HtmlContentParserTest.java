@@ -473,6 +473,70 @@ class HtmlContentParserTest {
     }
 
     @Test
+    void normalizesImageUrlsWithWhitespacePercentEncodingNonAsciiAndSchemes() {
+        ParsedHtmlContent result = parser.parse(
+                "https://example.com/posts/1",
+                """
+                        <html><body>
+                          <article>
+                            <img src="/images/relative.png" alt="relative image">
+                            <img src="https://cdn.example.com/absolute.png" alt="absolute image">
+                            <img src="/images/already%20encoded.png" alt="encoded image">
+                            <img src="/images/chart 2026.png" alt="space image">
+                            <img data-src="/images/한글.png" alt="non ascii image">
+                            <img src="data:image/png;base64,aaa" alt="inline">
+                            <img src="blob:https://example.com/id" alt="blob">
+                            <img src="javascript:alert(1)" alt="script">
+                            <img src="/images/placeholder.png" alt="placeholder">
+                          </article>
+                        </body></html>
+                        """,
+                List.of()
+        );
+
+        assertThat(result.imageCandidates())
+                .extracting(MaterialImageCandidate::url)
+                .contains(
+                        "https://example.com/images/relative.png",
+                        "https://cdn.example.com/absolute.png",
+                        "https://example.com/images/already%20encoded.png"
+                );
+        assertThat(result.imageCandidates())
+                .extracting(MaterialImageCandidate::url)
+                .anySatisfy(url -> assertThat(url).contains("chart").contains("2026.png"))
+                .anySatisfy(url -> assertThat(url).contains("한글").contains(".png"))
+                .doesNotContain(
+                        "data:image/png;base64,aaa",
+                        "blob:https://example.com/id",
+                        "javascript:alert(1)",
+                        "https://example.com/images/placeholder.png"
+                );
+    }
+
+    @Test
+    void nonContentImageFilteringUsesTokenMatchingWithoutDroppingSiliconChart() {
+        ParsedHtmlContent result = parser.parse(
+                "https://example.com/posts/1",
+                """
+                        <html><body>
+                          <article>
+                            <img src="/images/silicon-chart.png" alt="semiconductor silicon chart">
+                            <img src="/icons/menu.png" alt="menu icon">
+                            <img src="/profile/avatar.png" alt="author avatar">
+                            <img src="/images/banner-ad.png" alt="advertisement banner">
+                            <img src="/images/tracking-pixel.gif" alt="tracking pixel">
+                          </article>
+                        </body></html>
+                        """,
+                List.of()
+        );
+
+        assertThat(result.imageCandidates())
+                .extracting(MaterialImageCandidate::url)
+                .containsExactly("https://example.com/images/silicon-chart.png");
+    }
+
+    @Test
     void selectsUsefulImageCandidatesAcrossEntireDocumentWhenMoreThanLimitExist() {
         StringBuilder images = new StringBuilder();
         for (int index = 1; index <= 25; index++) {
