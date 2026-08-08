@@ -68,7 +68,8 @@ public class GenericWebMaterialContentExtractor implements MaterialContentExtrac
                 parsed.content(),
                 parsed.thumbnailUrl(),
                 parsed.author(),
-                parsed.publishedAt()
+                parsed.publishedAt(),
+                parsed.imageCandidates()
         );
     }
 

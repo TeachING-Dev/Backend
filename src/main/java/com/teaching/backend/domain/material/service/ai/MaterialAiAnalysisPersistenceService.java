@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class MaterialAiAnalysisPersistenceService {
 
-    private static final String PROMPT_VERSION = "v2";
+    private static final String PROMPT_VERSION = "v3";
     private static final int MAX_TAG_NAME_LENGTH = 50;
     private static final int MAX_SHORT_SUMMARY_LENGTH = 255;
 

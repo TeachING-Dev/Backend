@@ -1,5 +1,6 @@
 package com.teaching.backend.domain.material.service.extract;
 
+import com.teaching.backend.domain.material.dto.extract.MaterialImageCandidate;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -307,5 +308,81 @@ class HtmlContentParserTest {
     void detectsArticleLikeHtmlSignals() {
         assertThat(parser.looksLikeArticle("<meta property=\"og:type\" content=\"article\">")).isTrue();
         assertThat(parser.looksLikeArticle("<div>plain</div>")).isFalse();
+    }
+
+    @Test
+    void extractsImageCandidatesFromSelectedContentElement() {
+        ParsedHtmlContent result = parser.parse(
+                "https://example.com/posts/1",
+                """
+                        <html><body>
+                          <header><img src="/logo.png" alt="logo"></header>
+                          <article>
+                            <h2>경제 성장 추이</h2>
+                            <p>아래 그래프는 최근 5년간 성장률을 보여준다.</p>
+                            <figure>
+                              <img src="/images/chart.png" alt="경제 성장률" title="차트">
+                              <figcaption>연도별 경제 성장률</figcaption>
+                            </figure>
+                            <p>이후 문단입니다.</p>
+                          </article>
+                        </body></html>
+                        """,
+                List.of()
+        );
+
+        assertThat(result.imageCandidates()).hasSize(1);
+        MaterialImageCandidate candidate = result.imageCandidates().get(0);
+        assertThat(candidate.url()).isEqualTo("https://example.com/images/chart.png");
+        assertThat(candidate.alt()).isEqualTo("경제 성장률");
+        assertThat(candidate.title()).isEqualTo("차트");
+        assertThat(candidate.caption()).isEqualTo("연도별 경제 성장률");
+        assertThat(candidate.sectionHeading()).isEqualTo("경제 성장 추이");
+        assertThat(candidate.context()).contains("연도별 경제 성장률");
+    }
+
+    @Test
+    void extractsLazyAndSrcsetImageCandidatesAndFiltersInvalidDuplicatesAndNonContentImages() {
+        ParsedHtmlContent result = parser.parse(
+                "https://example.com/posts/1",
+                """
+                        <html><body>
+                          <article>
+                            <p>본문</p>
+                            <img data-src="/images/lazy.png" alt="lazy image">
+                            <img data-original="/images/original.png" alt="original image">
+                            <img data-lazy-src="/images/data-lazy.png" alt="data lazy image">
+                            <img srcset="/images/srcset-small.png 480w, /images/srcset-large.png 960w" alt="srcset image">
+                            <img src="data:image/png;base64,aaa" alt="inline">
+                            <img src="blob:https://example.com/id" alt="blob">
+                            <img src="javascript:alert(1)" alt="script">
+                            <img src="/images/lazy.png" alt="duplicate">
+                            <img src="/images/avatar.png" alt="avatar">
+                            <img src="/images/pixel.png" width="1" height="1" alt="tracking pixel">
+                          </article>
+                        </body></html>
+                        """,
+                List.of()
+        );
+
+        assertThat(result.imageCandidates())
+                .extracting(MaterialImageCandidate::url)
+                .containsExactly(
+                        "https://example.com/images/lazy.png",
+                        "https://example.com/images/original.png",
+                        "https://example.com/images/data-lazy.png",
+                        "https://example.com/images/srcset-small.png"
+                );
+    }
+
+    @Test
+    void returnsEmptyImageCandidatesWhenArticleHasNoImages() {
+        ParsedHtmlContent result = parser.parse(
+                "https://example.com/posts/1",
+                "<html><body><article><p>Only text content</p></article></body></html>",
+                List.of()
+        );
+
+        assertThat(result.imageCandidates()).isEmpty();
     }
 }

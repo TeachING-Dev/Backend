@@ -23,3 +23,7 @@ URL:
 [URL에서 추출한 본문]
 
 {{EXTRACTED_CONTENT}}
+
+[본문 이미지 후보 목록]
+
+{{IMAGE_CANDIDATES}}

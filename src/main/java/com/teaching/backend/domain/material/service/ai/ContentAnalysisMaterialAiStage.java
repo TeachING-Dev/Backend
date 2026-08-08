@@ -6,6 +6,7 @@ import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisResult;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiStageContext;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiStageResult;
 import com.teaching.backend.domain.material.dto.ai.MaterialUrlAnalysisParseResult;
+import com.teaching.backend.domain.material.dto.extract.MaterialImageCandidate;
 import com.teaching.backend.domain.material.enums.MaterialAiStageType;
 import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.exception.MaterialException;
@@ -41,7 +42,12 @@ public class ContentAnalysisMaterialAiStage implements MaterialAiAnalysisStage {
         List<String> folderNames = findActiveFolderNames(context.userId());
         String systemPrompt = materialUrlAnalysisPromptBuilder.buildSystemMessage();
         String userMessage = materialUrlAnalysisPromptBuilder.buildUserMessage(context.extractedContent(), folderNames);
-        MaterialUrlAnalysisParseResult parseResult = executeAndParse(systemPrompt, userMessage, folderNames);
+        MaterialUrlAnalysisParseResult parseResult = executeAndParse(
+                systemPrompt,
+                userMessage,
+                folderNames,
+                context.extractedContent().imageCandidates()
+        );
         MaterialAiAnalysisResult result = parseResult.analysisResult();
 
         return new MaterialAiStageResult(
@@ -54,7 +60,8 @@ public class ContentAnalysisMaterialAiStage implements MaterialAiAnalysisStage {
     private MaterialUrlAnalysisParseResult executeAndParse(
             String systemPrompt,
             String userMessage,
-            List<String> folderNames
+            List<String> folderNames,
+            List<MaterialImageCandidate> imageCandidates
     ) {
         MaterialException lastParseFailure = null;
         for (int attempt = 1; attempt <= MAX_PARSE_ATTEMPTS; attempt++) {
@@ -62,7 +69,7 @@ public class ContentAnalysisMaterialAiStage implements MaterialAiAnalysisStage {
                     () -> openAiClient.chatCompleteJson(systemPrompt, userMessage)
             );
             try {
-                return materialAiAnalysisResponseParser.parseUrlAnalysis(rawResponse, folderNames);
+                return materialAiAnalysisResponseParser.parseUrlAnalysis(rawResponse, folderNames, imageCandidates);
             } catch (MaterialException e) {
                 if (e.getErrorCode() != MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED
                         || attempt == MAX_PARSE_ATTEMPTS) {

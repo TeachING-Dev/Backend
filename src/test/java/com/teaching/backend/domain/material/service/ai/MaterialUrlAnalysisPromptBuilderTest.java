@@ -1,6 +1,7 @@
 package com.teaching.backend.domain.material.service.ai;
 
 import com.teaching.backend.domain.material.dto.extract.ExtractedMaterialContent;
+import com.teaching.backend.domain.material.dto.extract.MaterialImageCandidate;
 import com.teaching.backend.domain.material.enums.PlatformType;
 import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.exception.MaterialException;
@@ -103,6 +104,57 @@ class MaterialUrlAnalysisPromptBuilderTest {
     }
 
     @Test
+    void buildsUserMessageWithImageCandidates() {
+        when(promptProvider.userTemplate()).thenReturn(template());
+        ExtractedMaterialContent content = new ExtractedMaterialContent(
+                "https://example.com/post",
+                PlatformType.BLOG,
+                "Title",
+                "content",
+                null,
+                null,
+                null,
+                List.of(new MaterialImageCandidate(
+                        "https://cdn.example.com/chart.png",
+                        "경제 성장률",
+                        "연도별 경제 성장률",
+                        "차트",
+                        "경제 성장 추이",
+                        "아래 그래프는 최근 5년간 성장률을 보여준다."
+                ))
+        );
+
+        String message = promptBuilder.buildUserMessage(content, List.of("경제"));
+
+        assertThat(message).contains("이미지 후보 1");
+        assertThat(message).contains("- URL: https://cdn.example.com/chart.png");
+        assertThat(message).contains("- ALT: 경제 성장률");
+        assertThat(message).contains("- CAPTION: 연도별 경제 성장률");
+        assertThat(message).contains("- TITLE: 차트");
+        assertThat(message).contains("- SECTION: 경제 성장 추이");
+        assertThat(message).contains("- CONTEXT: 아래 그래프는 최근 5년간 성장률을 보여준다.");
+        assertThat(message).doesNotContain("{{IMAGE_CANDIDATES}}");
+    }
+
+    @Test
+    void usesNoImageCandidatesMessageWhenImageCandidatesAreEmpty() {
+        when(promptProvider.userTemplate()).thenReturn(template());
+        ExtractedMaterialContent content = new ExtractedMaterialContent(
+                "https://example.com/post",
+                PlatformType.BLOG,
+                "Title",
+                "content",
+                null,
+                null,
+                null
+        );
+
+        String message = promptBuilder.buildUserMessage(content, List.of("Backend"));
+
+        assertThat(message).contains("이미지:\n없음");
+    }
+
+    @Test
     void keepsPlaceholderLikeTextInsideExtractedContent() {
         when(promptProvider.userTemplate()).thenReturn(template());
         ExtractedMaterialContent content = new ExtractedMaterialContent(
@@ -176,6 +228,8 @@ class MaterialUrlAnalysisPromptBuilderTest {
                 {{FOLDER_LIST}}
                 본문:
                 {{EXTRACTED_CONTENT}}
+                이미지:
+                {{IMAGE_CANDIDATES}}
                 """;
     }
 }
