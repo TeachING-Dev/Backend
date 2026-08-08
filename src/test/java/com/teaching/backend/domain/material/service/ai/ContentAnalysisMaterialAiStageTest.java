@@ -80,7 +80,7 @@ class ContentAnalysisMaterialAiStageTest {
         )).thenReturn("user prompt with source content and Backend");
         when(openAiClient.chatCompleteJson("system prompt", "user prompt with source content and Backend"))
                 .thenReturn("raw");
-        when(materialAiAnalysisResponseParser.parseUrlAnalysis("raw", List.of("Backend", "AI")))
+        when(materialAiAnalysisResponseParser.parseUrlAnalysis("raw", List.of("Backend", "AI"), context.extractedContent().imageCandidates()))
                 .thenReturn(new MaterialUrlAnalysisParseResult(parsed, "Backend"));
 
         MaterialAiStageResult result = stage.execute(context);
@@ -89,7 +89,7 @@ class ContentAnalysisMaterialAiStageTest {
         assertThat(result.analysisResult()).isEqualTo(parsed);
         assertThat(result.recommendedFolderName()).isEqualTo("Backend");
         verify(openAiClient).chatCompleteJson("system prompt", "user prompt with source content and Backend");
-        verify(materialAiAnalysisResponseParser).parseUrlAnalysis("raw", List.of("Backend", "AI"));
+        verify(materialAiAnalysisResponseParser).parseUrlAnalysis("raw", List.of("Backend", "AI"), context.extractedContent().imageCandidates());
 
         ArgumentCaptor<List<String>> folderNamesCaptor = ArgumentCaptor.forClass(List.class);
         verify(materialUrlAnalysisPromptBuilder).buildUserMessage(
@@ -110,17 +110,17 @@ class ContentAnalysisMaterialAiStageTest {
         when(openAiClient.chatCompleteJson("system", "user"))
                 .thenReturn("invalid raw")
                 .thenReturn("valid raw");
-        when(materialAiAnalysisResponseParser.parseUrlAnalysis("invalid raw", List.of("Backend")))
+        when(materialAiAnalysisResponseParser.parseUrlAnalysis("invalid raw", List.of("Backend"), context.extractedContent().imageCandidates()))
                 .thenThrow(new MaterialException(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED));
-        when(materialAiAnalysisResponseParser.parseUrlAnalysis("valid raw", List.of("Backend")))
+        when(materialAiAnalysisResponseParser.parseUrlAnalysis("valid raw", List.of("Backend"), context.extractedContent().imageCandidates()))
                 .thenReturn(new MaterialUrlAnalysisParseResult(parsed, null));
 
         MaterialAiStageResult result = stage.execute(context);
 
         assertThat(result.analysisResult()).isEqualTo(parsed);
         verify(openAiClient, times(2)).chatCompleteJson("system", "user");
-        verify(materialAiAnalysisResponseParser).parseUrlAnalysis("invalid raw", List.of("Backend"));
-        verify(materialAiAnalysisResponseParser).parseUrlAnalysis("valid raw", List.of("Backend"));
+        verify(materialAiAnalysisResponseParser).parseUrlAnalysis("invalid raw", List.of("Backend"), context.extractedContent().imageCandidates());
+        verify(materialAiAnalysisResponseParser).parseUrlAnalysis("valid raw", List.of("Backend"), context.extractedContent().imageCandidates());
     }
 
     @Test
@@ -133,9 +133,9 @@ class ContentAnalysisMaterialAiStageTest {
         when(openAiClient.chatCompleteJson("system", "user"))
                 .thenReturn("invalid raw")
                 .thenReturn("still invalid raw");
-        when(materialAiAnalysisResponseParser.parseUrlAnalysis("invalid raw", List.of("Backend")))
+        when(materialAiAnalysisResponseParser.parseUrlAnalysis("invalid raw", List.of("Backend"), context.extractedContent().imageCandidates()))
                 .thenThrow(new MaterialException(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED));
-        when(materialAiAnalysisResponseParser.parseUrlAnalysis("still invalid raw", List.of("Backend")))
+        when(materialAiAnalysisResponseParser.parseUrlAnalysis("still invalid raw", List.of("Backend"), context.extractedContent().imageCandidates()))
                 .thenThrow(new MaterialException(MaterialErrorCode.AI_ANALYSIS_PARSE_FAILED));
 
         assertThatThrownBy(() -> stage.execute(context))
@@ -155,7 +155,7 @@ class ContentAnalysisMaterialAiStageTest {
         when(materialUrlAnalysisPromptBuilder.buildUserMessage(context.extractedContent(), List.of("Backend")))
                 .thenReturn("user-with-extracted-content");
         when(openAiClient.chatCompleteJson("system-from-resource", "user-with-extracted-content")).thenReturn("raw");
-        when(materialAiAnalysisResponseParser.parseUrlAnalysis("raw", List.of("Backend")))
+        when(materialAiAnalysisResponseParser.parseUrlAnalysis("raw", List.of("Backend"), context.extractedContent().imageCandidates()))
                 .thenReturn(new MaterialUrlAnalysisParseResult(parsed, null));
 
         stage.execute(context);

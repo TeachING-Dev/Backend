@@ -3,6 +3,7 @@ package com.teaching.backend.domain.material.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.teaching.backend.domain.material.dto.ai.MaterialAiAnalysisResult;
 import com.teaching.backend.domain.material.dto.ai.MaterialUrlAnalysisParseResult;
+import com.teaching.backend.domain.material.dto.extract.MaterialImageCandidate;
 import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.exception.MaterialException;
 import lombok.extern.slf4j.Slf4j;
@@ -26,7 +27,11 @@ public class MaterialAiAnalysisResponseParser {
             Pattern.compile("(?m)(^|\\R)\\s*([-*]|\\d+[.)])\\s+");
     private static final Pattern MARKDOWN_INLINE_LIST_PATTERN =
             Pattern.compile("\\s[-*]\\s+");
-    private static final int MIN_LONG_ANALYSIS_LENGTH = 20;
+    private static final Pattern MARKDOWN_SECTION_HEADING_PATTERN =
+            Pattern.compile("(?m)^\\s{0,3}##\\s+\\S+");
+    private static final Pattern MARKDOWN_IMAGE_PATTERN =
+            Pattern.compile("!\\[[^\\]]*]\\(([^)\\s]+)(?:\\s+\"[^\"]*\")?\\)");
+    private static final int MIN_LONG_ANALYSIS_LENGTH = 500;
     private static final int RAW_RESPONSE_LOG_LIMIT = 500;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -53,10 +58,19 @@ public class MaterialAiAnalysisResponseParser {
             String rawContent,
             List<String> folderNames
     ) {
+        return parseUrlAnalysis(rawContent, folderNames, List.of());
+    }
+
+    public MaterialUrlAnalysisParseResult parseUrlAnalysis(
+            String rawContent,
+            List<String> folderNames,
+            List<MaterialImageCandidate> imageCandidates
+    ) {
         MaterialAiAnalysisResult result = readResult(rawContent);
         String shortSummary = requiredTrimmed(result.shortSummary());
         String longAnalysis = requiredTrimmed(result.longAnalysis());
         validateMarkdownAnalysis(longAnalysis);
+        validateMarkdownImageUrls(longAnalysis, imageCandidates);
 
         List<String> tags = validateTags(result.tags());
         String recommendedFolderName = normalizeRecommendedFolder(result.recommendedFolder(), folderNames);
@@ -94,8 +108,31 @@ public class MaterialAiAnalysisResponseParser {
                 || MARKDOWN_BULLET_PATTERN.matcher(longAnalysis).find()
                 || MARKDOWN_INLINE_LIST_PATTERN.matcher(longAnalysis).find()
                 || longAnalysis.contains("**");
-        if (longAnalysis.length() < MIN_LONG_ANALYSIS_LENGTH || !hasMarkdownSignal) {
+        if (longAnalysis.length() < MIN_LONG_ANALYSIS_LENGTH
+                || !hasMarkdownSignal
+                || !MARKDOWN_SECTION_HEADING_PATTERN.matcher(longAnalysis).find()) {
             throw parseFailed("long_analysis_markdown_syntax_invalid");
+        }
+    }
+
+    private void validateMarkdownImageUrls(
+            String longAnalysis,
+            List<MaterialImageCandidate> imageCandidates
+    ) {
+        Set<String> allowedImageUrls = new LinkedHashSet<>();
+        if (imageCandidates != null) {
+            imageCandidates.stream()
+                    .filter(candidate -> candidate != null && candidate.url() != null && !candidate.url().isBlank())
+                    .map(candidate -> candidate.url().trim())
+                    .forEach(allowedImageUrls::add);
+        }
+
+        Matcher matcher = MARKDOWN_IMAGE_PATTERN.matcher(longAnalysis);
+        while (matcher.find()) {
+            String imageUrl = matcher.group(1);
+            if (!allowedImageUrls.contains(imageUrl)) {
+                throw parseFailed("long_analysis_image_url_invalid");
+            }
         }
     }
 

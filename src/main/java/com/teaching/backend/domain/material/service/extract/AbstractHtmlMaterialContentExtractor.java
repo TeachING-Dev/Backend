@@ -69,7 +69,8 @@ public abstract class AbstractHtmlMaterialContentExtractor implements MaterialCo
                     renderedParsed.content(),
                     renderedParsed.thumbnailUrl(),
                     renderedParsed.author(),
-                    renderedParsed.publishedAt()
+                    renderedParsed.publishedAt(),
+                    renderedParsed.imageCandidates()
             );
         }
         validateDocument(document);
@@ -95,7 +96,8 @@ public abstract class AbstractHtmlMaterialContentExtractor implements MaterialCo
                 parsed.content(),
                 parsed.thumbnailUrl(),
                 parsed.author(),
-                parsed.publishedAt()
+                parsed.publishedAt(),
+                parsed.imageCandidates()
         );
     }
 
