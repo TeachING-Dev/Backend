@@ -44,6 +44,24 @@ class MaterialUrlAnalysisPromptBuilderTest {
     }
 
     @Test
+    void systemPromptPrioritizesOneToThreeRelevantImageSelections() throws Exception {
+        String systemPrompt = Files.readString(
+                Path.of("src/main/resources/prompts/material/url-analysis-system-prompt.md"),
+                StandardCharsets.UTF_8
+        );
+
+        assertThat(systemPrompt)
+                .contains("- Image Selection:")
+                .contains("본문의 핵심 내용을 이해하거나 시각적으로 보완하는 데 도움이 되는 관련 이미지가 존재한다면, long_analysis에 관련성이 높은 이미지 1~3개를 우선적으로 선별하여 사용하십시오.")
+                .contains("로고, 프로필 사진, 아바타, 광고, 배너, 버튼, 아이콘, 사이트 UI, 단순 장식 이미지처럼 본문 이해에 의미 있는 정보를 추가하지 않는 이미지는 사용하지 마십시오.")
+                .contains("해당 이미지가 설명하거나 보완하는 내용이 등장하는 long_analysis의 관련 문단 또는 섹션 바로 뒤에 표준 Markdown 형식")
+                .contains("여러 이미지를 사용하는 경우 각 이미지를 관련 내용이 등장하는 서로 적절한 위치에 분산하여 배치하십시오.")
+                .contains("선택한 이미지들을 long_analysis의 마지막에 한꺼번에 모아 나열하거나 별도의 이미지 목록처럼 배치하지 마십시오.")
+                .contains("이미지 설명은 제공된 alt, caption, title, sectionHeading, context 정보만을 근거로 작성하십시오.")
+                .doesNotContain("본문의 이해에 반드시 필요한 이미지만 선별하여 사용하십시오.");
+    }
+
+    @Test
     void buildsUserMessageWithUrlMetadataContentAndFolders() {
         when(promptProvider.userTemplate()).thenReturn(template());
         ExtractedMaterialContent content = new ExtractedMaterialContent(

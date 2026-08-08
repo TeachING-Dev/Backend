@@ -342,6 +342,103 @@ class HtmlContentParserTest {
     }
 
     @Test
+    void keepsDirectSiblingImageContext() {
+        ParsedHtmlContent result = parser.parse(
+                "https://example.com/posts/1",
+                """
+                        <html><body>
+                          <article>
+                            <p>Previous paragraph explains the chart trend in detail.</p>
+                            <img src="/images/chart.png" alt="chart image">
+                            <p>Next paragraph explains the chart result in detail.</p>
+                          </article>
+                        </body></html>
+                        """,
+                List.of()
+        );
+
+        MaterialImageCandidate candidate = result.imageCandidates().get(0);
+        assertThat(candidate.context())
+                .contains("Previous paragraph explains")
+                .contains("Next paragraph explains");
+    }
+
+    @Test
+    void usesParentWrapperSiblingTextAsImageContext() {
+        ParsedHtmlContent result = parser.parse(
+                "https://example.com/posts/1",
+                """
+                        <html><body>
+                          <article>
+                            <p>Before wrapper paragraph explains the diagram meaning.</p>
+                            <div class="image-wrapper">
+                              <img src="/images/wrapped-diagram.png" alt="wrapped diagram">
+                            </div>
+                            <p>After wrapper paragraph explains how to apply it.</p>
+                          </article>
+                        </body></html>
+                        """,
+                List.of()
+        );
+
+        MaterialImageCandidate candidate = result.imageCandidates().get(0);
+        assertThat(candidate.context())
+                .contains("Before wrapper paragraph")
+                .contains("After wrapper paragraph");
+    }
+
+    @Test
+    void usesLimitedAncestorSiblingTextAsImageContextWithoutLeavingContentElement() {
+        ParsedHtmlContent result = parser.parse(
+                "https://example.com/posts/1",
+                """
+                        <html><body>
+                          <p>Outside content text must not be used for image context.</p>
+                          <article>
+                            <p>Article paragraph before the nested image wrapper.</p>
+                            <div class="outer-wrapper">
+                              <div class="inner-wrapper">
+                                <img src="/images/nested-diagram.png" alt="nested diagram">
+                              </div>
+                            </div>
+                          </article>
+                          <p>Outside footer text must not be used either.</p>
+                        </body></html>
+                        """,
+                List.of()
+        );
+
+        MaterialImageCandidate candidate = result.imageCandidates().get(0);
+        assertThat(candidate.context()).contains("Article paragraph before");
+        assertThat(candidate.context()).doesNotContain("Outside content", "Outside footer");
+    }
+
+    @Test
+    void limitsImageContextLengthAndSkipsNoiseSiblingText() {
+        String longContext = "Meaningful article context ".repeat(30);
+        ParsedHtmlContent result = parser.parse(
+                "https://example.com/posts/1",
+                """
+                        <html><body>
+                          <article>
+                            <div class="share">share this article</div>
+                            <p>%s</p>
+                            <div class="image-wrapper">
+                              <img src="/images/long-context.png" alt="long context image">
+                            </div>
+                          </article>
+                        </body></html>
+                        """.formatted(longContext),
+                List.of()
+        );
+
+        MaterialImageCandidate candidate = result.imageCandidates().get(0);
+        assertThat(candidate.context()).contains("Meaningful article context");
+        assertThat(candidate.context()).doesNotContain("share this article");
+        assertThat(candidate.context()).hasSizeLessThanOrEqualTo(240);
+    }
+
+    @Test
     void extractsLazyAndSrcsetImageCandidatesAndFiltersInvalidDuplicatesAndNonContentImages() {
         ParsedHtmlContent result = parser.parse(
                 "https://example.com/posts/1",
@@ -373,6 +470,97 @@ class HtmlContentParserTest {
                         "https://example.com/images/data-lazy.png",
                         "https://example.com/images/srcset-small.png"
                 );
+    }
+
+    @Test
+    void selectsUsefulImageCandidatesAcrossEntireDocumentWhenMoreThanLimitExist() {
+        StringBuilder images = new StringBuilder();
+        for (int index = 1; index <= 25; index++) {
+            if (index == 25) {
+                images.append("""
+                        <figure>
+                          <img src="/images/important-25.png" alt="architecture diagram">
+                          <figcaption>Important architecture diagram for the later section</figcaption>
+                        </figure>
+                        """);
+            } else {
+                images.append("<img src=\"/images/plain-%d.png\" alt=\"plain image %d\">".formatted(index, index));
+            }
+        }
+
+        ParsedHtmlContent result = parser.parse(
+                "https://example.com/posts/1",
+                """
+                        <html><body>
+                          <article>
+                            <h2>Architecture section</h2>
+                            <p>Article text with enough content for image candidate extraction.</p>
+                            %s
+                          </article>
+                        </body></html>
+                        """.formatted(images),
+                List.of()
+        );
+
+        assertThat(result.imageCandidates()).hasSize(20);
+        assertThat(result.imageCandidates())
+                .extracting(MaterialImageCandidate::url)
+                .contains("https://example.com/images/important-25.png");
+    }
+
+    @Test
+    void keepsSelectedImageCandidatesInOriginalDomOrder() {
+        StringBuilder images = new StringBuilder();
+        for (int index = 1; index <= 45; index++) {
+            images.append("<img src=\"/images/image-%02d.png\" alt=\"article image %d\">".formatted(index, index));
+        }
+
+        ParsedHtmlContent result = parser.parse(
+                "https://example.com/posts/1",
+                """
+                        <html><body>
+                          <article>
+                            <p>Article text with many images spread through the document.</p>
+                            %s
+                          </article>
+                        </body></html>
+                        """.formatted(images),
+                List.of()
+        );
+
+        assertThat(result.imageCandidates()).hasSize(20);
+        assertThat(result.imageCandidates())
+                .extracting(MaterialImageCandidate::url)
+                .contains("https://example.com/images/image-45.png");
+        assertThat(result.imageCandidates())
+                .extracting(MaterialImageCandidate::url)
+                .isSorted();
+    }
+
+    @Test
+    void preservesConfiguredContentSelectorInsideNoisyWrapper() {
+        ParsedHtmlContent result = parser.parse(
+                "https://blog.naver.com/PostView.naver?blogId=writer&logNo=123",
+                """
+                        <html><body>
+                          <div class="wrap_postcomment">
+                            <div class="se-main-container">
+                              <h2>Naver Article</h2>
+                              <p>Naver article body with enough meaningful text.</p>
+                              <img src="https://postfiles.pstatic.net/content.png" alt="content chart">
+                              <img src="https://example.com/profile.png" alt="profile">
+                            </div>
+                          </div>
+                        </body></html>
+                        """,
+                List.of("se-main-container"),
+                List.of(".se-main-container")
+        );
+
+        assertThat(result.content()).contains("Naver article body");
+        assertThat(result.imageCandidates())
+                .extracting(MaterialImageCandidate::url)
+                .containsExactly("https://postfiles.pstatic.net/content.png");
     }
 
     @Test

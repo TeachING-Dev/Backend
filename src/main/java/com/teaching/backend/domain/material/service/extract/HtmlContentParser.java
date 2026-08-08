@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
+import java.util.Comparator;
 
 public class HtmlContentParser {
 
@@ -36,6 +37,11 @@ public class HtmlContentParser {
             "icon",
             "avatar",
             "profile",
+            "button",
+            "btn_",
+            "quickeditor",
+            "toolbar",
+            "emoticon",
             "tracking",
             "pixel",
             "advertisement",
@@ -85,8 +91,17 @@ public class HtmlContentParser {
     );
 
     public ParsedHtmlContent parse(String originalUrl, String html, List<String> contentClassSignals) {
+        return parse(originalUrl, html, contentClassSignals, List.of());
+    }
+
+    ParsedHtmlContent parse(
+            String originalUrl,
+            String html,
+            List<String> contentClassSignals,
+            List<String> preservedContentSelectors
+    ) {
         Document document = Jsoup.parse(html == null ? "" : html, originalUrl);
-        removeNoise(document);
+        removeNoise(document, preservedContentSelectors);
         String title = firstNonBlank(
                 metaContent(document, "property", "og:title"),
                 firstTagText(document, "article", "h1"),
@@ -151,11 +166,23 @@ public class HtmlContentParser {
                 .max((left, right) -> Integer.compare(elementToText(left).length(), elementToText(right).length()));
     }
 
-    private void removeNoise(Document document) {
+    private void removeNoise(Document document, List<String> preservedContentSelectors) {
         document.select("script, style, noscript, nav, footer, aside").remove();
         document.select("[class], [id]").stream()
-                .filter(this::hasNoiseSignal)
+                .filter(element -> hasNoiseSignal(element) && !containsPreservedContent(element, preservedContentSelectors))
                 .forEach(Element::remove);
+    }
+
+    private boolean containsPreservedContent(Element element, List<String> preservedContentSelectors) {
+        if (preservedContentSelectors == null || preservedContentSelectors.isEmpty()) {
+            return false;
+        }
+        for (String selector : preservedContentSelectors) {
+            if (element.is(selector) || element.selectFirst(selector) != null) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean hasNoiseSignal(Element element) {
@@ -258,32 +285,122 @@ public class HtmlContentParser {
     }
 
     private List<MaterialImageCandidate> extractImageCandidates(Element contentElement) {
-        List<MaterialImageCandidate> candidates = new ArrayList<>();
+        List<RankedImageCandidate> candidates = new ArrayList<>();
         Set<String> seenUrls = new LinkedHashSet<>();
+        int index = 0;
 
         for (Element image : contentElement.select("img")) {
             Optional<String> url = imageUrl(image);
             if (url.isEmpty() || !seenUrls.add(url.get())) {
+                index++;
                 continue;
             }
             if (isNonContentImage(image, url.get())) {
+                index++;
                 continue;
             }
 
-            candidates.add(new MaterialImageCandidate(
+            MaterialImageCandidate candidate = new MaterialImageCandidate(
                     url.get(),
                     normalizeBlank(image.attr("alt")).orElse(null),
                     captionText(image).orElse(null),
                     normalizeBlank(image.attr("title")).orElse(null),
                     sectionHeading(image, contentElement).orElse(null),
-                    imageContext(image).orElse(null)
-            ));
-            if (candidates.size() >= MAX_IMAGE_CANDIDATES) {
-                break;
+                    imageContext(image, contentElement).orElse(null)
+            );
+            candidates.add(new RankedImageCandidate(candidate, index, imageCandidateScore(candidate)));
+            index++;
+        }
+
+        return selectImageCandidates(candidates);
+    }
+
+    private List<MaterialImageCandidate> selectImageCandidates(List<RankedImageCandidate> candidates) {
+        if (candidates.size() <= MAX_IMAGE_CANDIDATES) {
+            return candidates.stream()
+                    .map(RankedImageCandidate::candidate)
+                    .toList();
+        }
+
+        List<RankedImageCandidate> selected = new ArrayList<>();
+        List<RankedImageCandidate> ranked = candidates.stream()
+                .sorted(Comparator
+                        .comparingInt(RankedImageCandidate::score).reversed()
+                        .thenComparingInt(RankedImageCandidate::index))
+                .toList();
+
+        int qualityQuota = Math.min(MAX_IMAGE_CANDIDATES / 2, ranked.size());
+        for (int i = 0; i < qualityQuota; i++) {
+            selected.add(ranked.get(i));
+        }
+
+        int remainingSlots = MAX_IMAGE_CANDIDATES - selected.size();
+        if (remainingSlots > 0) {
+            for (int slot = 0; slot < remainingSlots; slot++) {
+                int targetIndex = evenlySpacedTargetIndex(slot, remainingSlots, candidates.size());
+                nearestUnselectedCandidate(candidates, selected, targetIndex).ifPresent(selected::add);
             }
         }
 
-        return List.copyOf(candidates);
+        if (selected.size() < MAX_IMAGE_CANDIDATES) {
+            ranked.stream()
+                    .filter(candidate -> !selected.contains(candidate))
+                    .limit(MAX_IMAGE_CANDIDATES - selected.size())
+                    .forEach(selected::add);
+        }
+
+        return selected.stream()
+                .sorted(Comparator.comparingInt(RankedImageCandidate::index))
+                .map(RankedImageCandidate::candidate)
+                .toList();
+    }
+
+    private int evenlySpacedTargetIndex(int slot, int slots, int totalCandidates) {
+        if (slots <= 1) {
+            return totalCandidates / 2;
+        }
+        return (int) Math.round((double) slot * (totalCandidates - 1) / (slots - 1));
+    }
+
+    private Optional<RankedImageCandidate> nearestUnselectedCandidate(
+            List<RankedImageCandidate> candidates,
+            List<RankedImageCandidate> selected,
+            int targetIndex
+    ) {
+        return candidates.stream()
+                .filter(candidate -> !selected.contains(candidate))
+                .min(Comparator
+                        .comparingInt((RankedImageCandidate candidate) -> Math.abs(candidate.index() - targetIndex))
+                        .thenComparing(Comparator.comparingInt(RankedImageCandidate::score).reversed())
+                        .thenComparingInt(RankedImageCandidate::index));
+    }
+
+    private int imageCandidateScore(MaterialImageCandidate candidate) {
+        int score = 0;
+        score += metadataScore(candidate.caption(), 4);
+        score += metadataScore(candidate.context(), 3);
+        score += metadataScore(candidate.sectionHeading(), 2);
+        score += metadataScore(candidate.alt(), 1);
+        score += metadataScore(candidate.title(), 1);
+        return score;
+    }
+
+    private int metadataScore(String value, int weight) {
+        return isMeaningfulMetadata(value) ? weight : 0;
+    }
+
+    private boolean isMeaningfulMetadata(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        String normalized = value.trim().toLowerCase(Locale.ROOT);
+        if (normalized.length() < 3) {
+            return false;
+        }
+        if (NON_CONTENT_IMAGE_SIGNALS.stream().anyMatch(normalized::contains)) {
+            return false;
+        }
+        return !normalized.matches("(?i).+\\.(png|jpe?g|gif|webp|svg)$");
     }
 
     private Optional<String> imageUrl(Element image) {
@@ -340,6 +457,7 @@ public class HtmlContentParser {
                 || normalized.contains("placeholder")
                 || normalized.contains("spacer")
                 || normalized.contains("blank.gif")
+                || normalized.contains("w80_blur")
                 || normalized.contains("1x1")
                 || normalized.contains("transparent");
     }
@@ -410,34 +528,71 @@ public class HtmlContentParser {
         return element != null && element.tagName().matches("(?i)h[1-6]");
     }
 
-    private Optional<String> imageContext(Element image) {
+    private Optional<String> imageContext(Element image, Element contentElement) {
         List<String> parts = new ArrayList<>();
-        nearbyText(image, true).ifPresent(parts::add);
-        nearbyText(image, false).ifPresent(parts::add);
+        addNearbyText(parts, image, contentElement);
 
-        if (parts.isEmpty() && image.parent() != null) {
-            normalizeBlank(elementToText(image.parent())).ifPresent(parts::add);
+        Element current = image.parent();
+        int ancestorDepth = 0;
+        while (parts.isEmpty()
+                && current != null
+                && current != contentElement
+                && ancestorDepth < 2) {
+            addNearbyText(parts, current, contentElement);
+            current = current.parent();
+            ancestorDepth++;
+        }
+
+        if (parts.isEmpty() && image.parent() != null && isInsideContentElement(image.parent(), contentElement)) {
+            contextText(image.parent()).ifPresent(parts::add);
         }
 
         if (parts.isEmpty()) {
             return Optional.empty();
         }
-        return normalizeBlank(truncate(String.join(" ", parts), MAX_IMAGE_CONTEXT_LENGTH));
+
+        List<String> distinctParts = new ArrayList<>(new LinkedHashSet<>(parts));
+        return normalizeBlank(truncate(String.join(" ", distinctParts), MAX_IMAGE_CONTEXT_LENGTH));
     }
 
-    private Optional<String> nearbyText(Element image, boolean previous) {
-        for (Element sibling = previous ? image.previousElementSibling() : image.nextElementSibling();
+    private void addNearbyText(List<String> parts, Element element, Element contentElement) {
+        nearbyText(element, true, contentElement).ifPresent(parts::add);
+        nearbyText(element, false, contentElement).ifPresent(parts::add);
+    }
+
+    private Optional<String> nearbyText(Element element, boolean previous, Element contentElement) {
+        for (Element sibling = previous ? element.previousElementSibling() : element.nextElementSibling();
              sibling != null;
              sibling = previous ? sibling.previousElementSibling() : sibling.nextElementSibling()) {
-            if (sibling.tagName().equalsIgnoreCase("img")) {
+            if (!isInsideContentElement(sibling, contentElement)) {
+                break;
+            }
+            if (sibling.tagName().equalsIgnoreCase("img") || hasNoiseSignal(sibling)) {
                 continue;
             }
-            Optional<String> text = normalizeBlank(elementToText(sibling));
+            Optional<String> text = contextText(sibling);
             if (text.isPresent()) {
                 return text;
             }
         }
         return Optional.empty();
+    }
+
+    private Optional<String> contextText(Element element) {
+        return normalizeBlank(elementToText(element))
+                .filter(this::isMeaningfulContextText);
+    }
+
+    private boolean isMeaningfulContextText(String text) {
+        return text != null
+                && text.trim().length() >= 8
+                && !isUiOnlyLine(text.trim());
+    }
+
+    private boolean isInsideContentElement(Element element, Element contentElement) {
+        return element != null
+                && contentElement != null
+                && (element == contentElement || element.parents().contains(contentElement));
     }
 
     private String truncate(String value, int maxLength) {
@@ -514,6 +669,9 @@ public class HtmlContentParser {
 
         String normalized = value.trim();
         return normalized.isBlank() ? Optional.empty() : Optional.of(normalized);
+    }
+
+    private record RankedImageCandidate(MaterialImageCandidate candidate, int index, int score) {
     }
 
     public boolean looksLikeArticle(String html) {

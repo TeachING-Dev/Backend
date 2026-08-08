@@ -302,6 +302,44 @@ class HtmlMaterialContentExtractorTest {
     }
 
     @Test
+    void blogExtractorKeepsNaverBlogContentImagesInsideNoisyPostWrapper() {
+        String outerUrl = "https://blog.naver.com/writer/123";
+        String frameUrl = "https://blog.naver.com/PostView.naver?blogId=writer&logNo=123";
+        ExternalHtmlDocumentClient client = mock(ExternalHtmlDocumentClient.class);
+        when(client.fetch(outerUrl)).thenReturn(new HtmlDocument(
+                outerUrl,
+                "<html><body><iframe id=\"mainFrame\" src=\"/PostView.naver?blogId=writer&logNo=123\"></iframe></body></html>",
+                "text/html"
+        ));
+        when(client.fetch(frameUrl)).thenReturn(new HtmlDocument(
+                frameUrl,
+                """
+                        <html><body>
+                          <div class="wrap_postcomment">
+                            <div class="se-main-container">
+                              <h2>Naver blog article</h2>
+                              <p>Naver blog iframe content with enough body text for extraction.</p>
+                              <img src="https://postfiles.pstatic.net/content.png" alt="content diagram">
+                              <img src="https://example.com/avatar.png" alt="avatar">
+                            </div>
+                          </div>
+                        </body></html>
+                        """,
+                "text/html"
+        ));
+        RenderedHtmlDocumentClient renderedClient = mock(RenderedHtmlDocumentClient.class);
+        BlogMaterialContentExtractor extractor = new BlogMaterialContentExtractor(client, renderedClient);
+
+        ExtractedMaterialContent result = extractor.extract(outerUrl);
+
+        assertThat(result.content()).contains("Naver blog iframe content");
+        assertThat(result.imageCandidates())
+                .extracting(candidate -> candidate.url())
+                .containsExactly("https://postfiles.pstatic.net/content.png");
+        verify(renderedClient, never()).render(outerUrl);
+    }
+
+    @Test
     void blogExtractorResolvesRelativeNaverBlogFrameUrl() {
         String outerUrl = "https://blog.naver.com/writer/123";
         String frameUrl = "https://blog.naver.com/PostView.naver?blogId=writer&logNo=123";
@@ -552,6 +590,44 @@ class HtmlMaterialContentExtractorTest {
         ExtractedMaterialContent result = extractor.extract(notionUrl);
 
         assertThat(result.content()).contains("Rendered Notion content");
+        verify(renderedClient).render(notionUrl);
+    }
+
+    @Test
+    void notionExtractorCarriesImageCandidatesFromRenderedContentArea() {
+        String notionUrl = "https://example.notion.site/page";
+        ExternalHtmlDocumentClient client = mock(ExternalHtmlDocumentClient.class);
+        when(client.fetch(notionUrl)).thenReturn(new HtmlDocument(
+                notionUrl,
+                "<html><body><div id=\"notion-app\"></div></body></html>",
+                "text/html"
+        ));
+        RenderedHtmlDocumentClient renderedClient = mock(RenderedHtmlDocumentClient.class);
+        when(renderedClient.render(notionUrl)).thenReturn(Optional.of(new HtmlDocument(
+                notionUrl,
+                """
+                        <html><body>
+                          <header><img src="/images/notion-logo-block-main.svg" alt="Notion"></header>
+                          <div class="notion-page-content">
+                            <h2>Deployment architecture</h2>
+                            <p>Rendered Notion content with enough public text for extraction.</p>
+                            <figure>
+                              <img src="/images/eks-architecture.png" alt="EKS architecture">
+                              <figcaption>EKS deployment architecture</figcaption>
+                            </figure>
+                          </div>
+                        </body></html>
+                        """,
+                "text/html"
+        )));
+        NotionMaterialContentExtractor extractor = new NotionMaterialContentExtractor(client, renderedClient);
+
+        ExtractedMaterialContent result = extractor.extract(notionUrl);
+
+        assertThat(result.content()).contains("Rendered Notion content");
+        assertThat(result.imageCandidates())
+                .extracting(candidate -> candidate.url())
+                .containsExactly("https://example.notion.site/images/eks-architecture.png");
         verify(renderedClient).render(notionUrl);
     }
 

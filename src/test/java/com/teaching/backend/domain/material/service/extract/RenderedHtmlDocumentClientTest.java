@@ -12,6 +12,8 @@ import java.util.concurrent.Semaphore;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -117,6 +119,30 @@ class RenderedHtmlDocumentClientTest {
         assertThat(result).isEmpty();
         assertThat(permits.availablePermits()).isEqualTo(1);
         verify(driver).quit();
+    }
+
+    @Test
+    void triggersBoundedScrollForNotionRenderedPages() {
+        String notionUrl = "https://example.notion.site/page";
+        WebDriver driver = readableDriver(notionUrl);
+        Semaphore permits = new Semaphore(1);
+        ExternalHtmlDocumentClient validator = validatorAllowing(notionUrl);
+        TestRenderedHtmlDocumentClient client = new TestRenderedHtmlDocumentClient(driver, permits, validator);
+
+        Optional<HtmlDocument> result = client.render(notionUrl);
+
+        assertThat(result).isPresent();
+        JavascriptExecutor javascriptExecutor = (JavascriptExecutor) driver;
+        verify(javascriptExecutor).executeScript(startsWith("let expandedCount"));
+        verify(javascriptExecutor).executeScript(startsWith("window.scrollTo"), eq(1));
+        verify(javascriptExecutor).executeScript(startsWith("window.scrollTo"), eq(2));
+        verify(javascriptExecutor).executeScript(startsWith("window.scrollTo"), eq(3));
+        verify(javascriptExecutor).executeScript(startsWith("window.scrollTo"), eq(4));
+        verify(javascriptExecutor).executeScript(startsWith("window.scrollTo"), eq(5));
+        verify(javascriptExecutor).executeScript(startsWith("window.scrollTo"), eq(6));
+        verify(javascriptExecutor).executeScript(startsWith("window.scrollTo"), eq(7));
+        verify(javascriptExecutor).executeScript(startsWith("window.scrollTo"), eq(8));
+        verify(javascriptExecutor).executeScript("window.scrollTo(0, 0);");
     }
 
     private ExternalHtmlDocumentClient validatorAllowing(String url) {

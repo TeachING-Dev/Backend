@@ -22,6 +22,9 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class RenderedHtmlDocumentClient {
 
+    private static final int NOTION_SCROLL_STEPS = 8;
+    private static final long NOTION_SCROLL_WAIT_MS = 250L;
+
     private final boolean enabled;
     private final Duration pageLoadTimeout;
     private final Duration scriptTimeout;
@@ -144,6 +147,7 @@ public class RenderedHtmlDocumentClient {
             if (currentUrl == null || currentUrl.isBlank() || !isAllowedUrl(currentUrl, "final")) {
                 return Optional.empty();
             }
+            triggerNotionLazyLoad(driver, currentUrl);
 
             String pageSource = driver.getPageSource();
             log.info(
@@ -242,6 +246,75 @@ public class RenderedHtmlDocumentClient {
 
     private boolean isDocumentComplete(WebDriver driver) {
         return "complete".equals(readyState(driver));
+    }
+
+    private void triggerNotionLazyLoad(WebDriver driver, String currentUrl) {
+        if (!isNotionUrl(currentUrl) || !(driver instanceof JavascriptExecutor javascriptExecutor)) {
+            return;
+        }
+
+        try {
+            Object expandedCount = javascriptExecutor.executeScript(
+                    """
+                            let expandedCount = 0;
+                            document.querySelectorAll('.notion-toggle-block').forEach(element => {
+                              try {
+                                element.scrollIntoView({block: 'center'});
+                                const target = element.querySelector('[role="button"], button') || element;
+                                target.click();
+                                expandedCount++;
+                              } catch (error) {
+                              }
+                            });
+                            return expandedCount;
+                            """
+            );
+            log.debug(
+                    "Rendered HTML Notion toggle expansion completed. url={}, expandedCount={}",
+                    safeUrl(currentUrl),
+                    expandedCount
+            );
+            for (int step = 0; step < NOTION_SCROLL_STEPS; step++) {
+                javascriptExecutor.executeScript(
+                        "window.scrollTo(0, Math.min(document.body.scrollHeight, window.innerHeight * arguments[0]));",
+                        step + 1
+                );
+                sleepAfterScroll();
+            }
+            javascriptExecutor.executeScript("window.scrollTo(0, 0);");
+            log.debug("Rendered HTML Notion lazy-load scroll completed. url={}", safeUrl(currentUrl));
+        } catch (RuntimeException e) {
+            log.debug(
+                    "Rendered HTML Notion lazy-load scroll failed. url={}, reason={}",
+                    safeUrl(currentUrl),
+                    e.getClass().getSimpleName()
+            );
+        }
+    }
+
+    private boolean isNotionUrl(String url) {
+        try {
+            URI uri = URI.create(url);
+            String host = uri.getHost();
+            if (host == null) {
+                return false;
+            }
+            String normalized = host.toLowerCase();
+            return normalized.equals("notion.so")
+                    || normalized.endsWith(".notion.so")
+                    || normalized.equals("notion.site")
+                    || normalized.endsWith(".notion.site");
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    private void sleepAfterScroll() {
+        try {
+            Thread.sleep(NOTION_SCROLL_WAIT_MS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private Object readyState(WebDriver driver) {

@@ -15,6 +15,14 @@ import java.util.Optional;
 @Component
 public class BlogMaterialContentExtractor extends AbstractHtmlMaterialContentExtractor {
 
+    private static final List<String> NAVER_BLOG_PRESERVED_CONTENT_SELECTORS = List.of(
+            ".se-main-container",
+            "#post-area",
+            "[id^=post-view]",
+            ".post-view",
+            ".post_ct"
+    );
+
     @Autowired
     public BlogMaterialContentExtractor(
             ExternalHtmlDocumentClient htmlDocumentClient,
@@ -45,7 +53,12 @@ public class BlogMaterialContentExtractor extends AbstractHtmlMaterialContentExt
 
         return findNaverBlogFrameUrl(originalUrl, initialDocument.body())
                 .flatMap(this::fetchHtmlDocument)
-                .map(document -> parseDocument(document.originalUrl(), document));
+                .map(document -> htmlContentParser().parse(
+                        document.originalUrl(),
+                        document.body(),
+                        contentClassSignals(),
+                        NAVER_BLOG_PRESERVED_CONTENT_SELECTORS
+                ));
     }
 
     @Override
