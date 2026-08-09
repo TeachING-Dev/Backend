@@ -140,10 +140,10 @@ public class TeachingMapService {
     // 티칭맵 생성
     @Transactional
     public TeachingMapCreateResponse createTeachingMap(Long userId, TeachingMapCreateRequest request) {
-        User user = userRepository.findById(userId)
+        User user = userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new UserException(UserErrorCode.USER_NOT_FOUND));
 
-        //구독제 한도 체크
+        // 구독제 한도 체크
         if (user.getMembershipType() == MembershipType.FREE) {
             long activeCount = teachingMapRepository.countByUser_IdAndIsDraftFalseAndDeletedAtIsNullAndStatusIn(
                     userId, List.of(TeachingMapStatus.IN_PROGRESS, TeachingMapStatus.FINISHED));
