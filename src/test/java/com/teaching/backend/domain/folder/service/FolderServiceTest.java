@@ -10,8 +10,11 @@ import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.entity.MaterialAnalysis;
 import com.teaching.backend.domain.material.enums.AiStatus;
 import com.teaching.backend.domain.material.enums.PlatformType;
+import com.teaching.backend.domain.material.exception.MaterialErrorCode;
+import com.teaching.backend.domain.material.exception.MaterialException;
 import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
+import com.teaching.backend.domain.material.service.FolderMaterialCapacityValidator;
 import com.teaching.backend.domain.tag.entity.MaterialTag;
 import com.teaching.backend.domain.tag.entity.Tag;
 import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
@@ -41,6 +44,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -66,6 +70,9 @@ class FolderServiceTest {
 
     @Mock
     private MaterialTagRepository materialTagRepository;
+
+    @Mock
+    private FolderMaterialCapacityValidator folderMaterialCapacityValidator;
 
     @InjectMocks
     private FolderService folderService;
@@ -280,11 +287,33 @@ class FolderServiceTest {
         when(folderRepository.countByIdAndUserIdIncludingDeleted(FOLDER_ID, USER_ID)).thenReturn(1L);
         when(folderRepository.countDeletedByIdAndUserId(FOLDER_ID, USER_ID)).thenReturn(1L);
         when(folderRepository.countActiveNameConflictForRestore(FOLDER_ID, USER_ID)).thenReturn(0L);
+        when(materialRepository.countDeletedByFolderIdAndUserId(FOLDER_ID, USER_ID)).thenReturn(1L);
         when(folderRepository.restoreDeletedFolder(FOLDER_ID, USER_ID)).thenReturn(1);
 
         folderService.restoreFolder(USER_ID, FOLDER_ID);
 
         verify(materialRepository).restoreTrashedMaterialsByFolder(FOLDER_ID, USER_ID);
+    }
+
+    @Test
+    void restoreFolderFailsWhenRestoredMaterialsExceedFolderLimit() {
+        when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(user(USER_ID)));
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.empty());
+        when(folderRepository.countByIdIncludingDeleted(FOLDER_ID)).thenReturn(1L);
+        when(folderRepository.countByIdAndUserIdIncludingDeleted(FOLDER_ID, USER_ID)).thenReturn(1L);
+        when(folderRepository.countDeletedByIdAndUserId(FOLDER_ID, USER_ID)).thenReturn(1L);
+        when(folderRepository.countActiveNameConflictForRestore(FOLDER_ID, USER_ID)).thenReturn(0L);
+        when(materialRepository.countDeletedByFolderIdAndUserId(FOLDER_ID, USER_ID)).thenReturn(1L);
+        doThrow(new MaterialException(MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED))
+                .when(folderMaterialCapacityValidator).validateCanAdd(FOLDER_ID, 1L);
+
+        assertThatThrownBy(() -> folderService.restoreFolder(USER_ID, FOLDER_ID))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED);
+
+        verify(folderRepository, never()).restoreDeletedFolder(FOLDER_ID, USER_ID);
+        verify(materialRepository, never()).restoreTrashedMaterialsByFolder(any(), any());
     }
 
     @Test
@@ -295,6 +324,7 @@ class FolderServiceTest {
         when(folderRepository.countByIdAndUserIdIncludingDeleted(FOLDER_ID, USER_ID)).thenReturn(1L);
         when(folderRepository.countDeletedByIdAndUserId(FOLDER_ID, USER_ID)).thenReturn(1L);
         when(folderRepository.countActiveNameConflictForRestore(FOLDER_ID, USER_ID)).thenReturn(0L);
+        when(materialRepository.countDeletedByFolderIdAndUserId(FOLDER_ID, USER_ID)).thenReturn(1L);
         when(folderRepository.restoreDeletedFolder(FOLDER_ID, USER_ID)).thenReturn(0);
 
         assertFolderExceptionThrown(

@@ -9,6 +9,8 @@ import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.entity.MaterialAnalysis;
 import com.teaching.backend.domain.material.dto.request.MaterialAnalysisDetailUpdateRequest;
 import com.teaching.backend.domain.material.dto.request.MaterialFinalizeRequest;
+import com.teaching.backend.domain.material.dto.request.MaterialIdsRequest;
+import com.teaching.backend.domain.material.dto.request.MaterialMoveRequest;
 import com.teaching.backend.domain.material.dto.response.MaterialAnalysisDetailUpdateResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialAnalysisResponse;
 import com.teaching.backend.domain.material.dto.response.MaterialFinalizeResponse;
@@ -51,6 +53,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -81,6 +84,9 @@ class MaterialServiceTest {
 
     @Mock
     private MaterialIndexingService materialIndexingService;
+
+    @Mock
+    private FolderMaterialCapacityValidator folderMaterialCapacityValidator;
 
     @Mock
     private EntityManager entityManager;
@@ -300,6 +306,30 @@ class MaterialServiceTest {
                 FolderErrorCode.FOLDER_ACCESS_DENIED
         );
 
+        verify(entityManager, never()).flush();
+        verify(materialIndexingService, never()).syncFolderPayload(any(), any());
+    }
+
+    @Test
+    void finalizeMaterialFailsWhenTargetFolderMaterialLimitExceeded() {
+        Material material = materialWithoutFolder(101L, USER_ID, "Material", PlatformType.WEB, AiStatus.COMPLETED, createdAt(1));
+        Folder finalFolder = folder(USER_ID, 20L);
+        when(materialRepository.findByIdAndUser_Id(101L, USER_ID)).thenReturn(Optional.of(material));
+        when(folderRepository.findByIdAndUser_IdForUpdate(20L, USER_ID)).thenReturn(Optional.of(finalFolder));
+        when(materialTagRepository.findAllWithTagByMaterialIds(List.of(101L))).thenReturn(List.of());
+        doThrow(new MaterialException(MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED))
+                .when(folderMaterialCapacityValidator).validateCanAdd(20L, 1);
+
+        assertMaterialExceptionThrown(
+                () -> materialService.finalizeMaterial(
+                        USER_ID,
+                        101L,
+                        new MaterialFinalizeRequest(20L, List.of())
+                ),
+                MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED
+        );
+
+        assertThat(material.getFolder()).isNull();
         verify(entityManager, never()).flush();
         verify(materialIndexingService, never()).syncFolderPayload(any(), any());
     }
@@ -541,6 +571,92 @@ class MaterialServiceTest {
         }
 
         verify(materialIndexingService, never()).syncFolderPayload(any());
+        verify(folderMaterialCapacityValidator, never()).validateCanAdd(any(), anyLong());
+    }
+
+    @Test
+    void moveMaterialsFailsWhenTargetFolderMaterialLimitExceeded() {
+        Folder sourceFolder = folder(USER_ID, FOLDER_ID);
+        Folder targetFolder = folder(USER_ID, 20L);
+        Material first = material(101L, USER_ID, "First", PlatformType.WEB, AiStatus.COMPLETED, createdAt(1));
+        Material second = material(102L, USER_ID, "Second", PlatformType.WEB, AiStatus.COMPLETED, createdAt(1));
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(sourceFolder));
+        when(folderRepository.findByIdAndUser_Id(20L, USER_ID)).thenReturn(Optional.of(targetFolder));
+        when(materialRepository.findAllByIdInAndFolder_IdAndUser_Id(List.of(101L, 102L), FOLDER_ID, USER_ID))
+                .thenReturn(List.of(first, second));
+        doThrow(new MaterialException(MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED))
+                .when(folderMaterialCapacityValidator).validateCanAdd(20L, 2);
+
+        assertMaterialExceptionThrown(
+                () -> materialService.moveMaterials(
+                        USER_ID,
+                        FOLDER_ID,
+                        new MaterialMoveRequest(List.of(101L, 102L), 20L)
+                ),
+                MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED
+        );
+
+        assertThat(first.getFolderId()).isEqualTo(FOLDER_ID);
+        assertThat(second.getFolderId()).isEqualTo(FOLDER_ID);
+    }
+
+    @Test
+    void moveMaterialsDoesNotCheckLimitWhenTargetFolderIsSameFolder() {
+        Folder sourceFolder = folder(USER_ID, FOLDER_ID);
+        Material material = material(101L, USER_ID, "Material", PlatformType.WEB, AiStatus.COMPLETED, createdAt(1));
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(sourceFolder));
+        when(materialRepository.findAllByIdInAndFolder_IdAndUser_Id(List.of(101L), FOLDER_ID, USER_ID))
+                .thenReturn(List.of(material));
+
+        materialService.moveMaterials(
+                USER_ID,
+                FOLDER_ID,
+                new MaterialMoveRequest(List.of(101L), FOLDER_ID)
+        );
+
+        verify(folderMaterialCapacityValidator, never()).validateCanAdd(any(), anyLong());
+    }
+
+    @Test
+    void restoreMaterialsFailsWhenFolderMaterialLimitExceeded() {
+        Folder folder = folder(USER_ID, FOLDER_ID);
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(folder));
+        when(materialRepository.countDeletedByMaterialIdsAndUserId(List.of(101L), USER_ID))
+                .thenReturn(1L);
+        doThrow(new MaterialException(MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED))
+                .when(folderMaterialCapacityValidator).validateCanAdd(FOLDER_ID, 1);
+
+        assertMaterialExceptionThrown(
+                () -> materialService.restoreMaterials(
+                        USER_ID,
+                        FOLDER_ID,
+                        new MaterialIdsRequest(List.of(101L))
+                ),
+                MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED
+        );
+
+        verify(materialRepository, never()).restoreDeletedMaterials(any(), any(), any());
+    }
+
+    @Test
+    void restoreMaterialsCountsDeletedMaterialsFromOtherFoldersAsTargetFolderAdditions() {
+        Folder targetFolder = folder(USER_ID, FOLDER_ID);
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(targetFolder));
+        when(materialRepository.countDeletedByMaterialIdsAndUserId(List.of(101L, 102L), USER_ID))
+                .thenReturn(2L);
+        doThrow(new MaterialException(MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED))
+                .when(folderMaterialCapacityValidator).validateCanAdd(FOLDER_ID, 2L);
+
+        assertMaterialExceptionThrown(
+                () -> materialService.restoreMaterials(
+                        USER_ID,
+                        FOLDER_ID,
+                        new MaterialIdsRequest(List.of(101L, 102L))
+                ),
+                MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED
+        );
+
+        verify(materialRepository, never()).restoreDeletedMaterials(any(), any(), any());
     }
 
     @Test
@@ -720,6 +836,13 @@ class MaterialServiceTest {
     private void assertFolderExceptionThrown(Runnable action, FolderErrorCode errorCode) {
         assertThatThrownBy(action::run)
                 .isInstanceOf(FolderException.class)
+                .extracting("errorCode")
+                .isEqualTo(errorCode);
+    }
+
+    private void assertMaterialExceptionThrown(Runnable action, MaterialErrorCode errorCode) {
+        assertThatThrownBy(action::run)
+                .isInstanceOf(MaterialException.class)
                 .extracting("errorCode")
                 .isEqualTo(errorCode);
     }

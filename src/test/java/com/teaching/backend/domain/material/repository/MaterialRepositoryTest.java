@@ -137,6 +137,44 @@ class MaterialRepositoryTest {
     }
 
     @Test
+    void countByFolderIdExcludesDeletedMaterialsBySqlRestriction() {
+        User user = userRepository.save(user("capacity-count"));
+        Folder folder = folderRepository.save(Folder.create(user, "Capacity"));
+
+        for (int index = 0; index < 14; index++) {
+            materialRepository.save(material(user, folder, "https://example.com/active-" + index));
+        }
+        for (int index = 0; index < 2; index++) {
+            Material deleted = materialRepository.save(material(user, folder, "https://example.com/deleted-" + index));
+            deleted.delete();
+        }
+        flushAndClear();
+
+        long count = materialRepository.countByFolder_Id(folder.getId());
+
+        assertThat(count).isEqualTo(14L);
+    }
+
+    @Test
+    void countDeletedByMaterialIdsAndUserIdCountsDeletedMaterialsRegardlessOfOriginalFolder() {
+        User user = userRepository.save(user("restore-count"));
+        Folder targetFolder = folderRepository.save(Folder.create(user, "Target"));
+        Folder otherFolder = folderRepository.save(Folder.create(user, "Other"));
+        Material targetDeleted = materialRepository.save(material(user, targetFolder, "https://example.com/target"));
+        Material otherDeleted = materialRepository.save(material(user, otherFolder, "https://example.com/other"));
+        targetDeleted.delete();
+        otherDeleted.delete();
+        flushAndClear();
+
+        long count = materialRepository.countDeletedByMaterialIdsAndUserId(
+                List.of(targetDeleted.getId(), otherDeleted.getId()),
+                user.getId()
+        );
+
+        assertThat(count).isEqualTo(2L);
+    }
+
+    @Test
     void findFolderNamesByIdsReturnsFolderNameForEachRequestedMaterial() {
         User user = userRepository.save(user("folder-names"));
         Folder folderA = folderRepository.save(Folder.create(user, "Folder A"));

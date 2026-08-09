@@ -63,6 +63,7 @@ public class MaterialService {
     private final TagRepository tagRepository;
     private final FolderRepository folderRepository;
     private final MaterialIndexingService materialIndexingService;
+    private final FolderMaterialCapacityValidator folderMaterialCapacityValidator;
     private final EntityManager entityManager;
 
     public List<MaterialListResponse> getMaterialList(Long userId, Integer size) {
@@ -169,6 +170,7 @@ public class MaterialService {
         List<Long> finalTagIds = normalizeFinalTagIds(request == null ? null : request.tagIds());
         Map<Long, Tag> finalTagsById = findFinalTagsById(finalTagIds);
         Long currentFolderId = material.getFolderId();
+        boolean folderChanged = !finalFolder.getId().equals(currentFolderId);
         Map<Long, MaterialTag> currentTagsByTagId = currentTags.stream()
                 .collect(Collectors.toMap(
                         materialTag -> materialTag.getTag().getId(),
@@ -184,7 +186,8 @@ public class MaterialService {
                 .map(tagId -> MaterialTag.create(material, finalTagsById.get(tagId)))
                 .toList();
 
-        if (!finalFolder.getId().equals(currentFolderId)) {
+        if (folderChanged) {
+            folderMaterialCapacityValidator.validateCanAdd(finalFolder.getId(), 1);
             material.changeFolder(finalFolder);
         }
         if (!tagsToRemove.isEmpty()) {
@@ -195,7 +198,7 @@ public class MaterialService {
         }
         entityManager.flush();
 
-        if (!finalFolder.getId().equals(currentFolderId)) {
+        if (folderChanged) {
             registerFolderPayloadSyncAfterCommit(material, currentFolderId, finalFolder.getId());
         }
 
@@ -224,6 +227,9 @@ public class MaterialService {
         Folder targetFolder = getOwnedFolder(userId, targetFolderId);
 
         List<Material> materials = findOwnedMaterialsInFolder(userId, folderId, materialIds);
+        if (!targetFolder.getId().equals(folderId)) {
+            folderMaterialCapacityValidator.validateCanAdd(targetFolder.getId(), materials.size());
+        }
         materials.forEach(material -> material.changeFolder(targetFolder));
 
         return MaterialMoveResponse.of(materials.size(), folderId, targetFolderId);
@@ -253,6 +259,11 @@ public class MaterialService {
         getOwnedFolder(userId, folderId);
         List<Long> materialIds = validateMaterialIds(request == null ? null : request.materialIds());
 
+        long materialRestoreCount = materialRepository.countDeletedByMaterialIdsAndUserId(
+                materialIds,
+                userId
+        );
+        folderMaterialCapacityValidator.validateCanAdd(folderId, materialRestoreCount);
         int restoredCount = materialRepository.restoreDeletedMaterials(materialIds, folderId, userId);
         if (restoredCount != materialIds.size()) {
             throw new MaterialException(MaterialErrorCode.MATERIAL_NOT_FOUND);

@@ -240,6 +240,53 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
             @Param("userId") Long userId
     );
 
+    @Query(
+            value = """
+                    SELECT COUNT(*)
+                    FROM materials
+                    WHERE folder_id = :folderId
+                      AND user_id = :userId
+                      AND deleted_at IS NOT NULL
+                    """,
+            nativeQuery = true
+    )
+    long countDeletedByFolderIdAndUserId(
+            @Param("folderId") Long folderId,
+            @Param("userId") Long userId
+    );
+
+    @Query(
+            value = """
+                    SELECT COUNT(*)
+                    FROM materials
+                    WHERE id IN (:materialIds)
+                      AND user_id = :userId
+                      AND deleted_at IS NOT NULL
+                    """,
+            nativeQuery = true
+    )
+    long countDeletedByMaterialIdsAndUserId(
+            @Param("materialIds") List<Long> materialIds,
+            @Param("userId") Long userId
+    );
+
+    @Query(
+            value = """
+                    SELECT folder_id AS folderId, COUNT(*) AS materialCount
+                    FROM materials
+                    WHERE id IN (:materialIds)
+                      AND user_id = :userId
+                      AND deleted_at IS NOT NULL
+                      AND folder_id IS NOT NULL
+                    GROUP BY folder_id
+                    """,
+            nativeQuery = true
+    )
+    List<FolderMaterialRestoreCountProjection> countDeletedByFolderIdForRestore(
+            @Param("materialIds") List<Long> materialIds,
+            @Param("userId") Long userId
+    );
+
     /** 휴지통에 있는 폴더 상세 조회용: 그 폴더 안에 있던(폴더와 함께 휴지통으로 이동한) 자료를 최신순으로 조회한다. */
     @Query(
             value = """
