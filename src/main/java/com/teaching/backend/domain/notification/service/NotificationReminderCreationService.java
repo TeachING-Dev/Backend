@@ -46,6 +46,10 @@ public class NotificationReminderCreationService {
         }
 
         TeachingMap teachingMap = teachingMapOptional.get();
+        if (!Boolean.TRUE.equals(teachingMap.getUser().getNotificationsEnabled())) {
+            return false;
+        }
+
         if (!isReminderDue(teachingMap, now)) {
             return false;
         }
