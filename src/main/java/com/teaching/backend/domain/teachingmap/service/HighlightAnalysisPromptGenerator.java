@@ -18,7 +18,13 @@ public class HighlightAnalysisPromptGenerator {
             Constraints:
             - Contextual Analysis: Clicked Highlight가 Original Content 내에서 갖는 위치와 의미를 파악해 전체 맥락 속에서 설명하십시오.
             - Actionable Insight: 단순 뜻풀이가 아니라 실제 개발/학습 현장에서 이 지식을 어떻게 다뤄야 하는지 실무 팁을 반드시 포함하십시오.
-            - Format: 말풍선에 바로 노출할 답변 내용만 출력하십시오 (서론 생략, 마크다운 가능).
+            - Format: 말풍선에 바로 노출할 답변 내용만 출력하십시오 (서론 생략).
+              마크다운을 적극 활용하여 가독성을 높이십시오:
+              * 소제목이 필요할 경우 ### 사용
+              * 핵심 개념/용어는 **볼드** 처리
+              * 여러 항목 나열 시 - 또는 1. 등 리스트 사용
+              * 코드/문법 언급 시 `인라인 코드` 사용
+              * 문단 사이에는 줄바꿈을 넣어 한 덩어리로 뭉치지 않게 하십시오
             - Tone: 지정된 Persona 말투를 일관되게 유지하십시오.
             """;
 
