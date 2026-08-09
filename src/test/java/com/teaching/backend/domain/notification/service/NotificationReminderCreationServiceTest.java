@@ -88,6 +88,22 @@ class NotificationReminderCreationServiceTest {
     }
 
     @Test
+    void createReminderIfDueSkipsWhenUserNotificationDisabled() {
+        LocalDateTime now = LocalDateTime.of(2026, 8, 10, 9, 0);
+        TeachingMap teachingMap = teachingMap(TeachingMapType.SHORTCUT, now.minusDays(5), "Backend");
+        ReflectionTestUtils.setField(teachingMap.getUser(), "notificationsEnabled", false);
+        when(teachingMapRepository.findByIdAndStatusAndIsDraftFalseAndDeletedAtIsNull(
+                TEACHING_MAP_ID,
+                TeachingMapStatus.IN_PROGRESS
+        )).thenReturn(Optional.of(teachingMap));
+
+        boolean result = reminderCreationService.createReminderIfDue(TEACHING_MAP_ID, now);
+
+        assertThat(result).isFalse();
+        verify(notificationRepository, never()).save(any(Notification.class));
+    }
+
+    @Test
     void createReminderIfDueCreatesDeepDiveReminderOnTenthDay() {
         LocalDateTime now = LocalDateTime.of(2026, 8, 10, 9, 0);
         TeachingMap teachingMap = teachingMap(TeachingMapType.DEEPDIVE, now.minusDays(10), "Deep Backend");
