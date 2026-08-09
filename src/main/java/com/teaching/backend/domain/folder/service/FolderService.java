@@ -19,6 +19,7 @@ import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.entity.MaterialAnalysis;
 import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
+import com.teaching.backend.domain.material.service.FolderMaterialCapacityValidator;
 import com.teaching.backend.domain.tag.entity.MaterialTag;
 import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
 import com.teaching.backend.domain.user.entity.User;
@@ -59,6 +60,7 @@ public class FolderService {
     private final MaterialRepository materialRepository;
     private final MaterialAnalysisRepository materialAnalysisRepository;
     private final MaterialTagRepository materialTagRepository;
+    private final FolderMaterialCapacityValidator folderMaterialCapacityValidator;
 
     public List<FolderListResponse> getFolderList(
             Long userId,
@@ -227,6 +229,9 @@ public class FolderService {
         if (folderRepository.countActiveNameConflictForRestore(folderId, userId) > 0) {
             throw new FolderException(FolderErrorCode.DUPLICATE_FOLDER_NAME);
         }
+
+        long materialRestoreCount = materialRepository.countDeletedByFolderIdAndUserId(folderId, userId);
+        folderMaterialCapacityValidator.validateCanAdd(folderId, materialRestoreCount);
 
         int restoredCount = restoreFolderOrThrowDuplicateName(folderId, userId);
         if (restoredCount == 0) {

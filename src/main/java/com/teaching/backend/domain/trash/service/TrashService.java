@@ -14,8 +14,10 @@ import com.teaching.backend.domain.material.exception.MaterialErrorCode;
 import com.teaching.backend.domain.material.exception.MaterialException;
 import com.teaching.backend.domain.material.enums.PlatformType;
 import com.teaching.backend.domain.material.dto.response.MaterialTagResponse;
+import com.teaching.backend.domain.material.repository.FolderMaterialRestoreCountProjection;
 import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
+import com.teaching.backend.domain.material.service.FolderMaterialCapacityValidator;
 import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
 import com.teaching.backend.domain.teachingmap.dto.request.TeachingMapIdsRequest;
 import com.teaching.backend.domain.teachingmap.dto.response.SourcePlatform;
@@ -72,6 +74,7 @@ public class TrashService {
     private final MaterialRepository materialRepository;
     private final MaterialAnalysisRepository materialAnalysisRepository;
     private final MaterialTagRepository materialTagRepository;
+    private final FolderMaterialCapacityValidator folderMaterialCapacityValidator;
     private final TeachingMapRepository teachingMapRepository;
     private final TeachingMapStepRepository teachingMapStepRepository;
 
@@ -190,6 +193,7 @@ public class TrashService {
         List<Long> restorableIds = materialRepository.findRestorableTrashedIds(requestedIds, userId);
         List<MaterialRestoreResponse.RestoredMaterial> restored = List.of();
         if (!restorableIds.isEmpty()) {
+            validateMaterialRestoreCapacity(restorableIds, userId);
             materialRepository.restoreTrashedMaterials(restorableIds, userId);
             // 자료는 원래 소속 폴더로 그대로 복구되므로(folder_id 변경 없음), 복구 직후 그 폴더명을 조회해
             // 프론트가 "OO 폴더로 복구되었습니다" 토스트를 표시할 수 있게 한다.
@@ -224,6 +228,8 @@ public class TrashService {
         List<Long> restoredIds = new ArrayList<>();
         for (Long folderId : requestedIds) {
             if (folderRepository.restoreTrashedFolderIfNameAvailable(folderId, userId) > 0) {
+                long materialRestoreCount = materialRepository.countDeletedByFolderIdAndUserId(folderId, userId);
+                folderMaterialCapacityValidator.validateCanAdd(folderId, materialRestoreCount);
                 restoredIds.add(folderId);
                 materialRepository.restoreTrashedMaterialsByFolder(folderId, userId);
             }
@@ -251,6 +257,16 @@ public class TrashService {
             throw new TeachingMapException(TeachingMapErrorCode.TEACHING_MAP_IDS_REQUIRED);
         }
         return request.teachingMapIds();
+    }
+
+    private void validateMaterialRestoreCapacity(List<Long> restorableIds, Long userId) {
+        List<FolderMaterialRestoreCountProjection> restoreCounts =
+                materialRepository.countDeletedByFolderIdForRestore(restorableIds, userId);
+
+        restoreCounts.forEach(count -> folderMaterialCapacityValidator.validateCanAdd(
+                count.getFolderId(),
+                count.getMaterialCount()
+        ));
     }
 
     private List<Long> failedIds(List<Long> requestedIds, List<Long> restoredIds) {

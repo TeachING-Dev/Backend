@@ -6,10 +6,15 @@ import com.teaching.backend.domain.folder.entity.Folder;
 import com.teaching.backend.domain.folder.exception.FolderErrorCode;
 import com.teaching.backend.domain.folder.exception.FolderException;
 import com.teaching.backend.domain.folder.repository.FolderRepository;
+import com.teaching.backend.domain.material.dto.request.MaterialIdsRequest;
 import com.teaching.backend.domain.material.entity.Material;
 import com.teaching.backend.domain.material.enums.PlatformType;
+import com.teaching.backend.domain.material.exception.MaterialErrorCode;
+import com.teaching.backend.domain.material.exception.MaterialException;
+import com.teaching.backend.domain.material.repository.FolderMaterialRestoreCountProjection;
 import com.teaching.backend.domain.material.repository.MaterialAnalysisRepository;
 import com.teaching.backend.domain.material.repository.MaterialRepository;
+import com.teaching.backend.domain.material.service.FolderMaterialCapacityValidator;
 import com.teaching.backend.domain.tag.entity.MaterialTag;
 import com.teaching.backend.domain.tag.entity.Tag;
 import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
@@ -36,6 +41,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -58,6 +64,9 @@ class TrashServiceTest {
 
     @Mock
     private MaterialTagRepository materialTagRepository;
+
+    @Mock
+    private FolderMaterialCapacityValidator folderMaterialCapacityValidator;
 
     @Mock
     private TeachingMapRepository teachingMapRepository;
@@ -135,6 +144,7 @@ class TrashServiceTest {
     void restoreFoldersCascadesMaterialRestoreOnlyForActuallyRestoredFolders() {
         when(folderRepository.restoreTrashedFolderIfNameAvailable(10L, USER_ID)).thenReturn(1);
         when(folderRepository.restoreTrashedFolderIfNameAvailable(20L, USER_ID)).thenReturn(0);
+        when(materialRepository.countDeletedByFolderIdAndUserId(10L, USER_ID)).thenReturn(1L);
 
         FolderTrashRestoreResponse response = trashService.restoreFolders(USER_ID, new FolderIdsRequest(List.of(10L, 20L)));
 
@@ -142,6 +152,37 @@ class TrashServiceTest {
         assertThat(response.failedIds()).containsExactly(20L);
         verify(materialRepository).restoreTrashedMaterialsByFolder(10L, USER_ID);
         verify(materialRepository, never()).restoreTrashedMaterialsByFolder(20L, USER_ID);
+    }
+
+    @Test
+    void restoreMaterialsFailsWhenOriginalFolderMaterialLimitExceeded() {
+        when(materialRepository.findRestorableTrashedIds(List.of(10L), USER_ID)).thenReturn(List.of(10L));
+        when(materialRepository.countDeletedByFolderIdForRestore(List.of(10L), USER_ID))
+                .thenReturn(List.of(restoreCount(FOLDER_ID, 1L)));
+        doThrow(new MaterialException(MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED))
+                .when(folderMaterialCapacityValidator).validateCanAdd(FOLDER_ID, 1L);
+
+        assertThatThrownBy(() -> trashService.restoreMaterials(USER_ID, new MaterialIdsRequest(List.of(10L))))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED);
+
+        verify(materialRepository, never()).restoreTrashedMaterials(anyList(), any());
+    }
+
+    @Test
+    void restoreFoldersFailsWhenRestoredMaterialsExceedFolderLimit() {
+        when(folderRepository.restoreTrashedFolderIfNameAvailable(FOLDER_ID, USER_ID)).thenReturn(1);
+        when(materialRepository.countDeletedByFolderIdAndUserId(FOLDER_ID, USER_ID)).thenReturn(1L);
+        doThrow(new MaterialException(MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED))
+                .when(folderMaterialCapacityValidator).validateCanAdd(FOLDER_ID, 1L);
+
+        assertThatThrownBy(() -> trashService.restoreFolders(USER_ID, new FolderIdsRequest(List.of(FOLDER_ID))))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED);
+
+        verify(materialRepository, never()).restoreTrashedMaterialsByFolder(any(), any());
     }
 
     @Test
@@ -201,6 +242,20 @@ class TrashServiceTest {
         Folder folder = Folder.create(null, name);
         ReflectionTestUtils.setField(folder, "id", id);
         return folder;
+    }
+
+    private FolderMaterialRestoreCountProjection restoreCount(Long folderId, long materialCount) {
+        return new FolderMaterialRestoreCountProjection() {
+            @Override
+            public Long getFolderId() {
+                return folderId;
+            }
+
+            @Override
+            public long getMaterialCount() {
+                return materialCount;
+            }
+        };
     }
 
     private Tag tag(Long id, String name) {
