@@ -214,27 +214,104 @@ public class TeachingMapService {
 
     private void saveHighlights(MaterialAnalysis analysis, List<MaterialHighlightResultParser.HighlightItem> items) {
         if (items.isEmpty()) {
-            throw new IllegalStateException("AI 응답에 하이라이트가 없습니다. materialAnalysisId=" + analysis.getId());
+            log.warn("AI 응답에 하이라이트가 없습니다. materialAnalysisId={}", analysis.getId());
+            return;
         }
 
         String detailAnalysis = analysis.getDetailAnalysis();
         List<MaterialHighlight> highlights = new ArrayList<>();
+        int skipped = 0;
 
         for (var item : items) {
             if (item.text() == null || item.text().isBlank()) {
-                throw new IllegalStateException("하이라이트 텍스트가 비어 있습니다. materialAnalysisId=" + analysis.getId());
+                log.warn("하이라이트 텍스트가 비어 있어 스킵. materialAnalysisId={}", analysis.getId());
+                skipped++;
+                continue;
             }
-            int start = detailAnalysis.indexOf(item.text());
-            if (start == -1) {
-                throw new IllegalStateException("본문과 일치하지 않는 하이라이트입니다. materialAnalysisId=" + analysis.getId());
+
+            int[] range = findRangeInOriginal(detailAnalysis, item.text());
+            if (range == null) {
+                log.warn("본문과 일치하지 않는 하이라이트 스킵. materialAnalysisId={}, text=\"{}\"",
+                        analysis.getId(), truncate(item.text(), 50));
+                skipped++;
+                continue;
             }
-            int end = start + item.text().length();
+
             highlights.add(MaterialHighlight.create(
-                    analysis, item.text(), toHighlightType(item.type()), start, end));
+                    analysis, item.text(), toHighlightType(item.type()), range[0], range[1]));
         }
-        materialHighlightRepository.saveAll(highlights); // 여기 도달하면 전부 검증 통과한 상태
+
+        if (!highlights.isEmpty()) {
+            materialHighlightRepository.saveAll(highlights);
+        }
+
+        log.info("하이라이트 저장 완료. materialAnalysisId={}, 전체={}, 저장={}, 스킵={}",
+                analysis.getId(), items.size(), highlights.size(), skipped);
     }
 
+    /**
+     * 공백/개행/마크다운 강조 기호 차이를 흡수해서 원문 내 위치를 찾는다.
+     * 정규화된 문자열에서 매칭 위치를 찾은 뒤, 원본 문자열 좌표로 역매핑한다.
+     * 정규화된 타겟이 본문에 2회 이상 등장하면 경고 로그만 남기고 첫 매칭을 사용한다.
+     * @return [start, end] 배열, 못 찾으면 null
+     */
+    private int[] findRangeInOriginal(String source, String target) {
+        String normalizedTarget = normalize(target);
+        if (normalizedTarget.isEmpty()) return null;
+
+        StringBuilder normalizedSource = new StringBuilder();
+        List<Integer> origIndexOfNormalizedChar = new ArrayList<>();
+
+        boolean prevWasSpace = false;
+        for (int i = 0; i < source.length(); i++) {
+            char c = source.charAt(i);
+            if (isStrippedChar(c)) {
+                continue; // 마크다운 강조 기호 등은 정규화 문자열에서 아예 제외
+            }
+            if (Character.isWhitespace(c)) {
+                if (!prevWasSpace && normalizedSource.length() > 0) {
+                    origIndexOfNormalizedChar.add(i);
+                    normalizedSource.append(' ');
+                }
+                prevWasSpace = true;
+            } else {
+                origIndexOfNormalizedChar.add(i);
+                normalizedSource.append(c);
+                prevWasSpace = false;
+            }
+        }
+        origIndexOfNormalizedChar.add(source.length()); // 끝 위치 sentinel
+
+        int normalizedStart = normalizedSource.indexOf(normalizedTarget);
+        if (normalizedStart == -1) {
+            return null;
+        }
+
+        // 중복 매칭 여부 확인 (디버깅용 경고만, 매칭 자체는 첫 번째 것 사용)
+        if (normalizedSource.indexOf(normalizedTarget, normalizedStart + 1) != -1) {
+            log.warn("하이라이트 텍스트가 본문에 2회 이상 등장. 첫 매칭 사용. text=\"{}\"", truncate(target, 50));
+        }
+
+        int normalizedEnd = normalizedStart + normalizedTarget.length();
+        int origStart = origIndexOfNormalizedChar.get(normalizedStart);
+        int origEnd = origIndexOfNormalizedChar.get(normalizedEnd);
+
+        return new int[]{origStart, origEnd};
+    }
+
+    private String normalize(String s) {
+        return s.replaceAll("[*_`#>~]", "")   // 마크다운 강조/헤더/인용 기호 제거
+                .replaceAll("\\s+", " ")
+                .trim();
+    }
+
+    private boolean isStrippedChar(char c) {
+        return c == '*' || c == '_' || c == '`' || c == '#' || c == '>' || c == '~';
+    }
+
+    private String truncate(String s, int maxLen) {
+        return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
+    }
     private HighlightType toHighlightType(String type) {
         return switch (type) {
             case "핵심" -> HighlightType.MAIN;
