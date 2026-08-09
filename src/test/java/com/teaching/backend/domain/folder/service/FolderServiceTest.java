@@ -26,6 +26,7 @@ import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -68,6 +69,84 @@ class FolderServiceTest {
 
     @InjectMocks
     private FolderService folderService;
+
+    @Test
+    void getFolderListWithoutKeywordUsesExistingFullListQuery() {
+        Folder folder = folder(USER_ID, FOLDER_ID, "Backend");
+        when(folderRepository.findAllByUser_Id(eq(USER_ID), any(Sort.class))).thenReturn(List.of(folder));
+        when(materialRepository.countGroupedByFolderIds(List.of(FOLDER_ID))).thenReturn(List.<Object[]>of(new Object[]{FOLDER_ID, 2L}));
+
+        var result = folderService.getFolderList(USER_ID, "recent", null);
+
+        assertThat(result).singleElement()
+                .satisfies(item -> {
+                    assertThat(item.folderId()).isEqualTo(FOLDER_ID);
+                    assertThat(item.folderName()).isEqualTo("Backend");
+                    assertThat(item.materialCount()).isEqualTo(2L);
+                });
+        verify(folderRepository).findAllByUser_Id(eq(USER_ID), any(Sort.class));
+        verify(folderRepository, never()).findAllByUser_IdAndNameContaining(any(), any(), any(Sort.class));
+    }
+
+    @Test
+    void getFolderListWithBlankKeywordUsesExistingFullListQuery() {
+        when(folderRepository.findAllByUser_Id(eq(USER_ID), any(Sort.class))).thenReturn(List.of());
+
+        var result = folderService.getFolderList(USER_ID, "recent", "   ");
+
+        assertThat(result).isEmpty();
+        verify(folderRepository).findAllByUser_Id(eq(USER_ID), any(Sort.class));
+        verify(folderRepository, never()).findAllByUser_IdAndNameContaining(any(), any(), any(Sort.class));
+    }
+
+    @Test
+    void getFolderListWithKeywordReturnsPartialNameMatches() {
+        Folder folder = folder(USER_ID, FOLDER_ID, "Backend");
+        when(folderRepository.findAllByUser_IdAndNameContaining(eq(USER_ID), eq("Back"), any(Sort.class)))
+                .thenReturn(List.of(folder));
+        when(materialRepository.countGroupedByFolderIds(List.of(FOLDER_ID))).thenReturn(List.<Object[]>of(new Object[]{FOLDER_ID, 0L}));
+
+        var result = folderService.getFolderList(USER_ID, "recent", "Back");
+
+        assertThat(result).singleElement()
+                .satisfies(item -> assertThat(item.folderName()).isEqualTo("Backend"));
+    }
+
+    @Test
+    void getFolderListWithKeywordReturnsEmptyWhenNoMatchExists() {
+        when(folderRepository.findAllByUser_IdAndNameContaining(eq(USER_ID), eq("missing"), any(Sort.class)))
+                .thenReturn(List.of());
+
+        var result = folderService.getFolderList(USER_ID, "recent", "missing");
+
+        assertThat(result).isEmpty();
+        verify(materialRepository, never()).countGroupedByFolderIds(any());
+    }
+
+    @Test
+    void getFolderListWithKeywordExcludesOtherUsersAndDeletedFoldersByRepositoryContract() {
+        when(folderRepository.findAllByUser_IdAndNameContaining(eq(USER_ID), eq("Backend"), any(Sort.class)))
+                .thenReturn(List.of());
+
+        var result = folderService.getFolderList(USER_ID, "recent", "Backend");
+
+        assertThat(result).isEmpty();
+        verify(folderRepository).findAllByUser_IdAndNameContaining(eq(USER_ID), eq("Backend"), any(Sort.class));
+    }
+
+    @Test
+    void getFolderListCombinesKeywordWithExistingSort() {
+        when(folderRepository.findAllByUser_IdAndNameContaining(eq(USER_ID), eq("Back"), any(Sort.class)))
+                .thenReturn(List.of());
+
+        folderService.getFolderList(USER_ID, "name", "Back");
+
+        verify(folderRepository).findAllByUser_IdAndNameContaining(
+                eq(USER_ID),
+                eq("Back"),
+                eq(Sort.by(Sort.Direction.ASC, "name"))
+        );
+    }
 
     @Test
     void createFolderAllowsKoreanEnglishAndMixedNames() {
