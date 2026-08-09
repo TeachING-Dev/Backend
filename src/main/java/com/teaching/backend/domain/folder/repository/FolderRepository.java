@@ -21,6 +21,12 @@ public interface FolderRepository extends JpaRepository<Folder, Long> {
             Sort sort
     );
 
+    List<Folder> findAllByUser_IdAndNameContaining(
+            Long userId,
+            String name,
+            Sort sort
+    );
+
     @Query("""
             SELECT COUNT(f)
             FROM Folder f

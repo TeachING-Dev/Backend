@@ -62,14 +62,22 @@ public class FolderService {
 
     public List<FolderListResponse> getFolderList(
             Long userId,
-            String sort
+            String sort,
+            String keyword
     ) {
         Sort folderSort = resolveSort(sort);
+        String normalizedKeyword = normalizeKeyword(keyword);
 
-        List<Folder> folders = folderRepository.findAllByUser_Id(
-                userId,
-                folderSort
-        );
+        List<Folder> folders = normalizedKeyword == null
+                ? folderRepository.findAllByUser_Id(
+                        userId,
+                        folderSort
+                )
+                : folderRepository.findAllByUser_IdAndNameContaining(
+                        userId,
+                        normalizedKeyword,
+                        folderSort
+                );
 
         Map<Long, Long> materialCountByFolderId = getMaterialCountByFolderId(folders);
 

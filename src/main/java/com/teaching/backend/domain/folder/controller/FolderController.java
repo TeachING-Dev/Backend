@@ -78,11 +78,18 @@ public class FolderController {
                     name = "sort",
                     defaultValue = "recent"
             )
-            String sort
+            String sort,
+
+            @Parameter(
+                    description = "폴더명 검색어",
+                    example = "백엔드"
+            )
+            @RequestParam(required = false) String keyword
     ) {
         List<FolderListResponse> result = folderService.getFolderList(
                 getAuthenticatedUserId(authMember),
-                sort
+                sort,
+                keyword
         );
 
         return ResponseEntity.ok(
