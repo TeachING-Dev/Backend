@@ -621,7 +621,7 @@ class MaterialServiceTest {
     void restoreMaterialsFailsWhenFolderMaterialLimitExceeded() {
         Folder folder = folder(USER_ID, FOLDER_ID);
         when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(folder));
-        when(materialRepository.countDeletedByMaterialIdsAndFolderIdAndUserId(List.of(101L), FOLDER_ID, USER_ID))
+        when(materialRepository.countDeletedByMaterialIdsAndUserId(List.of(101L), USER_ID))
                 .thenReturn(1L);
         doThrow(new MaterialException(MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED))
                 .when(folderMaterialCapacityValidator).validateCanAdd(FOLDER_ID, 1);
@@ -631,6 +631,27 @@ class MaterialServiceTest {
                         USER_ID,
                         FOLDER_ID,
                         new MaterialIdsRequest(List.of(101L))
+                ),
+                MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED
+        );
+
+        verify(materialRepository, never()).restoreDeletedMaterials(any(), any(), any());
+    }
+
+    @Test
+    void restoreMaterialsCountsDeletedMaterialsFromOtherFoldersAsTargetFolderAdditions() {
+        Folder targetFolder = folder(USER_ID, FOLDER_ID);
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.of(targetFolder));
+        when(materialRepository.countDeletedByMaterialIdsAndUserId(List.of(101L, 102L), USER_ID))
+                .thenReturn(2L);
+        doThrow(new MaterialException(MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED))
+                .when(folderMaterialCapacityValidator).validateCanAdd(FOLDER_ID, 2L);
+
+        assertMaterialExceptionThrown(
+                () -> materialService.restoreMaterials(
+                        USER_ID,
+                        FOLDER_ID,
+                        new MaterialIdsRequest(List.of(101L, 102L))
                 ),
                 MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED
         );

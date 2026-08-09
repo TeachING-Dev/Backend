@@ -260,15 +260,13 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
                     SELECT COUNT(*)
                     FROM materials
                     WHERE id IN (:materialIds)
-                      AND folder_id = :folderId
                       AND user_id = :userId
                       AND deleted_at IS NOT NULL
                     """,
             nativeQuery = true
     )
-    long countDeletedByMaterialIdsAndFolderIdAndUserId(
+    long countDeletedByMaterialIdsAndUserId(
             @Param("materialIds") List<Long> materialIds,
-            @Param("folderId") Long folderId,
             @Param("userId") Long userId
     );
 

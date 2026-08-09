@@ -259,9 +259,8 @@ public class MaterialService {
         getOwnedFolder(userId, folderId);
         List<Long> materialIds = validateMaterialIds(request == null ? null : request.materialIds());
 
-        long materialRestoreCount = materialRepository.countDeletedByMaterialIdsAndFolderIdAndUserId(
+        long materialRestoreCount = materialRepository.countDeletedByMaterialIdsAndUserId(
                 materialIds,
-                folderId,
                 userId
         );
         folderMaterialCapacityValidator.validateCanAdd(folderId, materialRestoreCount);

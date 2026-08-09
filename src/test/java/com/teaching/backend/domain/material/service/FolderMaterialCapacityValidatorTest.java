@@ -45,6 +45,16 @@ class FolderMaterialCapacityValidatorTest {
     }
 
     @Test
+    void rejectsWhenAdditionalMaterialsWouldExceedFifteenActiveMaterials() {
+        when(materialRepository.countByFolder_Id(FOLDER_ID)).thenReturn(14L);
+
+        assertThatThrownBy(() -> validator.validateCanAdd(FOLDER_ID, 2))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED);
+    }
+
+    @Test
     void allowsWhenActiveCountIsUnderLimitEvenIfDeletedRowsExistOutsideCount() {
         when(materialRepository.countByFolder_Id(FOLDER_ID)).thenReturn(13L);
 
