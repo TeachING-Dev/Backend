@@ -21,6 +21,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 
 @Tag(name = "Auth", description = "인증/인가 관련 API")
@@ -74,29 +75,33 @@ public class AuthController {
     }
 
     private String extractRefreshTokenFromCookie(HttpServletRequest request) {
-        if (request.getCookies() == null) {
-
+        List<String> refreshTokens = extractRefreshTokenCookieValues(request);
+        if (refreshTokens.size() != 1) {
             throw new AuthException(AuthErrorCode.REFRESH_TOKEN_NOT_FOUND);
         }
-
-
-
-        return java.util.Arrays.stream(request.getCookies())
-                .filter(c -> c.getName().equals("refreshToken"))
-                .findFirst()
-                .map(jakarta.servlet.http.Cookie::getValue)
-                .orElseThrow(() -> new AuthException(AuthErrorCode.REFRESH_TOKEN_NOT_FOUND));
+        return refreshTokens.get(0);
     }
 
     /** 로그아웃은 토큰이 없어도 실패시키지 않아야 해서, 예외 대신 Optional로 처리하는 별도 버전. */
     private Optional<String> extractRefreshTokenFromCookieOrEmpty(HttpServletRequest request) {
+        List<String> refreshTokens = extractRefreshTokenCookieValues(request);
+        return refreshTokens.size() == 1 ? Optional.of(refreshTokens.get(0)) : Optional.empty();
+    }
+
+    /**
+     * domain 속성이 다른 refreshToken 쿠키가 과거 발급분과 공존하는 경우(legacy 정리 전
+     * 브라우저 등) 이름만으로는 어느 쪽이 유효한 쿠키인지 서버가 구분할 수 없다.
+     * 임의로 하나를 골라 쓰면 엉뚱한 사용자로 인증될 수 있으므로, 정확히 하나가 아니면
+     * 재로그인을 유도한다.
+     */
+    private List<String> extractRefreshTokenCookieValues(HttpServletRequest request) {
         if (request.getCookies() == null) {
-            return Optional.empty();
+            return List.of();
         }
         return Arrays.stream(request.getCookies())
                 .filter(c -> c.getName().equals("refreshToken"))
-                .findFirst()
-                .map(Cookie::getValue);
+                .map(Cookie::getValue)
+                .toList();
     }
 
     @Operation(
