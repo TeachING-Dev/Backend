@@ -229,14 +229,285 @@ class MaterialAiAnalysisResponseParserTest {
     }
 
     @Test
-    void acceptsNoMarkdownImageEvenWhenCandidatesExist() {
+    void leavesLongAnalysisWithoutImageWhenCandidatesAreEmpty() {
         MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis(
                 validUrlAnalysisJson("Backend"),
                 List.of("Backend"),
-                List.of(new MaterialImageCandidate("https://cdn.example.com/chart.png", null, null, null, null, null))
+                List.of()
         );
 
         assertThat(result.analysisResult().longAnalysis()).doesNotContain("![");
+    }
+
+    @Test
+    void insertsOneFallbackMarkdownImageWhenCandidatesExistAndAiUsesNoImage() {
+        String imageUrl = "https://cdn.example.com/chart.png";
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis(
+                validUrlAnalysisJson("Backend"),
+                List.of("Backend"),
+                List.of(new MaterialImageCandidate(imageUrl, "성장률 그래프", null, null, "Application", null))
+        );
+
+        assertThat(result.analysisResult().longAnalysis())
+                .contains("![성장률 그래프](%s)".formatted(imageUrl));
+        assertThat(markdownImageCount(result.analysisResult().longAnalysis())).isEqualTo(1);
+    }
+
+    @Test
+    void skipsFallbackCandidateWithWhitespaceUrlAndUsesNextSafeCandidate() {
+        String unsafeUrl = "https://cdn.example.com/image space.png";
+        String safeUrl = "https://cdn.example.com/safe.png";
+
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis(
+                validUrlAnalysisJson("Backend"),
+                List.of("Backend"),
+                List.of(
+                        new MaterialImageCandidate(unsafeUrl, "unsafe", null, null, "Application", "상세 분석 검색 보조 맥락 활용"),
+                        new MaterialImageCandidate(safeUrl, "safe", null, null, null, null)
+                )
+        );
+
+        assertThat(result.analysisResult().longAnalysis())
+                .contains("![safe](%s)".formatted(safeUrl))
+                .doesNotContain(unsafeUrl);
+    }
+
+    @Test
+    void skipsFallbackCandidateWithParenthesesUrlAndUsesNextSafeCandidate() {
+        String unsafeUrl = "https://cdn.example.com/a(1).png";
+        String safeUrl = "https://cdn.example.com/safe.png";
+
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis(
+                validUrlAnalysisJson("Backend"),
+                List.of("Backend"),
+                List.of(
+                        new MaterialImageCandidate(unsafeUrl, "unsafe", null, null, "Application", "상세 분석 검색 보조 맥락 활용"),
+                        new MaterialImageCandidate(safeUrl, "safe", null, null, null, null)
+                )
+        );
+
+        assertThat(result.analysisResult().longAnalysis())
+                .contains("![safe](%s)".formatted(safeUrl))
+                .doesNotContain(unsafeUrl);
+    }
+
+    @Test
+    void succeedsWithoutFallbackImageWhenAllCandidatesAreMarkdownUnsafe() {
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis(
+                validUrlAnalysisJson("Backend"),
+                List.of("Backend"),
+                List.of(
+                        new MaterialImageCandidate("https://cdn.example.com/a(1).png", "first", null, null, "Application", null),
+                        new MaterialImageCandidate("https://cdn.example.com/image space.png", "second", null, null, null, null)
+                )
+        );
+
+        assertThat(result.analysisResult().longAnalysis()).doesNotContain("![");
+    }
+
+    @Test
+    void ignoresHighScoringUnsafeCandidateAndSelectsLowerScoringSafeCandidate() {
+        String unsafeUrl = "https://cdn.example.com/best(1).png";
+        String safeUrl = "https://cdn.example.com/safe.png";
+
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis(
+                validUrlAnalysisJson("Backend"),
+                List.of("Backend"),
+                List.of(
+                        new MaterialImageCandidate(unsafeUrl, "unsafe", null, null, "Application", "상세 분석 검색 보조 맥락 활용"),
+                        new MaterialImageCandidate(safeUrl, "safe", null, null, null, null)
+                )
+        );
+
+        assertThat(result.analysisResult().longAnalysis())
+                .contains("![safe](%s)".formatted(safeUrl))
+                .doesNotContain(unsafeUrl);
+    }
+
+    @Test
+    void keepsAiMarkdownImageUnchangedWhenOneCandidateImageAlreadyExists() {
+        String imageUrl = "https://cdn.example.com/chart.png";
+        String longAnalysis = validLongAnalysis() + "\n![성장률 그래프](%s)".formatted(imageUrl);
+
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis(
+                urlAnalysisJson("Backend", longAnalysis),
+                List.of("Backend"),
+                List.of(new MaterialImageCandidate(imageUrl, "fallback alt", null, null, null, null))
+        );
+
+        assertThat(result.analysisResult().longAnalysis()).isEqualTo(longAnalysis);
+        assertThat(markdownImageCount(result.analysisResult().longAnalysis())).isEqualTo(1);
+    }
+
+    @Test
+    void keepsAiMarkdownImagesUnchangedWhenMultipleCandidateImagesAlreadyExist() {
+        String firstUrl = "https://cdn.example.com/first.png";
+        String secondUrl = "https://cdn.example.com/second.png";
+        String longAnalysis = validLongAnalysis()
+                + "\n![첫 이미지](%s)\n![두 번째 이미지](%s)".formatted(firstUrl, secondUrl);
+
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis(
+                urlAnalysisJson("Backend", longAnalysis),
+                List.of("Backend"),
+                List.of(
+                        new MaterialImageCandidate(firstUrl, "first", null, null, null, null),
+                        new MaterialImageCandidate(secondUrl, "second", null, null, null, null)
+                )
+        );
+
+        assertThat(result.analysisResult().longAnalysis()).isEqualTo(longAnalysis);
+        assertThat(markdownImageCount(result.analysisResult().longAnalysis())).isEqualTo(2);
+    }
+
+    @Test
+    void insertsFallbackImageIntoBestMatchingLaterSection() {
+        String imageUrl = "https://cdn.example.com/application.png";
+
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis(
+                validUrlAnalysisJson("Backend"),
+                List.of("Backend"),
+                List.of(new MaterialImageCandidate(
+                        imageUrl,
+                        "적용 방안 이미지",
+                        null,
+                        null,
+                        "Application",
+                        "저장된 상세 분석과 검색 보조 맥락에서 활용되는 흐름"
+                ))
+        );
+
+        String longAnalysis = result.analysisResult().longAnalysis();
+        assertThat(longAnalysis.indexOf("![적용 방안 이미지](%s)".formatted(imageUrl)))
+                .isGreaterThan(longAnalysis.indexOf("## Application"))
+                .isLessThan(longAnalysis.indexOf("## Conclusion"));
+    }
+
+    @Test
+    void choosesLaterCandidateWhenItMatchesSectionBetterThanFirstCandidate() {
+        String weakUrl = "https://cdn.example.com/weak.png";
+        String strongUrl = "https://cdn.example.com/strong.png";
+
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis(
+                validUrlAnalysisJson("Backend"),
+                List.of("Backend"),
+                List.of(
+                        new MaterialImageCandidate(weakUrl, "일반 이미지", null, null, null, null),
+                        new MaterialImageCandidate(strongUrl, "인덱싱 흐름", null, null, "Application", "상세 분석 검색 보조 맥락 활용")
+                )
+        );
+
+        assertThat(result.analysisResult().longAnalysis())
+                .contains("![인덱싱 흐름](%s)".formatted(strongUrl))
+                .doesNotContain(weakUrl);
+    }
+
+    @Test
+    void prioritizesSectionHeadingMatchOverWeakContextOrAltMatch() {
+        String weakUrl = "https://cdn.example.com/weak.png";
+        String strongUrl = "https://cdn.example.com/section.png";
+
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis(
+                validUrlAnalysisJson("Backend"),
+                List.of("Backend"),
+                List.of(
+                        new MaterialImageCandidate(weakUrl, "Spring", null, null, null, "Spring"),
+                        new MaterialImageCandidate(strongUrl, "섹션 이미지", null, null, "Application", null)
+                )
+        );
+
+        assertThat(result.analysisResult().longAnalysis())
+                .contains("![섹션 이미지](%s)".formatted(strongUrl))
+                .doesNotContain(weakUrl);
+    }
+
+    @Test
+    void fallsBackToFirstCandidateAndSafeFirstParagraphWhenNoMetadataMatches() {
+        String firstUrl = "https://cdn.example.com/first.png";
+        String secondUrl = "https://cdn.example.com/second.png";
+
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis(
+                validUrlAnalysisJson("Backend"),
+                List.of("Backend"),
+                List.of(
+                        new MaterialImageCandidate(firstUrl, null, null, null, null, null),
+                        new MaterialImageCandidate(secondUrl, "unmatched", null, null, null, null)
+                )
+        );
+
+        String longAnalysis = result.analysisResult().longAnalysis();
+        assertThat(longAnalysis)
+                .contains("![이미지](%s)".formatted(firstUrl))
+                .doesNotContain(secondUrl);
+        assertThat(longAnalysis.indexOf("![이미지](%s)".formatted(firstUrl)))
+                .isGreaterThan(longAnalysis.indexOf("## Overview"))
+                .isLessThan(longAnalysis.indexOf("## Background"));
+    }
+
+    @Test
+    void usesCaptionForFallbackDescriptionWhenAltIsBlank() {
+        String imageUrl = "https://cdn.example.com/caption.png";
+
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis(
+                validUrlAnalysisJson("Backend"),
+                List.of("Backend"),
+                List.of(new MaterialImageCandidate(imageUrl, " ", "캡션 설명", "제목 설명", null, null))
+        );
+
+        assertThat(result.analysisResult().longAnalysis())
+                .contains("![캡션 설명](%s)".formatted(imageUrl));
+    }
+
+    @Test
+    void usesTitleForFallbackDescriptionWhenAltAndCaptionAreBlank() {
+        String imageUrl = "https://cdn.example.com/title.png";
+
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis(
+                validUrlAnalysisJson("Backend"),
+                List.of("Backend"),
+                List.of(new MaterialImageCandidate(imageUrl, null, null, "제목 설명", null, null))
+        );
+
+        assertThat(result.analysisResult().longAnalysis())
+                .contains("![제목 설명](%s)".formatted(imageUrl));
+    }
+
+    @Test
+    void doesNotInsertFallbackInsideCodeBlockOrMarkdownTable() {
+        String imageUrl = "https://cdn.example.com/safe.png";
+        String longAnalysis = """
+                ## Overview
+                첫 문단은 안전한 삽입 위치입니다.
+
+                ```java
+                ## Not a heading
+                String value = "code";
+                ```
+
+                | A | B |
+                |---|---|
+                | 1 | 2 |
+
+                ## Background
+                * **본문 추출** 단계는 정적 HTML과 렌더링된 HTML을 사용합니다.
+                ## Key Points
+                * **요약**은 짧게 유지하고 상세 분석은 여러 섹션으로 나눕니다.
+                ## Application
+                * **저장된 상세 분석**은 자료 상세 화면에서 활용됩니다.
+                ## Conclusion
+                * 전체 흐름은 원문 정제, AI 분석, 태그 저장, 인덱싱을 분리합니다.
+                """;
+        longAnalysis = longAnalysis + " 상세한 설명을 충분히 채우기 위해 ".repeat(30);
+
+        MaterialUrlAnalysisParseResult result = parser.parseUrlAnalysis(
+                urlAnalysisJson("Backend", longAnalysis),
+                List.of("Backend"),
+                List.of(new MaterialImageCandidate(imageUrl, "안전 이미지", null, null, null, null))
+        );
+
+        String parsedLongAnalysis = result.analysisResult().longAnalysis();
+        assertThat(parsedLongAnalysis).contains("![안전 이미지](%s)".formatted(imageUrl));
+        assertThat(parsedLongAnalysis.indexOf("![안전 이미지](%s)".formatted(imageUrl)))
+                .isLessThan(parsedLongAnalysis.indexOf("```java"));
     }
 
     @Test
@@ -290,6 +561,10 @@ class MaterialAiAnalysisResponseParserTest {
     }
 
     private String validUrlAnalysisJson(String recommendedFolder, String extraMarkdown) {
+        return urlAnalysisJson(recommendedFolder, validLongAnalysis() + extraMarkdown);
+    }
+
+    private String urlAnalysisJson(String recommendedFolder, String longAnalysis) {
         String folderValue = recommendedFolder == null ? "null" : "\"" + recommendedFolder + "\"";
         return """
                 {
@@ -298,7 +573,17 @@ class MaterialAiAnalysisResponseParserTest {
                   "tags": ["Spring", "JPA", "Web"],
                   "recommended_folder": %s
                 }
-                """.formatted(jsonEscape(validLongAnalysis() + extraMarkdown), folderValue);
+                """.formatted(jsonEscape(longAnalysis), folderValue);
+    }
+
+    private int markdownImageCount(String value) {
+        int count = 0;
+        int index = 0;
+        while ((index = value.indexOf("![", index)) >= 0) {
+            count++;
+            index += 2;
+        }
+        return count;
     }
 
     private String validLongAnalysis() {
