@@ -124,8 +124,18 @@ public class MaterialAiAnalysisResponseParser {
         return imageCandidates.stream()
                 .filter(candidate -> candidate != null
                         && candidate.url() != null
-                        && !candidate.url().isBlank())
+                        && isMarkdownSafeImageUrl(candidate.url()))
                 .toList();
+    }
+
+    private boolean isMarkdownSafeImageUrl(String url) {
+        if (url == null || url.isBlank()) {
+            return false;
+        }
+        String normalized = url.trim();
+        return normalized.indexOf('(') < 0
+                && normalized.indexOf(')') < 0
+                && normalized.chars().noneMatch(Character::isWhitespace);
     }
 
     private boolean hasMarkdownImage(String longAnalysis) {
