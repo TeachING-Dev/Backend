@@ -224,6 +224,18 @@ class FolderServiceTest {
     }
 
     @Test
+    void createFolderAppliesFreeLimitWhenMembershipTypeIsNull() {
+        when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(user(USER_ID, null)));
+        when(folderRepository.countByUser_Id(USER_ID)).thenReturn(6L);
+
+        assertFolderExceptionThrown(
+                () -> folderService.createFolder(USER_ID, new FolderCreateRequest("Backend")),
+                FolderErrorCode.FOLDER_LIMIT_EXCEEDED
+        );
+        verify(folderRepository, never()).saveAndFlush(any(Folder.class));
+    }
+
+    @Test
     void createFolderDoesNotApplyFreeLimitToPremiumUser() {
         when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(user(USER_ID, MembershipType.PREMIUM)));
         when(folderRepository.existsActiveByUserIdAndName(USER_ID, "Backend")).thenReturn(false);
@@ -296,6 +308,24 @@ class FolderServiceTest {
     }
 
     @Test
+    void restoreFolderDoesNotApplyFreeFolderLimitToPremiumUser() {
+        when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(user(USER_ID, MembershipType.PREMIUM)));
+        when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.empty());
+        when(folderRepository.countByIdIncludingDeleted(FOLDER_ID)).thenReturn(1L);
+        when(folderRepository.countByIdAndUserIdIncludingDeleted(FOLDER_ID, USER_ID)).thenReturn(1L);
+        when(folderRepository.countDeletedByIdAndUserId(FOLDER_ID, USER_ID)).thenReturn(1L);
+        when(folderRepository.countActiveNameConflictForRestore(FOLDER_ID, USER_ID)).thenReturn(0L);
+        when(materialRepository.countDeletedByFolderIdAndUserId(FOLDER_ID, USER_ID)).thenReturn(0L);
+        when(folderRepository.restoreDeletedFolder(FOLDER_ID, USER_ID)).thenReturn(1);
+
+        assertThatCode(() -> folderService.restoreFolder(USER_ID, FOLDER_ID))
+                .doesNotThrowAnyException();
+
+        verify(folderRepository, never()).countByUser_Id(USER_ID);
+        verify(folderRepository).restoreDeletedFolder(FOLDER_ID, USER_ID);
+    }
+
+    @Test
     void restoreFolderFailsWhenRestoredMaterialsExceedFolderLimit() {
         when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(user(USER_ID)));
         when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.empty());
@@ -305,7 +335,7 @@ class FolderServiceTest {
         when(folderRepository.countActiveNameConflictForRestore(FOLDER_ID, USER_ID)).thenReturn(0L);
         when(materialRepository.countDeletedByFolderIdAndUserId(FOLDER_ID, USER_ID)).thenReturn(1L);
         doThrow(new MaterialException(MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED))
-                .when(folderMaterialCapacityValidator).validateCanAdd(FOLDER_ID, 1L);
+                .when(folderMaterialCapacityValidator).validateCanAdd(USER_ID, FOLDER_ID, 1L);
 
         assertThatThrownBy(() -> folderService.restoreFolder(USER_ID, FOLDER_ID))
                 .isInstanceOf(MaterialException.class)

@@ -229,7 +229,7 @@ public class TrashService {
         for (Long folderId : requestedIds) {
             if (folderRepository.restoreTrashedFolderIfNameAvailable(folderId, userId) > 0) {
                 long materialRestoreCount = materialRepository.countDeletedByFolderIdAndUserId(folderId, userId);
-                folderMaterialCapacityValidator.validateCanAdd(folderId, materialRestoreCount);
+                folderMaterialCapacityValidator.validateCanAdd(userId, folderId, materialRestoreCount);
                 restoredIds.add(folderId);
                 materialRepository.restoreTrashedMaterialsByFolder(folderId, userId);
             }
@@ -264,6 +264,7 @@ public class TrashService {
                 materialRepository.countDeletedByFolderIdForRestore(restorableIds, userId);
 
         restoreCounts.forEach(count -> folderMaterialCapacityValidator.validateCanAdd(
+                userId,
                 count.getFolderId(),
                 count.getMaterialCount()
         ));

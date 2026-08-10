@@ -187,7 +187,7 @@ public class MaterialService {
                 .toList();
 
         if (folderChanged) {
-            folderMaterialCapacityValidator.validateCanAdd(finalFolder.getId(), 1);
+            folderMaterialCapacityValidator.validateCanAdd(userId, finalFolder.getId(), 1);
             material.changeFolder(finalFolder);
         }
         if (!tagsToRemove.isEmpty()) {
@@ -228,7 +228,7 @@ public class MaterialService {
 
         List<Material> materials = findOwnedMaterialsInFolder(userId, folderId, materialIds);
         if (!targetFolder.getId().equals(folderId)) {
-            folderMaterialCapacityValidator.validateCanAdd(targetFolder.getId(), materials.size());
+            folderMaterialCapacityValidator.validateCanAdd(userId, targetFolder.getId(), materials.size());
         }
         materials.forEach(material -> material.changeFolder(targetFolder));
 
@@ -263,7 +263,7 @@ public class MaterialService {
                 materialIds,
                 userId
         );
-        folderMaterialCapacityValidator.validateCanAdd(folderId, materialRestoreCount);
+        folderMaterialCapacityValidator.validateCanAdd(userId, folderId, materialRestoreCount);
         int restoredCount = materialRepository.restoreDeletedMaterials(materialIds, folderId, userId);
         if (restoredCount != materialIds.size()) {
             throw new MaterialException(MaterialErrorCode.MATERIAL_NOT_FOUND);

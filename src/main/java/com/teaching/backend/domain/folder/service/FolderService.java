@@ -231,7 +231,7 @@ public class FolderService {
         }
 
         long materialRestoreCount = materialRepository.countDeletedByFolderIdAndUserId(folderId, userId);
-        folderMaterialCapacityValidator.validateCanAdd(folderId, materialRestoreCount);
+        folderMaterialCapacityValidator.validateCanAdd(userId, folderId, materialRestoreCount);
 
         int restoredCount = restoreFolderOrThrowDuplicateName(folderId, userId);
         if (restoredCount == 0) {

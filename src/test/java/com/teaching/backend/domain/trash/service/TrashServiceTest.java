@@ -160,7 +160,7 @@ class TrashServiceTest {
         when(materialRepository.countDeletedByFolderIdForRestore(List.of(10L), USER_ID))
                 .thenReturn(List.of(restoreCount(FOLDER_ID, 1L)));
         doThrow(new MaterialException(MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED))
-                .when(folderMaterialCapacityValidator).validateCanAdd(FOLDER_ID, 1L);
+                .when(folderMaterialCapacityValidator).validateCanAdd(USER_ID, FOLDER_ID, 1L);
 
         assertThatThrownBy(() -> trashService.restoreMaterials(USER_ID, new MaterialIdsRequest(List.of(10L))))
                 .isInstanceOf(MaterialException.class)
@@ -175,7 +175,7 @@ class TrashServiceTest {
         when(folderRepository.restoreTrashedFolderIfNameAvailable(FOLDER_ID, USER_ID)).thenReturn(1);
         when(materialRepository.countDeletedByFolderIdAndUserId(FOLDER_ID, USER_ID)).thenReturn(1L);
         doThrow(new MaterialException(MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED))
-                .when(folderMaterialCapacityValidator).validateCanAdd(FOLDER_ID, 1L);
+                .when(folderMaterialCapacityValidator).validateCanAdd(USER_ID, FOLDER_ID, 1L);
 
         assertThatThrownBy(() -> trashService.restoreFolders(USER_ID, new FolderIdsRequest(List.of(FOLDER_ID))))
                 .isInstanceOf(MaterialException.class)
