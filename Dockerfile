@@ -5,6 +5,7 @@ RUN ./gradlew clean build -x test
 
 FROM eclipse-temurin:17-jdk-jammy
 WORKDIR /app
+ENV SE_CACHE_PATH=/app/.cache/selenium
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
     && install -m 0755 -d /etc/apt/keyrings \
@@ -16,7 +17,10 @@ RUN apt-get update \
     && apt-get update \
     && apt-get install -y --no-install-recommends google-chrome-stable \
     && rm -rf /var/lib/apt/lists/*
-RUN addgroup --system app && adduser --system --ingroup app app
+RUN addgroup --system app \
+    && adduser --system --ingroup app app \
+    && mkdir -p "$SE_CACHE_PATH" \
+    && chown -R app:app /app/.cache
 COPY --from=build /app/build/libs/*.jar app.jar
 USER app
 ENTRYPOINT ["java", "-jar", "app.jar"]
