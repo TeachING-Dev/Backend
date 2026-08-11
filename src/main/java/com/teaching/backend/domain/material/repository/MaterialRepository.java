@@ -287,6 +287,23 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
             @Param("userId") Long userId
     );
 
+    /** 휴지통 폴더 목록 조회용: 폴더와 함께 삭제된(휴지통으로 같이 이동한) 자료 개수를 폴더별로 집계한다. */
+    @Query(
+            value = """
+                    SELECT folder_id AS folderId, COUNT(*) AS materialCount
+                    FROM materials
+                    WHERE folder_id IN (:folderIds)
+                      AND user_id = :userId
+                      AND deleted_at IS NOT NULL
+                    GROUP BY folder_id
+                    """,
+            nativeQuery = true
+    )
+    List<FolderMaterialRestoreCountProjection> countDeletedByFolderIdsAndUserId(
+            @Param("folderIds") List<Long> folderIds,
+            @Param("userId") Long userId
+    );
+
     /** 휴지통에 있는 폴더 상세 조회용: 그 폴더 안에 있던(폴더와 함께 휴지통으로 이동한) 자료를 최신순으로 조회한다. */
     @Query(
             value = """

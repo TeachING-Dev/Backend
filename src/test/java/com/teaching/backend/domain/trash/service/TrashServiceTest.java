@@ -20,6 +20,7 @@ import com.teaching.backend.domain.tag.entity.Tag;
 import com.teaching.backend.domain.tag.repository.MaterialTagRepository;
 import com.teaching.backend.domain.teachingmap.repository.TeachingMapRepository;
 import com.teaching.backend.domain.teachingmap.repository.TeachingMapStepRepository;
+import com.teaching.backend.domain.trash.dto.response.TrashFolderListResponse;
 import com.teaching.backend.domain.trash.dto.response.TrashFolderMaterialListResponse;
 import com.teaching.backend.domain.trash.dto.response.TrashMaterialItemResponse;
 import com.teaching.backend.domain.trash.dto.response.TrashMaterialListResponse;
@@ -138,6 +139,46 @@ class TrashServiceTest {
         ArgumentCaptor<List<Long>> materialIdsCaptor = ArgumentCaptor.forClass(List.class);
         verify(materialTagRepository, times(1)).findAllWithTagByMaterialIds(materialIdsCaptor.capture());
         assertThat(materialIdsCaptor.getValue()).containsExactlyInAnyOrder(10L, 20L);
+    }
+
+    /**
+     * 휴지통 폴더 목록의 materialCount는 폴더 엔티티의 죽은 itemCount 필드가 아니라,
+     * 삭제된 자료를 직접 COUNT한 값이어야 한다 (never-updated itemCount=0 회귀 방지).
+     */
+    @Test
+    void trashedFolderListUsesLiveDeletedMaterialCountNotStaleItemCountField() {
+        Folder folder = folder(FOLDER_ID, "테스트테테");
+        when(folderRepository.findTrashedByUserIdOrderByDeletedAtDesc(any(), any()))
+                .thenReturn(new PageImpl<>(List.of(folder)));
+        when(materialRepository.countDeletedByFolderIdsAndUserId(List.of(FOLDER_ID), USER_ID))
+                .thenReturn(List.of(restoreCount(FOLDER_ID, 6L)));
+
+        TrashFolderListResponse response = trashService.getTrashedFolders(USER_ID, null, 0);
+
+        assertThat(response.content()).extracting("materialCount").containsExactly(6L);
+    }
+
+    @Test
+    void trashedFolderListDefaultsToZeroWhenNoDeletedMaterialsMatchFolder() {
+        Folder folder = folder(FOLDER_ID, "빈폴더");
+        when(folderRepository.findTrashedByUserIdOrderByDeletedAtDesc(any(), any()))
+                .thenReturn(new PageImpl<>(List.of(folder)));
+        when(materialRepository.countDeletedByFolderIdsAndUserId(List.of(FOLDER_ID), USER_ID))
+                .thenReturn(List.of());
+
+        TrashFolderListResponse response = trashService.getTrashedFolders(USER_ID, null, 0);
+
+        assertThat(response.content()).extracting("materialCount").containsExactly(0L);
+    }
+
+    @Test
+    void trashedFolderListDoesNotQueryMaterialCountsForEmptyPage() {
+        when(folderRepository.findTrashedByUserIdOrderByDeletedAtDesc(any(), any()))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        trashService.getTrashedFolders(USER_ID, null, 0);
+
+        verify(materialRepository, never()).countDeletedByFolderIdsAndUserId(anyList(), any());
     }
 
     @Test

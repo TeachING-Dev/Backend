@@ -11,18 +11,12 @@ public record TrashFolderItemResponse(
         LocalDateTime deletedAt
 ) {
 
-    public static TrashFolderItemResponse from(Folder folder) {
+    public static TrashFolderItemResponse from(Folder folder, long materialCount) {
         return new TrashFolderItemResponse(
                 folder.getId(),
                 folder.getName(),
-                convertToLong(folder.getItemCount()),
+                materialCount,
                 folder.getDeletedAt()
         );
-    }
-
-    private static Long convertToLong(Integer itemCount) {
-        return itemCount == null
-                ? 0L
-                : itemCount.longValue();
     }
 }

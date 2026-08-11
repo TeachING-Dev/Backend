@@ -87,7 +87,23 @@ public class TrashService {
                 ? folderRepository.findTrashedByUserIdOrderByDeletedAtAsc(userId, pageRequest)
                 : folderRepository.findTrashedByUserIdOrderByDeletedAtDesc(userId, pageRequest);
 
-        return TrashFolderListResponse.of(folders.map(TrashFolderItemResponse::from));
+        Map<Long, Long> materialCountByFolderId = getDeletedMaterialCountByFolderId(folders.getContent(), userId);
+
+        return TrashFolderListResponse.of(folders.map(folder ->
+                TrashFolderItemResponse.from(folder, materialCountByFolderId.getOrDefault(folder.getId(), 0L))
+        ));
+    }
+
+    private Map<Long, Long> getDeletedMaterialCountByFolderId(List<Folder> folders, Long userId) {
+        if (folders.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> folderIds = folders.stream().map(Folder::getId).toList();
+        return materialRepository.countDeletedByFolderIdsAndUserId(folderIds, userId).stream()
+                .collect(Collectors.toMap(
+                        FolderMaterialRestoreCountProjection::getFolderId,
+                        FolderMaterialRestoreCountProjection::getMaterialCount
+                ));
     }
 
     public TrashMaterialListResponse getTrashedMaterials(Long userId, String sort, Integer page) {
