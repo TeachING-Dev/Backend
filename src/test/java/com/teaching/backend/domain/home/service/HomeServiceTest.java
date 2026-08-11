@@ -232,6 +232,7 @@ class HomeServiceTest {
         assertThat(result.activeTeachingMaps().get(0).type()).isEqualTo("DEEPDIVE");
         assertThat(result.activeTeachingMaps().get(0).status()).isEqualTo("IN_PROGRESS");
         assertThat(result.activeTeachingMaps().get(0).sourcePlatforms()).hasSize(3);
+        assertThat(result.activeTeachingMaps().get(0).extraCount()).isEqualTo(1);
         assertThat(result.activeTeachingMaps().get(0).sourcePlatforms())
                 .extracting("imageUrl")
                 .containsExactly(
@@ -239,6 +240,89 @@ class HomeServiceTest {
                         PlatformType.VELOG.getIconPath(),
                         PlatformType.BLOG.getIconPath()
                 );
+    }
+
+    @Test
+    void getDashboardMapsSourcePlatformsAndExtraCountLikeTeachingMapList() {
+        List<TeachingMap> teachingMaps = List.of(
+                teachingMap(201L, USER_ID, "Map 1", TeachingMapType.SHORTCUT, createdAt(1)),
+                teachingMap(202L, USER_ID, "Map 2", TeachingMapType.DEEPDIVE, createdAt(2)),
+                teachingMap(203L, USER_ID, "Map 3", TeachingMapType.SHORTCUT, createdAt(3))
+        );
+        when(materialRepository.findHomeRecentMaterials(eq(USER_ID), eq(AiStatus.COMPLETED), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+        when(teachingMapRepository.findAllByUser_IdAndStatusAndIsDraftFalseAndDeletedAtIsNull(
+                eq(USER_ID),
+                eq(TeachingMapStatus.IN_PROGRESS),
+                any(Pageable.class)
+        )).thenReturn(new PageImpl<>(teachingMaps));
+        when(teachingMapStepRepository.findActivePlatformTypesByTeachingMapIdIn(List.of(201L, 202L, 203L), USER_ID))
+                .thenReturn(List.of(
+                        platformProjection(201L, PlatformType.YOUTUBE),
+                        platformProjection(201L, PlatformType.VELOG),
+                        platformProjection(201L, PlatformType.BLOG),
+                        platformProjection(202L, PlatformType.YOUTUBE),
+                        platformProjection(202L, PlatformType.VELOG),
+                        platformProjection(202L, PlatformType.BLOG),
+                        platformProjection(202L, PlatformType.NOTION),
+                        platformProjection(203L, PlatformType.YOUTUBE),
+                        platformProjection(203L, PlatformType.VELOG),
+                        platformProjection(203L, PlatformType.YOUTUBE),
+                        platformProjection(203L, PlatformType.BLOG),
+                        platformProjection(203L, PlatformType.NOTION),
+                        platformProjection(203L, PlatformType.TISTORY)
+                ));
+
+        HomeDashboardResponse result = homeService.getDashboard(USER_ID);
+
+        assertThat(result.activeTeachingMaps().get(0).sourcePlatforms()).hasSize(3);
+        assertThat(result.activeTeachingMaps().get(0).extraCount()).isZero();
+        assertThat(result.activeTeachingMaps().get(1).sourcePlatforms()).hasSize(3);
+        assertThat(result.activeTeachingMaps().get(1).extraCount()).isEqualTo(1);
+        assertThat(result.activeTeachingMaps().get(2).sourcePlatforms()).hasSize(3);
+        assertThat(result.activeTeachingMaps().get(2).extraCount()).isEqualTo(2);
+        assertThat(result.activeTeachingMaps().get(2).sourcePlatforms())
+                .extracting("type")
+                .containsExactly("YOUTUBE", "VELOG", "BLOG");
+    }
+
+    @Test
+    void getDashboardDoesNotCountDuplicatePlatformsAsExtra() {
+        List<TeachingMap> teachingMaps = List.of(
+                teachingMap(201L, USER_ID, "Map 1", TeachingMapType.SHORTCUT, createdAt(1)),
+                teachingMap(202L, USER_ID, "Map 2", TeachingMapType.DEEPDIVE, createdAt(2))
+        );
+        when(materialRepository.findHomeRecentMaterials(eq(USER_ID), eq(AiStatus.COMPLETED), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of()));
+        when(teachingMapRepository.findAllByUser_IdAndStatusAndIsDraftFalseAndDeletedAtIsNull(
+                eq(USER_ID),
+                eq(TeachingMapStatus.IN_PROGRESS),
+                any(Pageable.class)
+        )).thenReturn(new PageImpl<>(teachingMaps));
+        when(teachingMapStepRepository.findActivePlatformTypesByTeachingMapIdIn(List.of(201L, 202L), USER_ID))
+                .thenReturn(List.of(
+                        platformProjection(201L, PlatformType.VELOG),
+                        platformProjection(201L, PlatformType.VELOG),
+                        platformProjection(201L, PlatformType.VELOG),
+                        platformProjection(201L, PlatformType.VELOG),
+                        platformProjection(202L, PlatformType.VELOG),
+                        platformProjection(202L, PlatformType.VELOG),
+                        platformProjection(202L, PlatformType.NOTION),
+                        platformProjection(202L, PlatformType.TISTORY)
+                ));
+
+        HomeDashboardResponse result = homeService.getDashboard(USER_ID);
+
+        assertThat(result.activeTeachingMaps().get(0).sourcePlatforms()).hasSize(1);
+        assertThat(result.activeTeachingMaps().get(0).sourcePlatforms())
+                .extracting("type")
+                .containsExactly("VELOG");
+        assertThat(result.activeTeachingMaps().get(0).extraCount()).isZero();
+        assertThat(result.activeTeachingMaps().get(1).sourcePlatforms()).hasSize(3);
+        assertThat(result.activeTeachingMaps().get(1).sourcePlatforms())
+                .extracting("type")
+                .containsExactly("VELOG", "NOTION", "TISTORY");
+        assertThat(result.activeTeachingMaps().get(1).extraCount()).isZero();
     }
 
     @Test

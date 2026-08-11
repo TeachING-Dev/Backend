@@ -86,23 +86,41 @@ public class HomeService {
                 ));
 
         return teachingMaps.stream()
-                .map(teachingMap -> HomeTeachingMapResponse.from(
+                .map(teachingMap -> toTeachingMapResponse(
                         teachingMap,
-                        toSourcePlatforms(platformTypesByTeachingMapId.getOrDefault(teachingMap.getId(), List.of()))
+                        platformTypesByTeachingMapId.getOrDefault(teachingMap.getId(), List.of())
                 ))
+                .toList();
+    }
+
+    private HomeTeachingMapResponse toTeachingMapResponse(TeachingMap teachingMap, List<PlatformType> platformTypes) {
+        List<PlatformType> displayablePlatformTypes = toDisplayablePlatformTypes(platformTypes);
+        return HomeTeachingMapResponse.from(
+                teachingMap,
+                toSourcePlatforms(displayablePlatformTypes),
+                extraCount(displayablePlatformTypes)
+        );
+    }
+
+    private List<PlatformType> toDisplayablePlatformTypes(List<PlatformType> platformTypes) {
+        return platformTypes.stream()
+                .filter(platformType -> platformType != null && platformType.getIconPath() != null)
+                .distinct()
                 .toList();
     }
 
     private List<SourcePlatform> toSourcePlatforms(List<PlatformType> platformTypes) {
         return platformTypes.stream()
-                .filter(platformType -> platformType != null && platformType.getIconPath() != null)
-                .distinct()
                 .limit(SOURCE_PLATFORM_LIMIT)
                 .map(platformType -> new SourcePlatform(
                         platformType.name(),
                         buildIconUrl(platformType.getIconPath())
                 ))
                 .toList();
+    }
+
+    private int extraCount(List<PlatformType> platformTypes) {
+        return Math.max(0, platformTypes.size() - SOURCE_PLATFORM_LIMIT);
     }
 
     private String buildIconUrl(String iconPath) {
