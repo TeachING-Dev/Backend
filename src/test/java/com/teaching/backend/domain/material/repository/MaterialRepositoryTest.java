@@ -212,6 +212,39 @@ class MaterialRepositoryTest {
         assertThat(result).isEmpty();
     }
 
+    /** 휴지통 폴더 목록의 materialCount 계산에 쓰이는 쿼리 — 삭제된 자료만, 요청한 유저 소유만, 폴더별로 정확히 집계되는지 검증. */
+    @Test
+    void countDeletedByFolderIdsAndUserIdGroupsDeletedMaterialsPerFolderScopedToOwner() {
+        User owner = userRepository.save(user("trash-count-owner"));
+        User other = userRepository.save(user("trash-count-other"));
+        Folder folderWithTwoDeleted = folderRepository.save(Folder.create(owner, "Folder X"));
+        Folder folderWithOneDeleted = folderRepository.save(Folder.create(owner, "Folder Y"));
+        Folder otherUsersFolder = folderRepository.save(Folder.create(other, "Folder Z"));
+
+        Material activeInFolderX = materialRepository.save(material(owner, folderWithTwoDeleted, "https://example.com/active"));
+        Material deletedInFolderX1 = materialRepository.save(material(owner, folderWithTwoDeleted, "https://example.com/x1"));
+        Material deletedInFolderX2 = materialRepository.save(material(owner, folderWithTwoDeleted, "https://example.com/x2"));
+        Material deletedInFolderY = materialRepository.save(material(owner, folderWithOneDeleted, "https://example.com/y"));
+        Material deletedInOthersFolder = materialRepository.save(material(other, otherUsersFolder, "https://example.com/z"));
+        deletedInFolderX1.delete();
+        deletedInFolderX2.delete();
+        deletedInFolderY.delete();
+        deletedInOthersFolder.delete();
+        flushAndClear();
+
+        List<FolderMaterialRestoreCountProjection> result = materialRepository.countDeletedByFolderIdsAndUserId(
+                List.of(folderWithTwoDeleted.getId(), folderWithOneDeleted.getId(), otherUsersFolder.getId()),
+                owner.getId()
+        );
+
+        assertThat(result)
+                .extracting(FolderMaterialRestoreCountProjection::getFolderId, FolderMaterialRestoreCountProjection::getMaterialCount)
+                .containsExactlyInAnyOrder(
+                        tuple(folderWithTwoDeleted.getId(), 2L),
+                        tuple(folderWithOneDeleted.getId(), 1L)
+                );
+    }
+
     private User user(String suffix) {
         return User.create(
                 "material-repository-" + suffix + "@example.com",

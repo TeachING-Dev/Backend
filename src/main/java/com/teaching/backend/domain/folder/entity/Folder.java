@@ -26,6 +26,11 @@ public class Folder extends BaseSoftDeleteEntity {
     @Column(nullable = false, length = 100)
     private String name;
 
+    /**
+     * DB 컬럼(item_count)이 NOT NULL이고 기본값이 없어 필드 자체는 유지해야 하지만,
+     * 값은 어디에서도 갱신되지 않아 항상 0으로 고정된 죽은 필드다 — 읽지 말 것
+     * (휴지통 폴더의 자료 개수는 TrashService 에서 native COUNT 쿼리로 별도 계산한다).
+     */
     @Column(nullable = false)
     @Builder.Default
     private Integer itemCount = 0;
