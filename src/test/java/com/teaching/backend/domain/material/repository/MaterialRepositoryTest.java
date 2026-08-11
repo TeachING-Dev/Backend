@@ -274,11 +274,10 @@ class MaterialRepositoryTest {
         LocalDateTime beforeFolderTrashed = LocalDateTime.now().minusDays(1);
         LocalDateTime folderTrashedAt = LocalDateTime.now();
         ReflectionTestUtils.setField(deletedBeforeFolderTrashed, "deletedAt", beforeFolderTrashed);
-        ReflectionTestUtils.setField(folder, "deletedAt", folderTrashedAt);
         ReflectionTestUtils.setField(deletedWithFolder, "deletedAt", folderTrashedAt);
         flushAndClear();
 
-        materialRepository.restoreTrashedMaterialsByFolder(folder.getId(), owner.getId());
+        materialRepository.restoreTrashedMaterialsByFolder(folder.getId(), owner.getId(), folderTrashedAt);
         flushAndClear();
 
         // Material에도 @SQLRestriction("deleted_at IS NULL")이 걸려있어 findById로는 삭제 상태를

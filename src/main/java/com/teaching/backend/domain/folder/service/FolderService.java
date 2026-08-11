@@ -37,6 +37,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -230,14 +231,20 @@ public class FolderService {
             throw new FolderException(FolderErrorCode.DUPLICATE_FOLDER_NAME);
         }
 
-        long materialRestoreCount = materialRepository.countDeletedByFolderIdAndUserId(folderId, userId);
+        // 폴더 자신의 deleted_at을 복구(NULL로 되돌리기) 전에 미리 스냅샷으로 떼어둔다 —
+        // restoreFolderOrThrowDuplicateName 이후에는 이 값을 더 이상 조회할 수 없다.
+        LocalDateTime folderDeletedAt = folderRepository.findTrashedByIdAndUserId(folderId, userId)
+                .orElseThrow(() -> new FolderException(FolderErrorCode.FOLDER_NOT_FOUND))
+                .getDeletedAt();
+
+        long materialRestoreCount = materialRepository.countDeletedByFolderIdAndUserId(folderId, userId, folderDeletedAt);
         folderMaterialCapacityValidator.validateCanAdd(userId, folderId, materialRestoreCount);
 
         int restoredCount = restoreFolderOrThrowDuplicateName(folderId, userId);
         if (restoredCount == 0) {
             throw new FolderException(FolderErrorCode.FOLDER_NOT_FOUND);
         }
-        materialRepository.restoreTrashedMaterialsByFolder(folderId, userId);
+        materialRepository.restoreTrashedMaterialsByFolder(folderId, userId, folderDeletedAt);
 
         return FolderRestoreResponse.of(folderId, false);
     }

@@ -293,29 +293,35 @@ class FolderServiceTest {
 
     @Test
     void restoreFolderAlsoRestoresMaterialsTrashedTogetherWithFolder() {
+        LocalDateTime deletedAt = LocalDateTime.now();
         when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(user(USER_ID)));
         when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.empty());
         when(folderRepository.countByIdIncludingDeleted(FOLDER_ID)).thenReturn(1L);
         when(folderRepository.countByIdAndUserIdIncludingDeleted(FOLDER_ID, USER_ID)).thenReturn(1L);
         when(folderRepository.countDeletedByIdAndUserId(FOLDER_ID, USER_ID)).thenReturn(1L);
         when(folderRepository.countActiveNameConflictForRestore(FOLDER_ID, USER_ID)).thenReturn(0L);
-        when(materialRepository.countDeletedByFolderIdAndUserId(FOLDER_ID, USER_ID)).thenReturn(1L);
+        when(folderRepository.findTrashedByIdAndUserId(FOLDER_ID, USER_ID))
+                .thenReturn(Optional.of(trashedFolder(USER_ID, FOLDER_ID, "Java", deletedAt)));
+        when(materialRepository.countDeletedByFolderIdAndUserId(FOLDER_ID, USER_ID, deletedAt)).thenReturn(1L);
         when(folderRepository.restoreDeletedFolder(FOLDER_ID, USER_ID)).thenReturn(1);
 
         folderService.restoreFolder(USER_ID, FOLDER_ID);
 
-        verify(materialRepository).restoreTrashedMaterialsByFolder(FOLDER_ID, USER_ID);
+        verify(materialRepository).restoreTrashedMaterialsByFolder(FOLDER_ID, USER_ID, deletedAt);
     }
 
     @Test
     void restoreFolderDoesNotApplyFreeFolderLimitToPremiumUser() {
+        LocalDateTime deletedAt = LocalDateTime.now();
         when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(user(USER_ID, MembershipType.PREMIUM)));
         when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.empty());
         when(folderRepository.countByIdIncludingDeleted(FOLDER_ID)).thenReturn(1L);
         when(folderRepository.countByIdAndUserIdIncludingDeleted(FOLDER_ID, USER_ID)).thenReturn(1L);
         when(folderRepository.countDeletedByIdAndUserId(FOLDER_ID, USER_ID)).thenReturn(1L);
         when(folderRepository.countActiveNameConflictForRestore(FOLDER_ID, USER_ID)).thenReturn(0L);
-        when(materialRepository.countDeletedByFolderIdAndUserId(FOLDER_ID, USER_ID)).thenReturn(0L);
+        when(folderRepository.findTrashedByIdAndUserId(FOLDER_ID, USER_ID))
+                .thenReturn(Optional.of(trashedFolder(USER_ID, FOLDER_ID, "Java", deletedAt)));
+        when(materialRepository.countDeletedByFolderIdAndUserId(FOLDER_ID, USER_ID, deletedAt)).thenReturn(0L);
         when(folderRepository.restoreDeletedFolder(FOLDER_ID, USER_ID)).thenReturn(1);
 
         assertThatCode(() -> folderService.restoreFolder(USER_ID, FOLDER_ID))
@@ -327,13 +333,16 @@ class FolderServiceTest {
 
     @Test
     void restoreFolderFailsWhenRestoredMaterialsExceedFolderLimit() {
+        LocalDateTime deletedAt = LocalDateTime.now();
         when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(user(USER_ID)));
         when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.empty());
         when(folderRepository.countByIdIncludingDeleted(FOLDER_ID)).thenReturn(1L);
         when(folderRepository.countByIdAndUserIdIncludingDeleted(FOLDER_ID, USER_ID)).thenReturn(1L);
         when(folderRepository.countDeletedByIdAndUserId(FOLDER_ID, USER_ID)).thenReturn(1L);
         when(folderRepository.countActiveNameConflictForRestore(FOLDER_ID, USER_ID)).thenReturn(0L);
-        when(materialRepository.countDeletedByFolderIdAndUserId(FOLDER_ID, USER_ID)).thenReturn(1L);
+        when(folderRepository.findTrashedByIdAndUserId(FOLDER_ID, USER_ID))
+                .thenReturn(Optional.of(trashedFolder(USER_ID, FOLDER_ID, "Java", deletedAt)));
+        when(materialRepository.countDeletedByFolderIdAndUserId(FOLDER_ID, USER_ID, deletedAt)).thenReturn(1L);
         doThrow(new MaterialException(MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED))
                 .when(folderMaterialCapacityValidator).validateCanAdd(USER_ID, FOLDER_ID, 1L);
 
@@ -343,25 +352,28 @@ class FolderServiceTest {
                 .isEqualTo(MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED);
 
         verify(folderRepository, never()).restoreDeletedFolder(FOLDER_ID, USER_ID);
-        verify(materialRepository, never()).restoreTrashedMaterialsByFolder(any(), any());
+        verify(materialRepository, never()).restoreTrashedMaterialsByFolder(any(), any(), any());
     }
 
     @Test
     void restoreFolderDoesNotRestoreMaterialsWhenFolderRestoreFails() {
+        LocalDateTime deletedAt = LocalDateTime.now();
         when(userRepository.findByIdForUpdate(USER_ID)).thenReturn(Optional.of(user(USER_ID)));
         when(folderRepository.findByIdAndUser_Id(FOLDER_ID, USER_ID)).thenReturn(Optional.empty());
         when(folderRepository.countByIdIncludingDeleted(FOLDER_ID)).thenReturn(1L);
         when(folderRepository.countByIdAndUserIdIncludingDeleted(FOLDER_ID, USER_ID)).thenReturn(1L);
         when(folderRepository.countDeletedByIdAndUserId(FOLDER_ID, USER_ID)).thenReturn(1L);
         when(folderRepository.countActiveNameConflictForRestore(FOLDER_ID, USER_ID)).thenReturn(0L);
-        when(materialRepository.countDeletedByFolderIdAndUserId(FOLDER_ID, USER_ID)).thenReturn(1L);
+        when(folderRepository.findTrashedByIdAndUserId(FOLDER_ID, USER_ID))
+                .thenReturn(Optional.of(trashedFolder(USER_ID, FOLDER_ID, "Java", deletedAt)));
+        when(materialRepository.countDeletedByFolderIdAndUserId(FOLDER_ID, USER_ID, deletedAt)).thenReturn(1L);
         when(folderRepository.restoreDeletedFolder(FOLDER_ID, USER_ID)).thenReturn(0);
 
         assertFolderExceptionThrown(
                 () -> folderService.restoreFolder(USER_ID, FOLDER_ID),
                 FolderErrorCode.FOLDER_NOT_FOUND
         );
-        verify(materialRepository, never()).restoreTrashedMaterialsByFolder(any(), any());
+        verify(materialRepository, never()).restoreTrashedMaterialsByFolder(any(), any(), any());
     }
 
     @Test
@@ -534,6 +546,12 @@ class FolderServiceTest {
     private Folder folder(Long userId, Long folderId, String name) {
         Folder folder = Folder.create(user(userId), name);
         ReflectionTestUtils.setField(folder, "id", folderId);
+        return folder;
+    }
+
+    private Folder trashedFolder(Long userId, Long folderId, String name, LocalDateTime deletedAt) {
+        Folder folder = folder(userId, folderId, name);
+        ReflectionTestUtils.setField(folder, "deletedAt", deletedAt);
         return folder;
     }
 

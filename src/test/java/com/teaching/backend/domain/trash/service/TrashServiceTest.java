@@ -35,6 +35,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -42,6 +43,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -183,16 +185,31 @@ class TrashServiceTest {
 
     @Test
     void restoreFoldersCascadesMaterialRestoreOnlyForActuallyRestoredFolders() {
+        LocalDateTime deletedAt = LocalDateTime.now();
+        when(folderRepository.findTrashedByIdAndUserId(10L, USER_ID))
+                .thenReturn(Optional.of(trashedFolder(10L, "A", deletedAt)));
+        when(folderRepository.findTrashedByIdAndUserId(20L, USER_ID))
+                .thenReturn(Optional.of(trashedFolder(20L, "B", deletedAt)));
         when(folderRepository.restoreTrashedFolderIfNameAvailable(10L, USER_ID)).thenReturn(1);
         when(folderRepository.restoreTrashedFolderIfNameAvailable(20L, USER_ID)).thenReturn(0);
-        when(materialRepository.countDeletedByFolderIdAndUserId(10L, USER_ID)).thenReturn(1L);
+        when(materialRepository.countDeletedByFolderIdAndUserId(10L, USER_ID, deletedAt)).thenReturn(1L);
 
         FolderTrashRestoreResponse response = trashService.restoreFolders(USER_ID, new FolderIdsRequest(List.of(10L, 20L)));
 
         assertThat(response.restoredIds()).containsExactly(10L);
         assertThat(response.failedIds()).containsExactly(20L);
-        verify(materialRepository).restoreTrashedMaterialsByFolder(10L, USER_ID);
-        verify(materialRepository, never()).restoreTrashedMaterialsByFolder(20L, USER_ID);
+        verify(materialRepository).restoreTrashedMaterialsByFolder(10L, USER_ID, deletedAt);
+        verify(materialRepository, never()).restoreTrashedMaterialsByFolder(eq(20L), any(), any());
+    }
+
+    @Test
+    void restoreFoldersSkipsFolderNotFoundInTrash() {
+        when(folderRepository.findTrashedByIdAndUserId(10L, USER_ID)).thenReturn(Optional.empty());
+
+        FolderTrashRestoreResponse response = trashService.restoreFolders(USER_ID, new FolderIdsRequest(List.of(10L)));
+
+        assertThat(response.failedIds()).containsExactly(10L);
+        verify(folderRepository, never()).restoreTrashedFolderIfNameAvailable(any(), any());
     }
 
     @Test
@@ -213,8 +230,11 @@ class TrashServiceTest {
 
     @Test
     void restoreFoldersFailsWhenRestoredMaterialsExceedFolderLimit() {
+        LocalDateTime deletedAt = LocalDateTime.now();
+        when(folderRepository.findTrashedByIdAndUserId(FOLDER_ID, USER_ID))
+                .thenReturn(Optional.of(trashedFolder(FOLDER_ID, "Backend", deletedAt)));
         when(folderRepository.restoreTrashedFolderIfNameAvailable(FOLDER_ID, USER_ID)).thenReturn(1);
-        when(materialRepository.countDeletedByFolderIdAndUserId(FOLDER_ID, USER_ID)).thenReturn(1L);
+        when(materialRepository.countDeletedByFolderIdAndUserId(FOLDER_ID, USER_ID, deletedAt)).thenReturn(1L);
         doThrow(new MaterialException(MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED))
                 .when(folderMaterialCapacityValidator).validateCanAdd(USER_ID, FOLDER_ID, 1L);
 
@@ -223,7 +243,7 @@ class TrashServiceTest {
                 .extracting("errorCode")
                 .isEqualTo(MaterialErrorCode.FOLDER_MATERIAL_LIMIT_EXCEEDED);
 
-        verify(materialRepository, never()).restoreTrashedMaterialsByFolder(any(), any());
+        verify(materialRepository, never()).restoreTrashedMaterialsByFolder(any(), any(), any());
     }
 
     @Test
@@ -282,6 +302,12 @@ class TrashServiceTest {
     private Folder folder(Long id, String name) {
         Folder folder = Folder.create(null, name);
         ReflectionTestUtils.setField(folder, "id", id);
+        return folder;
+    }
+
+    private Folder trashedFolder(Long id, String name, LocalDateTime deletedAt) {
+        Folder folder = folder(id, name);
+        ReflectionTestUtils.setField(folder, "deletedAt", deletedAt);
         return folder;
     }
 

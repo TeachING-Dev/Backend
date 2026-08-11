@@ -237,45 +237,51 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
 
     /**
      * 폴더 복구 시 그 폴더 안에서 함께 휴지통으로 이동했던 자료를 폴더와 함께 복구한다.
-     * folders.deleted_at보다 먼저 삭제된(=폴더와 무관하게 개별적으로 먼저 휴지통에 있던) 자료는
-     * 제외한다 — 그 자료들은 폴더 삭제와 상관없이 사용자가 별도로 지운 것이라, 폴더를 복구한다고
-     * 같이 되살아나면 안 된다.
+     * folderDeletedAt(폴더가 삭제됐던 시각)보다 먼저 삭제된(=폴더와 무관하게 개별적으로 먼저
+     * 휴지통에 있던) 자료는 제외한다 — 그 자료들은 폴더 삭제와 상관없이 사용자가 별도로 지운
+     * 것이라, 폴더를 복구한다고 같이 되살아나면 안 된다.
+     *
+     * folders 테이블을 라이브로 조인하지 않고 folderDeletedAt을 호출자가 직접 넘기는 이유:
+     * 호출하는 쪽(FolderService.restoreFolder, TrashService.restoreFolders)에서 이 메서드보다
+     * "폴더 자신의 deleted_at을 NULL로 되돌리는 복구"가 먼저 실행되면, 라이브 조인으로는
+     * f.deleted_at이 이미 NULL이라 어떤 자료도 매칭되지 않는다 — 호출 순서에 안전하도록
+     * 폴더가 삭제됐던 시각의 스냅샷을 호출 전에 미리 받아서 파라미터로 고정한다.
      */
     @Modifying
     @Query(
             value = """
-                    UPDATE materials m
-                    JOIN folders f ON f.id = m.folder_id
-                    SET m.deleted_at = NULL,
-                        m.updated_at = CURRENT_TIMESTAMP
-                    WHERE m.folder_id = :folderId
-                      AND m.user_id = :userId
-                      AND m.deleted_at IS NOT NULL
-                      AND m.deleted_at >= f.deleted_at
+                    UPDATE materials
+                    SET deleted_at = NULL,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE folder_id = :folderId
+                      AND user_id = :userId
+                      AND deleted_at IS NOT NULL
+                      AND deleted_at >= :folderDeletedAt
                     """,
             nativeQuery = true
     )
     int restoreTrashedMaterialsByFolder(
             @Param("folderId") Long folderId,
-            @Param("userId") Long userId
+            @Param("userId") Long userId,
+            @Param("folderDeletedAt") LocalDateTime folderDeletedAt
     );
 
     /** restoreTrashedMaterialsByFolder와 동일한 기준(폴더와 함께 삭제된 자료만)으로 복구 대상 개수를 센다. */
     @Query(
             value = """
                     SELECT COUNT(*)
-                    FROM materials m
-                    JOIN folders f ON f.id = m.folder_id
-                    WHERE m.folder_id = :folderId
-                      AND m.user_id = :userId
-                      AND m.deleted_at IS NOT NULL
-                      AND m.deleted_at >= f.deleted_at
+                    FROM materials
+                    WHERE folder_id = :folderId
+                      AND user_id = :userId
+                      AND deleted_at IS NOT NULL
+                      AND deleted_at >= :folderDeletedAt
                     """,
             nativeQuery = true
     )
     long countDeletedByFolderIdAndUserId(
             @Param("folderId") Long folderId,
-            @Param("userId") Long userId
+            @Param("userId") Long userId,
+            @Param("folderDeletedAt") LocalDateTime folderDeletedAt
     );
 
     @Query(
