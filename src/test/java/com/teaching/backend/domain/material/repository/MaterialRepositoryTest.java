@@ -12,8 +12,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -212,9 +214,14 @@ class MaterialRepositoryTest {
         assertThat(result).isEmpty();
     }
 
-    /** 휴지통 폴더 목록의 materialCount 계산에 쓰이는 쿼리 — 삭제된 자료만, 요청한 유저 소유만, 폴더별로 정확히 집계되는지 검증. */
+    /**
+     * 휴지통 폴더 목록의 materialCount 계산에 쓰이는 쿼리.
+     * 폴더와 "함께" 삭제된 자료만 세야 하고, 폴더가 삭제되기 전에 이미 개별적으로
+     * 휴지통에 있던 자료(deletedBeforeFolderTrashed)는 이 폴더의 개수에 섞이면 안 된다
+     * — 섞이면 폴더 복구 시 그 자료까지 부활하는 버그로 이어진다(별도 테스트에서 검증).
+     */
     @Test
-    void countDeletedByFolderIdsAndUserIdGroupsDeletedMaterialsPerFolderScopedToOwner() {
+    void countDeletedByFolderIdsAndUserIdOnlyCountsMaterialsDeletedTogetherWithTheFolder() {
         User owner = userRepository.save(user("trash-count-owner"));
         User other = userRepository.save(user("trash-count-other"));
         Folder folderWithTwoDeleted = folderRepository.save(Folder.create(owner, "Folder X"));
@@ -222,14 +229,22 @@ class MaterialRepositoryTest {
         Folder otherUsersFolder = folderRepository.save(Folder.create(other, "Folder Z"));
 
         Material activeInFolderX = materialRepository.save(material(owner, folderWithTwoDeleted, "https://example.com/active"));
-        Material deletedInFolderX1 = materialRepository.save(material(owner, folderWithTwoDeleted, "https://example.com/x1"));
-        Material deletedInFolderX2 = materialRepository.save(material(owner, folderWithTwoDeleted, "https://example.com/x2"));
-        Material deletedInFolderY = materialRepository.save(material(owner, folderWithOneDeleted, "https://example.com/y"));
+        Material deletedBeforeFolderTrashed = materialRepository.save(material(owner, folderWithTwoDeleted, "https://example.com/early"));
+        Material deletedWithFolderX1 = materialRepository.save(material(owner, folderWithTwoDeleted, "https://example.com/x1"));
+        Material deletedWithFolderX2 = materialRepository.save(material(owner, folderWithTwoDeleted, "https://example.com/x2"));
+        Material deletedWithFolderY = materialRepository.save(material(owner, folderWithOneDeleted, "https://example.com/y"));
         Material deletedInOthersFolder = materialRepository.save(material(other, otherUsersFolder, "https://example.com/z"));
-        deletedInFolderX1.delete();
-        deletedInFolderX2.delete();
-        deletedInFolderY.delete();
-        deletedInOthersFolder.delete();
+
+        LocalDateTime beforeFolderTrashed = LocalDateTime.now().minusDays(1);
+        LocalDateTime folderTrashedAt = LocalDateTime.now();
+        ReflectionTestUtils.setField(deletedBeforeFolderTrashed, "deletedAt", beforeFolderTrashed);
+        ReflectionTestUtils.setField(folderWithTwoDeleted, "deletedAt", folderTrashedAt);
+        ReflectionTestUtils.setField(folderWithOneDeleted, "deletedAt", folderTrashedAt);
+        ReflectionTestUtils.setField(otherUsersFolder, "deletedAt", folderTrashedAt);
+        ReflectionTestUtils.setField(deletedWithFolderX1, "deletedAt", folderTrashedAt);
+        ReflectionTestUtils.setField(deletedWithFolderX2, "deletedAt", folderTrashedAt);
+        ReflectionTestUtils.setField(deletedWithFolderY, "deletedAt", folderTrashedAt);
+        ReflectionTestUtils.setField(deletedInOthersFolder, "deletedAt", folderTrashedAt);
         flushAndClear();
 
         List<FolderMaterialRestoreCountProjection> result = materialRepository.countDeletedByFolderIdsAndUserId(
@@ -243,6 +258,39 @@ class MaterialRepositoryTest {
                         tuple(folderWithTwoDeleted.getId(), 2L),
                         tuple(folderWithOneDeleted.getId(), 1L)
                 );
+    }
+
+    /**
+     * 폴더를 통째로 삭제했다가 복구할 때, 그 폴더 삭제 이전에 이미 개별적으로 휴지통에
+     * 있던 자료까지 같이 부활하면 안 된다는 걸 검증하는 회귀 테스트.
+     */
+    @Test
+    void restoreTrashedMaterialsByFolderDoesNotResurrectMaterialsDeletedBeforeTheFolderWasTrashed() {
+        User owner = userRepository.save(user("restore-scope-owner"));
+        Folder folder = folderRepository.save(Folder.create(owner, "Folder"));
+        Material deletedBeforeFolderTrashed = materialRepository.save(material(owner, folder, "https://example.com/early"));
+        Material deletedWithFolder = materialRepository.save(material(owner, folder, "https://example.com/with-folder"));
+
+        LocalDateTime beforeFolderTrashed = LocalDateTime.now().minusDays(1);
+        LocalDateTime folderTrashedAt = LocalDateTime.now();
+        ReflectionTestUtils.setField(deletedBeforeFolderTrashed, "deletedAt", beforeFolderTrashed);
+        ReflectionTestUtils.setField(deletedWithFolder, "deletedAt", folderTrashedAt);
+        flushAndClear();
+
+        materialRepository.restoreTrashedMaterialsByFolder(folder.getId(), owner.getId(), folderTrashedAt);
+        flushAndClear();
+
+        // Material에도 @SQLRestriction("deleted_at IS NULL")이 걸려있어 findById로는 삭제 상태를
+        // 확인할 수 없으므로(삭제된 행은 아예 안 보임), native 카운트 쿼리로 삭제 여부를 확인한다.
+        boolean earlyDeletedMaterialStillInTrash = materialRepository.countDeletedByMaterialIdsAndUserId(
+                List.of(deletedBeforeFolderTrashed.getId()), owner.getId()
+        ) == 1;
+        boolean cascadeDeletedMaterialWasRestored = materialRepository.countDeletedByMaterialIdsAndUserId(
+                List.of(deletedWithFolder.getId()), owner.getId()
+        ) == 0;
+
+        assertThat(earlyDeletedMaterialStillInTrash).isTrue();
+        assertThat(cascadeDeletedMaterialWasRestored).isTrue();
     }
 
     private User user(String suffix) {

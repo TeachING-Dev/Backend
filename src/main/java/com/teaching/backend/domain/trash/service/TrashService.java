@@ -44,10 +44,12 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -243,11 +245,20 @@ public class TrashService {
 
         List<Long> restoredIds = new ArrayList<>();
         for (Long folderId : requestedIds) {
+            // restoreTrashedFolderIfNameAvailable이 폴더의 deleted_at을 NULL로 되돌리므로,
+            // "폴더와 함께 삭제된 자료"를 가려낼 기준값(폴더가 삭제됐던 시각)은 그 전에 미리 떼어둔다.
+            Optional<LocalDateTime> folderDeletedAt = folderRepository.findTrashedByIdAndUserId(folderId, userId)
+                    .map(Folder::getDeletedAt);
+            if (folderDeletedAt.isEmpty()) {
+                continue;
+            }
+
             if (folderRepository.restoreTrashedFolderIfNameAvailable(folderId, userId) > 0) {
-                long materialRestoreCount = materialRepository.countDeletedByFolderIdAndUserId(folderId, userId);
+                long materialRestoreCount = materialRepository.countDeletedByFolderIdAndUserId(
+                        folderId, userId, folderDeletedAt.get());
                 folderMaterialCapacityValidator.validateCanAdd(userId, folderId, materialRestoreCount);
                 restoredIds.add(folderId);
-                materialRepository.restoreTrashedMaterialsByFolder(folderId, userId);
+                materialRepository.restoreTrashedMaterialsByFolder(folderId, userId, folderDeletedAt.get());
             }
         }
 
