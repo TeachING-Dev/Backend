@@ -15,12 +15,14 @@ public record HomeTeachingMapResponse(
         String type,
         String status,
         List<SourcePlatform> sourcePlatforms,
+        int extraCount,
         LocalDateTime createdAt
 ) {
 
     public static HomeTeachingMapResponse from(
             TeachingMap teachingMap,
-            List<SourcePlatform> sourcePlatforms
+            List<SourcePlatform> sourcePlatforms,
+            int extraCount
     ) {
         TeachingMapType type = teachingMap.getType();
         TeachingMapStatus status = teachingMap.getStatus();
@@ -32,6 +34,7 @@ public record HomeTeachingMapResponse(
                 type == null ? null : type.name(),
                 status == null ? null : status.name(),
                 sourcePlatforms == null ? List.of() : sourcePlatforms,
+                extraCount,
                 teachingMap.getCreatedAt()
         );
     }
