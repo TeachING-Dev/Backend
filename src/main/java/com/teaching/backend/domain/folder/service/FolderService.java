@@ -203,7 +203,7 @@ public class FolderService {
                 .orElseThrow(() -> resolveTrashLookupException(userId, folderId));
 
         folder.delete();
-        materialRepository.trashMaterialsByFolder(folderId, userId);
+        materialRepository.trashMaterialsByFolder(folderId, userId, folder.getDeletedAt());
 
         return FolderTrashResponse.from(folder);
     }
