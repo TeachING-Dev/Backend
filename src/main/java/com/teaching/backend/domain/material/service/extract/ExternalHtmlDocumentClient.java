@@ -105,6 +105,12 @@ public class ExternalHtmlDocumentClient {
                     .exchangeToMono(response -> {
                         HttpStatusCode statusCode = response.statusCode();
                         if (!statusCode.is2xxSuccessful()) {
+                            if (isAuthenticationRequiredStatus(statusCode)) {
+                                return response.releaseBody()
+                                        .then(Mono.error(new MaterialException(
+                                                MaterialErrorCode.MATERIAL_SOURCE_AUTH_REQUIRED
+                                        )));
+                            }
                             return response.bodyToMono(String.class)
                                     .defaultIfEmpty("")
                                     .flatMap(body -> extractionFailed(
@@ -156,6 +162,11 @@ public class ExternalHtmlDocumentClient {
                                         throw new HtmlFetchException(
                                                 MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED,
                                                 false
+                                        );
+                                    }
+                                    if (ProtectedSourceDetector.isProtectedHtml(body, originalUrl)) {
+                                        throw new MaterialException(
+                                                MaterialErrorCode.MATERIAL_SOURCE_AUTH_REQUIRED
                                         );
                                     }
                                     return new HtmlDocument(originalUrl, body, contentType.toString());
@@ -309,6 +320,14 @@ public class ExternalHtmlDocumentClient {
 
     private boolean isRecoverableStatus(HttpStatusCode statusCode) {
         return statusCode != null && statusCode.is5xxServerError();
+    }
+
+    private boolean isAuthenticationRequiredStatus(HttpStatusCode statusCode) {
+        if (statusCode == null) {
+            return false;
+        }
+        int value = statusCode.value();
+        return value == 401 || value == 403;
     }
 
     private String normalizeHost(String host) {

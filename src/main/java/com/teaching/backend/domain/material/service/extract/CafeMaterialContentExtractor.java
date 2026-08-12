@@ -33,6 +33,7 @@ public class CafeMaterialContentExtractor extends AbstractHtmlMaterialContentExt
 
     @Override
     protected void validateDocument(HtmlDocument document) {
+        super.validateDocument(document);
         String body = document.body();
         if (body == null || body.isBlank()) {
             return;
@@ -44,7 +45,7 @@ public class CafeMaterialContentExtractor extends AbstractHtmlMaterialContentExt
                     safeUrl(document.originalUrl()),
                     body.length()
             );
-            throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
+            throw new MaterialException(MaterialErrorCode.MATERIAL_SOURCE_AUTH_REQUIRED);
         }
     }
 

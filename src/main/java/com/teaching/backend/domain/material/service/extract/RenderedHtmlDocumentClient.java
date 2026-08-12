@@ -1,5 +1,7 @@
 package com.teaching.backend.domain.material.service.extract;
 
+import com.teaching.backend.domain.material.exception.MaterialErrorCode;
+import com.teaching.backend.domain.material.exception.MaterialException;
 import lombok.extern.slf4j.Slf4j;
 import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.PageLoadStrategy;
@@ -212,6 +214,8 @@ public class RenderedHtmlDocumentClient {
                             e.getClass().getSimpleName(),
                             e.getMessage()
                     );
+                } catch (MaterialException e) {
+                    throw e;
                 } catch (RuntimeException e) {
                     if (!isRetryableTimeout(e)) {
                         throw e;
@@ -235,6 +239,8 @@ public class RenderedHtmlDocumentClient {
                 }
             }
             return Optional.empty();
+        } catch (MaterialException e) {
+            throw e;
         } catch (RuntimeException e) {
             log.warn(
                     "Rendered HTML fallback failed. url={}, reason={}, message={}",
@@ -262,6 +268,7 @@ public class RenderedHtmlDocumentClient {
             if (currentUrl == null || currentUrl.isBlank() || !isAllowedUrl(currentUrl, "final")) {
                 return Optional.empty();
             }
+            validatePublicSourceUrl(currentUrl);
             log.debug(
                     "Rendered HTML page loaded. url={}, readyState={}, visibleTextLength={}",
                     safeUrl,
@@ -273,6 +280,7 @@ public class RenderedHtmlDocumentClient {
             if (currentUrl == null || currentUrl.isBlank() || !isAllowedUrl(currentUrl, "final")) {
                 return Optional.empty();
             }
+            validatePublicSourceUrl(currentUrl);
             triggerNotionLazyLoad(driver, currentUrl);
 
             String pageSource = driver.getPageSource();
@@ -285,6 +293,7 @@ public class RenderedHtmlDocumentClient {
             if (pageSource == null || pageSource.isBlank()) {
                 return Optional.empty();
             }
+            validatePublicSourceHtml(pageSource, currentUrl, originalUrl);
             return Optional.of(new HtmlDocument(originalUrl, pageSource, "text/html"));
         } finally {
             if (driver != null) {
@@ -310,6 +319,18 @@ public class RenderedHtmlDocumentClient {
 
     private boolean isRetryableTimeout(RuntimeException exception) {
         return exception instanceof TimeoutException || exception instanceof ScriptTimeoutException;
+    }
+
+    private void validatePublicSourceUrl(String currentUrl) {
+        if (ProtectedSourceDetector.isAuthenticationUrl(currentUrl)) {
+            throw new MaterialException(MaterialErrorCode.MATERIAL_SOURCE_AUTH_REQUIRED);
+        }
+    }
+
+    private void validatePublicSourceHtml(String pageSource, String currentUrl, String originalUrl) {
+        if (ProtectedSourceDetector.isProtectedHtml(pageSource, currentUrl, originalUrl)) {
+            throw new MaterialException(MaterialErrorCode.MATERIAL_SOURCE_AUTH_REQUIRED);
+        }
     }
 
     protected WebDriver createDriver(PageLoadStrategy pageLoadStrategy) {

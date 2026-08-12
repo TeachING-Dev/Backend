@@ -117,6 +117,12 @@ public abstract class AbstractHtmlMaterialContentExtractor implements MaterialCo
     }
 
     protected void validateDocument(HtmlDocument document) {
+        if (document == null) {
+            return;
+        }
+        if (ProtectedSourceDetector.isProtectedHtml(document.body(), document.originalUrl())) {
+            throw new MaterialException(MaterialErrorCode.MATERIAL_SOURCE_AUTH_REQUIRED);
+        }
     }
 
     protected List<String> contentClassSignals() {

@@ -1,6 +1,7 @@
 package com.teaching.backend.domain.material.service.extract;
 
 import com.teaching.backend.domain.material.exception.MaterialErrorCode;
+import com.teaching.backend.domain.material.exception.MaterialException;
 import org.junit.jupiter.api.Test;
 import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.PageLoadStrategy;
@@ -17,6 +18,7 @@ import java.util.Optional;
 import java.util.concurrent.Semaphore;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -293,6 +295,131 @@ class RenderedHtmlDocumentClientTest {
     }
 
     @Test
+    void rejectsAuthenticationFinalUrlWithoutRetry() {
+        String finalUrl = "https://example.com/login?redirect=/private/article";
+        WebDriver driver = readableDriver(finalUrl);
+        ExternalHtmlDocumentClient validator = validatorAllowing(URL, finalUrl);
+        Semaphore permits = new Semaphore(1);
+        TestRenderedHtmlDocumentClient client = new TestRenderedHtmlDocumentClient(driver, permits, validator);
+
+        assertThatThrownBy(() -> client.render(URL))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_SOURCE_AUTH_REQUIRED);
+
+        assertThat(client.createDriverCalls).isEqualTo(1);
+        verify(driver).quit();
+    }
+
+    @Test
+    void rejectsSigninFinalUrlWithoutRetry() {
+        String finalUrl = "https://example.com/signin";
+        WebDriver driver = readableDriver(finalUrl);
+        ExternalHtmlDocumentClient validator = validatorAllowing(URL, finalUrl);
+        TestRenderedHtmlDocumentClient client = new TestRenderedHtmlDocumentClient(driver, new Semaphore(1), validator);
+
+        assertThatThrownBy(() -> client.render(URL))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_SOURCE_AUTH_REQUIRED);
+
+        assertThat(client.createDriverCalls).isEqualTo(1);
+        verify(driver).quit();
+    }
+
+    @Test
+    void rejectsOAuthFinalUrlWithoutRetry() {
+        String finalUrl = "https://accounts.google.com/o/oauth2/v2/auth";
+        WebDriver driver = readableDriver(finalUrl);
+        ExternalHtmlDocumentClient validator = validatorAllowing(URL, finalUrl);
+        TestRenderedHtmlDocumentClient client = new TestRenderedHtmlDocumentClient(driver, new Semaphore(1), validator);
+
+        assertThatThrownBy(() -> client.render(URL))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_SOURCE_AUTH_REQUIRED);
+
+        assertThat(client.createDriverCalls).isEqualTo(1);
+        verify(driver).quit();
+    }
+
+    @Test
+    void doesNotRejectLoginWordInQueryOnly() {
+        String urlWithLoginQuery = "https://example.com/article?keyword=login";
+        WebDriver driver = readableDriver(urlWithLoginQuery);
+        ExternalHtmlDocumentClient validator = validatorAllowing(urlWithLoginQuery);
+        TestRenderedHtmlDocumentClient client = new TestRenderedHtmlDocumentClient(driver, new Semaphore(1), validator);
+
+        Optional<HtmlDocument> result = client.render(urlWithLoginQuery);
+
+        assertThat(result).isPresent();
+        verify(driver).quit();
+    }
+
+    @Test
+    void doesNotRejectAuthWordInArticlePath() {
+        String articleUrl = "https://example.com/articles/auth";
+        WebDriver driver = readableDriver(articleUrl);
+        ExternalHtmlDocumentClient validator = validatorAllowing(articleUrl);
+        TestRenderedHtmlDocumentClient client = new TestRenderedHtmlDocumentClient(driver, new Semaphore(1), validator);
+
+        Optional<HtmlDocument> result = client.render(articleUrl);
+
+        assertThat(result).isPresent();
+        verify(driver).quit();
+    }
+
+    @Test
+    void rejectsRenderedLoginFormPage() {
+        WebDriver driver = readableDriver(URL);
+        when(driver.getPageSource()).thenReturn("""
+                <html>
+                  <head><title>Login</title></head>
+                  <body><main><h1>Sign in</h1><form action="/login"><input type="password"></form></main></body>
+                </html>
+                """);
+        ExternalHtmlDocumentClient validator = validatorAllowing(URL);
+        TestRenderedHtmlDocumentClient client = new TestRenderedHtmlDocumentClient(driver, new Semaphore(1), validator);
+
+        assertThatThrownBy(() -> client.render(URL))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_SOURCE_AUTH_REQUIRED);
+
+        assertThat(client.createDriverCalls).isEqualTo(1);
+        verify(driver).quit();
+    }
+
+    @Test
+    void rejectsPrivateNotionAppShellWithoutRetry() {
+        String originalUrl = "https://app.notion.com/p/private-page-id";
+        WebDriver driver = readableDriver(originalUrl);
+        when(driver.getPageSource()).thenReturn("""
+                <html>
+                  <head><title>Notion | Where teams and agents work together</title></head>
+                  <body>
+                    <main>
+                      <h1>Where teams and agents work together</h1>
+                      <p>Notion is the connected workspace for your docs, projects, and knowledge.</p>
+                      <a href="/login">Log in</a>
+                      <a href="/signup">Sign up</a>
+                    </main>
+                  </body>
+                </html>
+                """);
+        ExternalHtmlDocumentClient validator = validatorAllowing(originalUrl);
+        TestRenderedHtmlDocumentClient client = new TestRenderedHtmlDocumentClient(driver, new Semaphore(1), validator);
+
+        assertThatThrownBy(() -> client.render(originalUrl))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_SOURCE_AUTH_REQUIRED);
+
+        assertThat(client.createDriverCalls).isEqualTo(1);
+        verify(driver).quit();
+    }
+
+    @Test
     void doesNotRetryUnsafeInitialUrl() {
         String unsafeUrl = "file:///etc/passwd";
         ExternalHtmlDocumentClient validator = mock(ExternalHtmlDocumentClient.class);
@@ -323,9 +450,11 @@ class RenderedHtmlDocumentClientTest {
         verify(driver).quit();
     }
 
-    private ExternalHtmlDocumentClient validatorAllowing(String url) {
+    private ExternalHtmlDocumentClient validatorAllowing(String... urls) {
         ExternalHtmlDocumentClient validator = mock(ExternalHtmlDocumentClient.class);
-        when(validator.validateFetchTarget(url)).thenReturn(URI.create(url));
+        for (String url : urls) {
+            when(validator.validateFetchTarget(url)).thenReturn(URI.create(url));
+        }
         return validator;
     }
 

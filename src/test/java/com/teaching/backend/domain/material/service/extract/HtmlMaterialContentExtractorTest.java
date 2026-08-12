@@ -166,6 +166,91 @@ class HtmlMaterialContentExtractorTest {
     }
 
     @Test
+    void genericWebExtractorRejectsLoginFormPage() {
+        ExternalHtmlDocumentClient client = client("""
+                <html>
+                  <head><title>Login</title></head>
+                  <body>
+                    <main>
+                      <h1>Sign in</h1>
+                      <form class="login-form" action="/login">
+                        <input type="password">
+                      </form>
+                    </main>
+                  </body>
+                </html>
+                """);
+        GenericWebMaterialContentExtractor extractor = new GenericWebMaterialContentExtractor(client);
+
+        assertThatThrownBy(() -> extractor.extract(URL))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_SOURCE_AUTH_REQUIRED);
+    }
+
+    @Test
+    void genericWebExtractorDoesNotRejectTechnicalDocumentWithLoginWordsOnly() {
+        ExternalHtmlDocumentClient client = client("""
+                <html>
+                  <head><title>How to build a login page</title></head>
+                  <body>
+                    <article>
+                      Spring Security login flow, OAuth login, and 회원가입 API design content for developers.
+                    </article>
+                  </body>
+                </html>
+                """);
+        GenericWebMaterialContentExtractor extractor = new GenericWebMaterialContentExtractor(client);
+
+        ExtractedMaterialContent result = extractor.extract(URL);
+
+        assertThat(result.content()).contains("Spring Security login flow");
+    }
+
+    @Test
+    void genericWebExtractorDoesNotRejectLoginTextWithoutPasswordForm() {
+        ExternalHtmlDocumentClient client = client("""
+                <html><body>
+                  <article>Login troubleshooting article content with enough public explanation.</article>
+                </body></html>
+                """);
+        GenericWebMaterialContentExtractor extractor = new GenericWebMaterialContentExtractor(client);
+
+        ExtractedMaterialContent result = extractor.extract(URL);
+
+        assertThat(result.content()).contains("Login troubleshooting");
+    }
+
+    @Test
+    void genericWebExtractorRejectsPrivateNotionAppShell() {
+        String notionAppUrl = "https://app.notion.com/p/private-page-id";
+        ExternalHtmlDocumentClient client = mock(ExternalHtmlDocumentClient.class);
+        when(client.fetch(notionAppUrl)).thenReturn(new HtmlDocument(
+                notionAppUrl,
+                """
+                        <html>
+                          <head><title>Notion | Where teams and agents work together</title></head>
+                          <body>
+                            <main>
+                              <h1>Where teams and agents work together</h1>
+                              <p>Notion is the connected workspace for your docs, projects, and knowledge.</p>
+                              <a href="/login">Log in</a>
+                              <a href="/signup">Sign up</a>
+                            </main>
+                          </body>
+                        </html>
+                        """,
+                "text/html"
+        ));
+        GenericWebMaterialContentExtractor extractor = new GenericWebMaterialContentExtractor(client);
+
+        assertThatThrownBy(() -> extractor.extract(notionAppUrl))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_SOURCE_AUTH_REQUIRED);
+    }
+
+    @Test
     void genericWebExtractorUsesRenderedFallbackWhenStaticExtractionIsEmpty() {
         ExternalHtmlDocumentClient client = client("<html><body><main>short</main></body></html>");
         RenderedHtmlDocumentClient renderedClient = mock(RenderedHtmlDocumentClient.class);
@@ -498,7 +583,7 @@ class HtmlMaterialContentExtractorTest {
         assertThatThrownBy(() -> extractor.extract(URL))
                 .isInstanceOf(MaterialException.class)
                 .extracting("errorCode")
-                .isEqualTo(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
+                .isEqualTo(MaterialErrorCode.MATERIAL_SOURCE_AUTH_REQUIRED);
     }
 
     @Test
@@ -532,7 +617,18 @@ class HtmlMaterialContentExtractorTest {
         assertThatThrownBy(() -> extractor.extract(URL))
                 .isInstanceOf(MaterialException.class)
                 .extracting("errorCode")
-                .isEqualTo(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
+                .isEqualTo(MaterialErrorCode.MATERIAL_SOURCE_AUTH_REQUIRED);
+    }
+
+    @Test
+    void notionExtractorRejectsAccessDeniedPageAsSourceAuthRequired() {
+        ExternalHtmlDocumentClient client = client("<html><body>You do not have access</body></html>");
+        NotionMaterialContentExtractor extractor = new NotionMaterialContentExtractor(client);
+
+        assertThatThrownBy(() -> extractor.extract(URL))
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_SOURCE_AUTH_REQUIRED);
     }
 
     @Test
@@ -567,7 +663,7 @@ class HtmlMaterialContentExtractorTest {
         assertThatThrownBy(() -> extractor.extract(URL))
                 .isInstanceOf(MaterialException.class)
                 .extracting("errorCode")
-                .isEqualTo(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
+                .isEqualTo(MaterialErrorCode.MATERIAL_SOURCE_AUTH_REQUIRED);
     }
 
     @Test

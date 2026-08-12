@@ -25,9 +25,13 @@ public class NotionMaterialContentExtractor extends AbstractHtmlMaterialContentE
 
     @Override
     protected void validateDocument(HtmlDocument document) {
+        super.validateDocument(document);
         String body = document.body();
+        if (body == null || body.isBlank()) {
+            return;
+        }
         if (body.contains("This page is private") || body.contains("You do not have access")) {
-            throw new MaterialException(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
+            throw new MaterialException(MaterialErrorCode.MATERIAL_SOURCE_AUTH_REQUIRED);
         }
     }
 
