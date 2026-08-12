@@ -32,6 +32,10 @@ public class MaterialController {
     private final MaterialIndexingService materialIndexingService;
     private final MaterialService materialService;
 
+    @Operation(
+            summary = "최근 수집 자료 조회",
+            description = "삭제되지 않은 수집 자료를 생성일 최신순으로 조회하며, size가 지정된 경우 해당 개수만 반환합니다."
+    )
     @GetMapping
     public ResponseEntity<ApiResponse<List<MaterialListResponse>>> getMaterials(
             @AuthenticationPrincipal AuthMember authMember,
