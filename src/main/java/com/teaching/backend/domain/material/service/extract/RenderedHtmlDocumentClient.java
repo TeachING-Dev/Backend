@@ -3,6 +3,7 @@ package com.teaching.backend.domain.material.service.extract;
 import lombok.extern.slf4j.Slf4j;
 import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.PageLoadStrategy;
+import org.openqa.selenium.ScriptTimeoutException;
 import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.chrome.ChromeDriver;
@@ -28,6 +29,8 @@ public class RenderedHtmlDocumentClient {
     private final boolean enabled;
     private final Duration pageLoadTimeout;
     private final Duration scriptTimeout;
+    private final Duration notionPageLoadTimeout;
+    private final Duration notionScriptTimeout;
     private final Duration waitTimeout;
     private final int minVisibleTextLength;
     private final Duration acquireTimeout;
@@ -40,6 +43,8 @@ public class RenderedHtmlDocumentClient {
             @Value("${material.extract.rendered.enabled:true}") boolean enabled,
             @Value("${material.extract.rendered.page-load-timeout-ms:10000}") long pageLoadTimeoutMs,
             @Value("${material.extract.rendered.script-timeout-ms:5000}") long scriptTimeoutMs,
+            @Value("${material.extract.rendered.notion-page-load-timeout-ms:30000}") long notionPageLoadTimeoutMs,
+            @Value("${material.extract.rendered.notion-script-timeout-ms:10000}") long notionScriptTimeoutMs,
             @Value("${material.extract.rendered.wait-timeout-ms:7000}") long waitTimeoutMs,
             @Value("${material.extract.rendered.min-visible-text-length:20}") int minVisibleTextLength,
             @Value("${material.extract.rendered.max-concurrency:2}") int maxConcurrency,
@@ -49,6 +54,8 @@ public class RenderedHtmlDocumentClient {
                 enabled,
                 pageLoadTimeoutMs,
                 scriptTimeoutMs,
+                notionPageLoadTimeoutMs,
+                notionScriptTimeoutMs,
                 waitTimeoutMs,
                 minVisibleTextLength,
                 maxConcurrency,
@@ -64,7 +71,7 @@ public class RenderedHtmlDocumentClient {
             long waitTimeoutMs,
             int minVisibleTextLength
     ) {
-        this(enabled, pageLoadTimeoutMs, scriptTimeoutMs, waitTimeoutMs, minVisibleTextLength, 2, 500, null);
+        this(enabled, pageLoadTimeoutMs, scriptTimeoutMs, 30000, 10000, waitTimeoutMs, minVisibleTextLength, 2, 500, null);
     }
 
     RenderedHtmlDocumentClient(
@@ -81,6 +88,34 @@ public class RenderedHtmlDocumentClient {
                 enabled,
                 pageLoadTimeoutMs,
                 scriptTimeoutMs,
+                30000,
+                10000,
+                waitTimeoutMs,
+                minVisibleTextLength,
+                maxConcurrency,
+                acquireTimeoutMs,
+                urlValidator
+        );
+    }
+
+    RenderedHtmlDocumentClient(
+            boolean enabled,
+            long pageLoadTimeoutMs,
+            long scriptTimeoutMs,
+            long notionPageLoadTimeoutMs,
+            long notionScriptTimeoutMs,
+            long waitTimeoutMs,
+            int minVisibleTextLength,
+            int maxConcurrency,
+            long acquireTimeoutMs,
+            ExternalHtmlDocumentClient urlValidator
+    ) {
+        this(
+                enabled,
+                pageLoadTimeoutMs,
+                scriptTimeoutMs,
+                notionPageLoadTimeoutMs,
+                notionScriptTimeoutMs,
                 waitTimeoutMs,
                 minVisibleTextLength,
                 acquireTimeoutMs,
@@ -99,9 +134,37 @@ public class RenderedHtmlDocumentClient {
             ExternalHtmlDocumentClient urlValidator,
             Semaphore renderPermits
     ) {
+        this(
+                enabled,
+                pageLoadTimeoutMs,
+                scriptTimeoutMs,
+                30000,
+                10000,
+                waitTimeoutMs,
+                minVisibleTextLength,
+                acquireTimeoutMs,
+                urlValidator,
+                renderPermits
+        );
+    }
+
+    RenderedHtmlDocumentClient(
+            boolean enabled,
+            long pageLoadTimeoutMs,
+            long scriptTimeoutMs,
+            long notionPageLoadTimeoutMs,
+            long notionScriptTimeoutMs,
+            long waitTimeoutMs,
+            int minVisibleTextLength,
+            long acquireTimeoutMs,
+            ExternalHtmlDocumentClient urlValidator,
+            Semaphore renderPermits
+    ) {
         this.enabled = enabled;
         this.pageLoadTimeout = Duration.ofMillis(pageLoadTimeoutMs);
         this.scriptTimeout = Duration.ofMillis(scriptTimeoutMs);
+        this.notionPageLoadTimeout = Duration.ofMillis(notionPageLoadTimeoutMs);
+        this.notionScriptTimeout = Duration.ofMillis(notionScriptTimeoutMs);
         this.waitTimeout = Duration.ofMillis(waitTimeoutMs);
         this.minVisibleTextLength = minVisibleTextLength;
         this.acquireTimeout = Duration.ofMillis(Math.max(0L, acquireTimeoutMs));
@@ -119,7 +182,6 @@ public class RenderedHtmlDocumentClient {
             return Optional.empty();
         }
 
-        WebDriver driver = null;
         boolean permitAcquired = false;
         try {
             permitAcquired = acquirePermit(safeUrl);
@@ -127,10 +189,74 @@ public class RenderedHtmlDocumentClient {
                 return Optional.empty();
             }
             log.info("Rendered HTML fallback started. url={}", safeUrl);
-            driver = createDriver();
+            boolean notionUrl = isNotionUrl(originalUrl);
+            RenderSettings settings = renderSettings(notionUrl);
+            int maxAttempts = notionUrl ? 2 : 1;
+            for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+                try {
+                    return renderAttempt(originalUrl, safeUrl, settings);
+                } catch (TimeoutException e) {
+                    if (attempt >= maxAttempts) {
+                        log.warn(
+                                "Rendered HTML fallback failed. url={}, reason={}, message={}",
+                                safeUrl,
+                                e.getClass().getSimpleName(),
+                                e.getMessage()
+                        );
+                        return Optional.empty();
+                    }
+                    log.warn(
+                            "Rendered HTML fallback timed out; retrying with a new driver. url={}, attempt={}, reason={}, message={}",
+                            safeUrl,
+                            attempt,
+                            e.getClass().getSimpleName(),
+                            e.getMessage()
+                    );
+                } catch (RuntimeException e) {
+                    if (!isRetryableTimeout(e)) {
+                        throw e;
+                    }
+                    if (attempt >= maxAttempts) {
+                        log.warn(
+                                "Rendered HTML fallback failed. url={}, reason={}, message={}",
+                                safeUrl,
+                                e.getClass().getSimpleName(),
+                                e.getMessage()
+                        );
+                        return Optional.empty();
+                    }
+                    log.warn(
+                            "Rendered HTML fallback timed out; retrying with a new driver. url={}, attempt={}, reason={}, message={}",
+                            safeUrl,
+                            attempt,
+                            e.getClass().getSimpleName(),
+                            e.getMessage()
+                    );
+                }
+            }
+            return Optional.empty();
+        } catch (RuntimeException e) {
+            log.warn(
+                    "Rendered HTML fallback failed. url={}, reason={}, message={}",
+                    safeUrl,
+                    e.getClass().getSimpleName(),
+                    e.getMessage()
+            );
+            return Optional.empty();
+        } finally {
+            if (permitAcquired) {
+                renderPermits.release();
+            }
+        }
+    }
+
+    private Optional<HtmlDocument> renderAttempt(String originalUrl, String safeUrl, RenderSettings settings) {
+        WebDriver driver = null;
+        try {
+            driver = createDriver(settings.pageLoadStrategy());
             log.debug("Rendered HTML driver created. url={}", safeUrl);
-            driver.manage().timeouts().pageLoadTimeout(pageLoadTimeout);
-            driver.manage().timeouts().scriptTimeout(scriptTimeout);
+            driver.manage().timeouts().pageLoadTimeout(settings.pageLoadTimeout());
+            driver.manage().timeouts().scriptTimeout(settings.scriptTimeout());
             driver.get(originalUrl);
             String currentUrl = driver.getCurrentUrl();
             if (currentUrl == null || currentUrl.isBlank() || !isAllowedUrl(currentUrl, "final")) {
@@ -160,14 +286,6 @@ public class RenderedHtmlDocumentClient {
                 return Optional.empty();
             }
             return Optional.of(new HtmlDocument(originalUrl, pageSource, "text/html"));
-        } catch (RuntimeException e) {
-            log.warn(
-                    "Rendered HTML fallback failed. url={}, reason={}, message={}",
-                    safeUrl,
-                    e.getClass().getSimpleName(),
-                    e.getMessage()
-            );
-            return Optional.empty();
         } finally {
             if (driver != null) {
                 try {
@@ -181,15 +299,22 @@ public class RenderedHtmlDocumentClient {
                     );
                 }
             }
-            if (permitAcquired) {
-                renderPermits.release();
-            }
         }
     }
 
-    protected WebDriver createDriver() {
+    private RenderSettings renderSettings(boolean notionUrl) {
+        return notionUrl
+                ? new RenderSettings(PageLoadStrategy.EAGER, notionPageLoadTimeout, notionScriptTimeout)
+                : new RenderSettings(PageLoadStrategy.NORMAL, pageLoadTimeout, scriptTimeout);
+    }
+
+    private boolean isRetryableTimeout(RuntimeException exception) {
+        return exception instanceof TimeoutException || exception instanceof ScriptTimeoutException;
+    }
+
+    protected WebDriver createDriver(PageLoadStrategy pageLoadStrategy) {
         ChromeOptions options = new ChromeOptions();
-        options.setPageLoadStrategy(PageLoadStrategy.NORMAL);
+        options.setPageLoadStrategy(pageLoadStrategy);
         options.addArguments(
                 "--headless=new",
                 "--disable-gpu",
@@ -198,6 +323,13 @@ public class RenderedHtmlDocumentClient {
                 "--window-size=1365,1800"
         );
         return new ChromeDriver(options);
+    }
+
+    private record RenderSettings(
+            PageLoadStrategy pageLoadStrategy,
+            Duration pageLoadTimeout,
+            Duration scriptTimeout
+    ) {
     }
 
     private boolean acquirePermit(String safeUrl) {

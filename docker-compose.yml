@@ -2,6 +2,7 @@ services:
   app:
     image: 254201323850.dkr.ecr.ap-northeast-2.amazonaws.com/teaching-app:latest
     container_name: teaching-app
+    init: true
     ports:
       - "8080:8080"
     environment:
