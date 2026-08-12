@@ -9,6 +9,7 @@ import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
 import com.teaching.backend.global.response.ApiResponse;
 import com.teaching.backend.global.security.entity.AuthMember;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -30,6 +31,10 @@ public class NotificationController {
 
     private final NotificationService notificationService;
 
+    @Operation(
+            summary = "알림 목록 조회",
+            description = "최근 30일 알림을 읽지 않은 알림 우선, 최신순으로 size만큼 조회합니다."
+    )
     @GetMapping
     public ResponseEntity<ApiResponse<List<NotificationListResponse>>> getNotifications(
             @AuthenticationPrincipal AuthMember authMember,
@@ -45,6 +50,10 @@ public class NotificationController {
         );
     }
 
+    @Operation(
+            summary = "알림 요약 조회",
+            description = "최근 30일 내 읽지 않은 알림 존재 여부와 개수를 조회합니다."
+    )
     @GetMapping("/summary")
     public ResponseEntity<ApiResponse<NotificationSummaryResponse>> getNotificationSummary(
             @AuthenticationPrincipal AuthMember authMember
@@ -58,6 +67,10 @@ public class NotificationController {
         );
     }
 
+    @Operation(
+            summary = "알림 읽음 처리",
+            description = "특정 알림을 읽음 상태로 변경합니다."
+    )
     @PatchMapping("/{notificationId}/read")
     public ResponseEntity<ApiResponse<NotificationReadResponse>> markAsRead(
             @AuthenticationPrincipal AuthMember authMember,

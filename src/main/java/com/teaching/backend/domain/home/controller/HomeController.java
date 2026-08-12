@@ -7,6 +7,7 @@ import com.teaching.backend.global.apiPayload.code.GlobalErrorCode;
 import com.teaching.backend.global.exception.GeneralException;
 import com.teaching.backend.global.response.ApiResponse;
 import com.teaching.backend.global.security.entity.AuthMember;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -23,6 +24,10 @@ public class HomeController {
 
     private final HomeService homeService;
 
+    @Operation(
+            summary = "홈 화면 조회",
+            description = "최근 완료 자료 5개와 진행 중인 티칭맵 3개를 조회합니다."
+    )
     @GetMapping
     public ResponseEntity<ApiResponse<HomeDashboardResponse>> getDashboard(
             @AuthenticationPrincipal AuthMember authMember
