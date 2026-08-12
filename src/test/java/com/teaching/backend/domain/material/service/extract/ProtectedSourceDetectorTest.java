@@ -79,6 +79,20 @@ class ProtectedSourceDetectorTest {
     }
 
     @Test
+    void doesNotTreatPublicGithubRepositoryAsAuthenticationUrl() {
+        boolean result = ProtectedSourceDetector.isAuthenticationUrl("https://github.com/openai/openai-python");
+
+        assertThat(result).isFalse();
+    }
+
+    @Test
+    void treatsGithubLoginPathAsAuthenticationUrl() {
+        boolean result = ProtectedSourceDetector.isAuthenticationUrl("https://github.com/login");
+
+        assertThat(result).isTrue();
+    }
+
+    @Test
     void doesNotRejectByNotionMarketingTitleAlone() {
         String originalUrl = "https://app.notion.com/p/private-page-id";
         String html = """

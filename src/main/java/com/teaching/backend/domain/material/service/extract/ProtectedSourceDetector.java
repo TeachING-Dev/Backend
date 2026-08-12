@@ -12,7 +12,6 @@ final class ProtectedSourceDetector {
 
     private static final List<String> AUTH_HOSTS = List.of(
             "accounts.google.com",
-            "github.com",
             "login.microsoftonline.com",
             "login.live.com",
             "appleid.apple.com"

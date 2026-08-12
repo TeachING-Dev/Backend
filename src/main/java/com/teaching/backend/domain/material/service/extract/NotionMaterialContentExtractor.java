@@ -26,6 +26,9 @@ public class NotionMaterialContentExtractor extends AbstractHtmlMaterialContentE
     @Override
     protected void validateDocument(HtmlDocument document) {
         super.validateDocument(document);
+        if (document == null) {
+            return;
+        }
         String body = document.body();
         if (body == null || body.isBlank()) {
             return;

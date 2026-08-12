@@ -538,7 +538,7 @@ class RenderedHtmlDocumentClientTest {
                 WebDriver... drivers
         ) {
             super(true, pageLoadTimeoutMs, scriptTimeoutMs, notionPageLoadTimeoutMs, notionScriptTimeoutMs,
-                    100, 20, 2, 0, validator);
+                    100, 20, 0, validator, permits);
             this.drivers = Arrays.asList(drivers);
         }
 

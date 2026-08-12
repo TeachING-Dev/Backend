@@ -101,11 +101,11 @@ class ExternalHtmlDocumentClientTest {
     }
 
     @Test
-    void rejectsForbiddenStatusAsSourceAuthRequired() throws IOException {
+    void treatsForbiddenStatusAsGenericExtractionFailure() throws IOException {
         String url = startServer(403, "text/html", "access denied", 0);
         ExternalHtmlDocumentClient client = testClient(Duration.ofSeconds(2));
 
-        assertSourceAuthRequired(() -> client.fetch(url));
+        assertExtractionFailed(() -> client.fetch(url));
     }
 
     @Test

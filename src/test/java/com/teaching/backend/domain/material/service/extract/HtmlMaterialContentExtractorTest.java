@@ -599,6 +599,20 @@ class HtmlMaterialContentExtractorTest {
     }
 
     @Test
+    void cafeValidateDocumentAllowsNullDocument() {
+        TestCafeMaterialContentExtractor extractor = new TestCafeMaterialContentExtractor(mock(ExternalHtmlDocumentClient.class));
+
+        extractor.validateForTest(null);
+    }
+
+    @Test
+    void notionValidateDocumentAllowsNullDocument() {
+        TestNotionMaterialContentExtractor extractor = new TestNotionMaterialContentExtractor(mock(ExternalHtmlDocumentClient.class));
+
+        extractor.validateForTest(null);
+    }
+
+    @Test
     void cafeExtractorTreatsBlankBodyAsEmptyContent() {
         ExternalHtmlDocumentClient client = client("");
         CafeMaterialContentExtractor extractor = new CafeMaterialContentExtractor(client);
@@ -836,5 +850,27 @@ class HtmlMaterialContentExtractorTest {
         when(client.fetch("https://youtube.com/watch?v=1"))
                 .thenReturn(new HtmlDocument("https://youtube.com/watch?v=1", body, "text/html"));
         return client;
+    }
+
+    private static final class TestCafeMaterialContentExtractor extends CafeMaterialContentExtractor {
+
+        private TestCafeMaterialContentExtractor(ExternalHtmlDocumentClient htmlDocumentClient) {
+            super(htmlDocumentClient);
+        }
+
+        private void validateForTest(HtmlDocument document) {
+            validateDocument(document);
+        }
+    }
+
+    private static final class TestNotionMaterialContentExtractor extends NotionMaterialContentExtractor {
+
+        private TestNotionMaterialContentExtractor(ExternalHtmlDocumentClient htmlDocumentClient) {
+            super(htmlDocumentClient);
+        }
+
+        private void validateForTest(HtmlDocument document) {
+            validateDocument(document);
+        }
     }
 }

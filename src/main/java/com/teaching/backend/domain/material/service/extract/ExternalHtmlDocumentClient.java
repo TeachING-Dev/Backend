@@ -106,6 +106,7 @@ public class ExternalHtmlDocumentClient {
                         HttpStatusCode statusCode = response.statusCode();
                         if (!statusCode.is2xxSuccessful()) {
                             if (isAuthenticationRequiredStatus(statusCode)) {
+                                logExtractionFailure("fetch-auth-required", host, statusCode, null, null);
                                 return response.releaseBody()
                                         .then(Mono.error(new MaterialException(
                                                 MaterialErrorCode.MATERIAL_SOURCE_AUTH_REQUIRED
@@ -326,8 +327,7 @@ public class ExternalHtmlDocumentClient {
         if (statusCode == null) {
             return false;
         }
-        int value = statusCode.value();
-        return value == 401 || value == 403;
+        return statusCode.value() == 401;
     }
 
     private String normalizeHost(String host) {
