@@ -93,6 +93,22 @@ class ExternalHtmlDocumentClientTest {
     }
 
     @Test
+    void rejectsUnauthorizedStatusAsSourceAuthRequired() throws IOException {
+        String url = startServer(401, "text/html", "login required", 0);
+        ExternalHtmlDocumentClient client = testClient(Duration.ofSeconds(2));
+
+        assertSourceAuthRequired(() -> client.fetch(url));
+    }
+
+    @Test
+    void treatsForbiddenStatusAsGenericExtractionFailure() throws IOException {
+        String url = startServer(403, "text/html", "access denied", 0);
+        ExternalHtmlDocumentClient client = testClient(Duration.ofSeconds(2));
+
+        assertExtractionFailed(() -> client.fetch(url));
+    }
+
+    @Test
     void failsWhenStatusIs500() throws IOException {
         String url = startServer(500, "text/html", "error", 0);
         ExternalHtmlDocumentClient client = testClient(Duration.ofSeconds(2));
@@ -136,6 +152,53 @@ class ExternalHtmlDocumentClientTest {
         ExternalHtmlDocumentClient client = testClient(Duration.ofSeconds(2));
 
         assertExtractionFailed(() -> client.fetch(url));
+    }
+
+    @Test
+    void rejectsHtmlLoginFormAsSourceAuthRequired() throws IOException {
+        String url = startServer(
+                200,
+                "text/html",
+                """
+                        <html>
+                          <head><title>Sign in</title></head>
+                          <body>
+                            <main>
+                              <h1>Log in</h1>
+                              <form action="/login"><input type="password"></form>
+                            </main>
+                          </body>
+                        </html>
+                        """,
+                0
+        );
+        ExternalHtmlDocumentClient client = testClient(Duration.ofSeconds(2));
+
+        assertSourceAuthRequired(() -> client.fetch(url));
+    }
+
+    @Test
+    void allowsTechnicalDocumentThatMentionsLoginWithoutPasswordForm() throws IOException {
+        String url = startServer(
+                200,
+                "text/html",
+                """
+                        <html>
+                          <head><title>How to build a login page</title></head>
+                          <body>
+                            <article>
+                              Spring Security login flow and OAuth 회원가입 API design notes for developers.
+                            </article>
+                          </body>
+                        </html>
+                        """,
+                0
+        );
+        ExternalHtmlDocumentClient client = testClient(Duration.ofSeconds(2));
+
+        HtmlDocument result = client.fetch(url);
+
+        assertThat(result.body()).contains("Spring Security login flow");
     }
 
     @Test
@@ -443,5 +506,12 @@ class ExternalHtmlDocumentClientTest {
                 .isInstanceOf(MaterialException.class)
                 .extracting("errorCode")
                 .isEqualTo(MaterialErrorCode.MATERIAL_CONTENT_EXTRACTION_FAILED);
+    }
+
+    private void assertSourceAuthRequired(Runnable action) {
+        assertThatThrownBy(action::run)
+                .isInstanceOf(MaterialException.class)
+                .extracting("errorCode")
+                .isEqualTo(MaterialErrorCode.MATERIAL_SOURCE_AUTH_REQUIRED);
     }
 }

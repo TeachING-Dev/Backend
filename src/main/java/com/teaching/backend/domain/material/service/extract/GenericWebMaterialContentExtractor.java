@@ -78,11 +78,18 @@ public class GenericWebMaterialContentExtractor implements MaterialContentExtrac
     }
 
     private ParsedHtmlContent parse(String originalUrl, HtmlDocument document) {
+        validateDocument(document);
         return htmlContentParser.parse(
                 originalUrl,
                 document.body(),
                 contentClassSignals()
         );
+    }
+
+    private void validateDocument(HtmlDocument document) {
+        if (document != null && ProtectedSourceDetector.isProtectedHtml(document.body(), document.originalUrl())) {
+            throw new MaterialException(MaterialErrorCode.MATERIAL_SOURCE_AUTH_REQUIRED);
+        }
     }
 
     private boolean hasSufficientContent(ParsedHtmlContent parsed) {

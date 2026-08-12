@@ -22,6 +22,7 @@ public enum MaterialErrorCode implements BaseErrorCode {
     CONTENT_REQUIRED(HttpStatus.BAD_REQUEST, "MATERIAL4007", "분석할 본문 내용을 입력해주세요."),
     UNSUPPORTED_MATERIAL_PLATFORM(HttpStatus.BAD_REQUEST, "MATERIAL4008", "지원하지 않는 자료 플랫폼입니다."),
     MATERIAL_ACCESS_DENIED(HttpStatus.FORBIDDEN, "MATERIAL4031", "해당 자료에 접근할 권한이 없습니다."),
+    MATERIAL_SOURCE_AUTH_REQUIRED(HttpStatus.FORBIDDEN, "MATERIAL4032", "로그인 또는 회원가입이 필요한 페이지는 분석할 수 없습니다."),
     MATERIAL_NOT_FOUND(HttpStatus.NOT_FOUND, "MATERIAL4041", "자료를 찾을 수 없습니다."),
     MATERIAL_ANALYSIS_NOT_FOUND(HttpStatus.NOT_FOUND, "MATERIAL4042", "자료의 AI 분석 결과를 찾을 수 없습니다."),
     MATERIAL_NOT_IN_TRASH(HttpStatus.CONFLICT, "MATERIAL4093", "휴지통에 있는 자료가 아닙니다."),
