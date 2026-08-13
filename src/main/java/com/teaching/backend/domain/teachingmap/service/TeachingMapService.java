@@ -193,7 +193,7 @@ public class TeachingMapService {
                     String title = (node.title() == null || node.title().isBlank())
                             ? material.getTitle()   // 자료 원제목으로 대체
                             : node.title();
-                    return TeachingMapStep.create(teachingMap, material, node.step(), node.title(), node.aiGuide());
+                    return TeachingMapStep.create(teachingMap, material, node.step(), title, node.aiGuide());
                 })
                 .toList();
         stepRepository.saveAll(steps);
