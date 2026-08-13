@@ -190,7 +190,10 @@ public class TeachingMapService {
                     if (material == null) {
                         throw new GeneralException(TeachingMapErrorCode.AI_RESULT_MATERIAL_MISMATCH);
                     }
-                    return TeachingMapStep.create(teachingMap, material, node.step(), node.title(), node.aiGuide());
+                    String title = (node.title() == null || node.title().isBlank())
+                            ? material.getTitle()   // 자료 원제목으로 대체
+                            : node.title();
+                    return TeachingMapStep.create(teachingMap, material, node.step(), title, node.aiGuide());
                 })
                 .toList();
         stepRepository.saveAll(steps);
